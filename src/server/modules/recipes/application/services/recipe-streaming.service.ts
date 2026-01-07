@@ -1,12 +1,13 @@
 import { z } from "zod/v4";
 
+import { GenerateRecipeRequestDto } from "@/src/server/modules/recipes";
 import { processJsonlStream } from "@/src/server/shared/streaming";
 
 import { RecipeAccumulator } from "../../domain/entities";
 
 export interface RecipeStreamConfig {
     schemas: [z.ZodType, z.ZodType, z.ZodType, z.ZodType]; // Header, Ingredient, Instruction, Tip
-    initialServings: number;
+    initialState: GenerateRecipeRequestDto;
 }
 
 /**
@@ -29,16 +30,18 @@ export async function* createRecipeStreamHandler(
     config: RecipeStreamConfig
 ): AsyncGenerator<any, RecipeAccumulator> {
     const recipe: RecipeAccumulator = {
-        name: "",
+        ...config.initialState,
         description: "",
-        difficulty: "medium",
-        servings: config.initialServings,
         prepTime: 0,
         cookTime: 0,
         ingredients: [],
         instructions: [],
         tips: [],
-        tags: [],
+    };
+
+    yield {
+        type: "initial",
+        ...config.initialState,
     };
 
     for await (const { parsed, schemaIndex } of processJsonlStream(
@@ -47,13 +50,9 @@ export async function* createRecipeStreamHandler(
     )) {
         // Schema 0: Header
         if (schemaIndex === 0) {
-            recipe.name = parsed.name;
             recipe.description = parsed.description;
-            recipe.difficulty = parsed.difficulty;
-            recipe.servings = parsed.servings;
             recipe.prepTime = parsed.prepTime;
             recipe.cookTime = parsed.cookTime;
-            recipe.tags = parsed.tags;
         }
         // Schema 1: Ingredient
         else if (schemaIndex === 1) {

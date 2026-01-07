@@ -9,10 +9,13 @@ export function createApiRouter() {
     const router = Router();
 
     // All handlers use IncomingMessage/ServerResponse which Express provides
-    router.post("/chat", createChatRoutes());
-    router.post("/ingredients", createIngredientsRoutes());
-    router.post("/suggestions", createSuggestionsRoutes());
-    router.post("/recipe", createRecipesRoutes());
+    router.use("/chat", createChatRoutes());
+
+    router.use("/ingredients", createIngredientsRoutes());
+
+    router.use("/suggestions", createSuggestionsRoutes());
+
+    router.use("/recipes", createRecipesRoutes());
 
     router.get("/health", (req, res) => {
         res.json({ status: "ok" });

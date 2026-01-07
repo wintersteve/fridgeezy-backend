@@ -1,35 +1,22 @@
-import { z } from "zod/v4";
-
+import { RecipesRepo } from "@/src/server/modules/recipes";
+import { SuggestionsMapper } from "@/src/server/modules/suggestions/application/mappers/suggestions-mapper/suggestions-mapper";
+import { SuggestionsRepo } from "@/src/server/modules/suggestions/infastracture";
 import {
-    createMcpHandler,
+    createStreamHandler,
     processJsonlStream,
 } from "@/src/server/shared/streaming";
 import { openai } from "@/src/shared/openai";
 import { castArray } from "@/src/shared/toolkit";
 
-// Request body schema
-export const RequestSchema = z.object({
-    blacklist: z.array(z.string()).optional(),
-    component: z.string().optional(),
-    course: z.string().optional(),
-    cuisine: z.string().optional(),
-    difficulty: z.enum(["easy", "medium", "hard"]).optional(),
-    dietaryRestrictions: z.array(z.string()).optional(),
-    ingredients: z.array(z.string()).optional(),
-});
+import {
+    GenerateSuggestionRequestSchema,
+    GenerateSuggestionResponseDto,
+    GenerateSuggestionResponseSchema,
+} from "../../application";
 
-// Schema for validating parsed suggestions
-export const SuggestionSchema = z.object({
-    name: z.string(),
-    description: z.string().max(50),
-    difficulty: z.enum(["easy", "medium", "hard"]),
-    ingredients: z.array(z.string()),
-    tags: z.array(z.string()),
-});
-
-export const generateSuggestion = createMcpHandler({
-    requestSchema: RequestSchema,
-    responseSchema: SuggestionSchema, // Single schema with 'type' → streaming auto-detected
+export const generateSuggestion = createStreamHandler({
+    requestSchema: GenerateSuggestionRequestSchema,
+    responseSchema: GenerateSuggestionResponseSchema,
 
     handler: async ({ body }) => {
         const systemPrompt = `You are a recipe suggestion assistant. Generate exactly 5 authentic, real-world recipe suggestions based on the provided ingredients.
@@ -39,7 +26,6 @@ export const generateSuggestion = createMcpHandler({
 - If a combination is not authentic (e.g., rosemary in Thai cuisine), do NOT invent dishes. Generate an empty array instead! VERY IMPORTANT!
 - Do NOT include recipes where a blacklisted item is normally present.
 - The name must be the authentic name (e.g., Murgh Makhani, NOT Indian Tomato Butter Chicken). Do NOT add alternative names in parenthesis.
-- Include a realistic cooking time.
 
 ## Difficulty Levels
 - "easy": Beginner-friendly version of the dish, using simple techniques while keeping ingredients authentic.
@@ -92,7 +78,7 @@ Each recipe object must include:
         // Use processJsonlStream to handle buffering and validation
         async function* suggestionStream() {
             for await (const { parsed } of processJsonlStream(stream, [
-                SuggestionSchema,
+                GenerateSuggestionResponseSchema,
             ])) {
                 yield parsed;
             }
@@ -103,8 +89,21 @@ Each recipe object must include:
             stream: suggestionStream(),
         };
     },
-    onComplete: async () => {
-        // Persist the accumulated recipe to database
-        // await persistGenerateRecipe(result);
+    onComplete: async ({
+        result,
+    }: {
+        result: GenerateSuggestionResponseDto;
+    }) => {
+        const suggestion = SuggestionsMapper.fromLLM(result);
+
+        const suggestionResponse = await SuggestionsRepo.getByName(
+            suggestion.name
+        );
+
+        const recipeResponse = await RecipesRepo.getByName(suggestion.name);
+
+        if (suggestionResponse.data?.id || recipeResponse.data?.id) return;
+
+        await SuggestionsRepo.insert(result);
     },
 });

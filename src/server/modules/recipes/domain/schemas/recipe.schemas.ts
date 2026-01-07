@@ -8,13 +8,9 @@ import { z } from "zod/v4";
 // Schema for header section
 export const HeaderSchema = z.object({
     type: z.literal("header"),
-    name: z.string(),
     description: z.string(),
-    difficulty: z.enum(["easy", "medium", "hard"]),
-    servings: z.number(),
     prepTime: z.number(),
     cookTime: z.number(),
-    tags: z.array(z.string()),
 });
 
 // Schema for ingredient line

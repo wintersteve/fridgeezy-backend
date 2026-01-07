@@ -4,18 +4,15 @@ import {
     InstructionSchema,
     TipSchema,
 } from "@/src/server/modules/recipes/domain/schemas";
-import { createMcpHandler } from "@/src/server/shared/streaming";
-import { fetchTagsCached } from "@/src/server/shared/tags";
-import { fetchUnitsCached } from "@/src/server/shared/units";
+import { createStreamHandler } from "@/src/server/shared/streaming";
 import { openai } from "@/src/shared/openai";
 
 import {
     createRecipeStreamHandler,
     GenerateRecipeRequestSchema,
-    persistGenerateRecipe,
 } from "../../application";
 
-export const generateRecipe = createMcpHandler({
+export const generateRecipe = createStreamHandler({
     requestSchema: GenerateRecipeRequestSchema,
     responseSchema: [
         HeaderSchema,
@@ -26,59 +23,38 @@ export const generateRecipe = createMcpHandler({
 
     handler: async ({ body }) => {
         // Fetch valid tags and units from database (cached for 5 minutes)
-        const [tags, units] = await Promise.all([
-            fetchTagsCached(),
-            fetchUnitsCached(),
-        ]);
+        // const [units] = await Promise.all([fetchUnitsCached()]);
+        //
+        // const unitsByType = units.reduce(
+        //     (acc, u) => {
+        //         if (!acc[u.type]) acc[u.type] = [];
+        //         acc[u.type].push({
+        //             id: u.id,
+        //             abbr: u.abbreviation,
+        //             name: u.name,
+        //         });
+        //         return acc;
+        //     },
+        //     {} as Record<string, { id: string; abbr: string; name: string }[]>
+        // );
 
-        const unitsByType = units.reduce(
-            (acc, u) => {
-                if (!acc[u.type]) acc[u.type] = [];
-                acc[u.type].push({
-                    id: u.id,
-                    abbr: u.abbreviation,
-                    name: u.name,
-                });
-                return acc;
-            },
-            {} as Record<string, { id: string; abbr: string; name: string }[]>
-        );
+        // const unitsListForPrompt = Object.entries(unitsByType)
+        //     .map(
+        //         ([type, items]) =>
+        //             `${type}:\n${items.map((u) => `  - ${u.name} (${u.abbr}): "${u.id}"`).join("\n")}`
+        //     )
+        //     .join("\n");
 
-        const unitsListForPrompt = Object.entries(unitsByType)
-            .map(
-                ([type, items]) =>
-                    `${type}:\n${items.map((u) => `  - ${u.name} (${u.abbr}): "${u.id}"`).join("\n")}`
-            )
-            .join("\n");
-
-        const systemPrompt = `You are a recipe generation assistant.
-
-## Available Values
-Tags (dietary): ${tags.dietary.join(", ")}
-Tags (cuisine): ${tags.cuisine.join(", ")}
-
-Units (use UUID):
-${unitsListForPrompt}
+        const systemPrompt = `Generate exactly an authentic, real-world recipe based on the provided ingredients
 
 ## Rules
-- Recipe name MUST be exactly: "${body.title}"
-- Use ALL provided ingredients (may add common pantry items)
-- Use only tags and unit UUIDs from the lists above
 - For each instruction step, include an "ingredients" array listing the ingredient names used in that specific step
+- Each step MUST be authentic
 
-## Ingredient Hierarchy
-Each ingredient must include:
-- name: The specific ingredient (lowercase_underscore_singular)
-- category: The top-level food category (meat, poultry, seafood, dairy, vegetable, fruit, grain, legume, herb, spice, oil, condiment, nut, seed, sweetener, beverage, other)
-- parent: The immediate parent ingredient if applicable (null if none)
-
-Examples:
-- leg_of_lamb -> parent: "lamb", category: "meat"
-- lamb -> parent: null, category: "meat"
-- chicken_breast -> parent: "chicken", category: "poultry"
-- red_bell_pepper -> parent: "bell_pepper", category: "vegetable"
-- extra_virgin_olive_oil -> parent: "olive_oil", category: "oil"
-- ground_cumin -> parent: "cumin", category: "spice"
+## Difficulty Levels
+- "easy": Beginner-friendly version of the dish, using simple techniques while keeping ingredients authentic.
+- "medium": The standard authentic recipe with its usual techniques.
+- "hard": Elevated or advanced version of the dish, which may include optional ingredients or more complex techniques.
 
 ## Output Format (JSONL - one JSON object per line)
 Output the recipe as multiple JSON lines in this exact order:
@@ -97,10 +73,9 @@ Optional tip lines:
 
 No markdown, no code blocks, just JSONL.`;
 
-        const userPrompt = `Generate a detailed recipe for: ${body.title}
-
+        const userPrompt = `Generate a detailed recipe for: ${body.name}
 Required ingredients to use: ${body.ingredients.join(", ")}
-Servings: ${body.servings}${body.dietaryRestrictions?.length ? `\nDietary restrictions: ${body.dietaryRestrictions.join(", ")}` : ""}`;
+Servings: ${body.servings}`;
 
         const stream = await openai.chat.completions.create({
             model: "gpt-4.1",
@@ -120,13 +95,13 @@ Servings: ${body.servings}${body.dietaryRestrictions?.length ? `\nDietary restri
                     InstructionSchema,
                     TipSchema,
                 ],
-                initialServings: body.servings,
+                initialState: body,
             }),
         };
     },
 
-    onComplete: async ({ result }) => {
+    onComplete: async () => {
         // Persist the accumulated recipe to database
-        await persistGenerateRecipe(result);
+        // await persistGenerateRecipe(result);
     },
 });

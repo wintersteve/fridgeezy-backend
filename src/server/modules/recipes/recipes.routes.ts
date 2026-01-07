@@ -7,7 +7,7 @@ export function createRecipesRoutes() {
 
     const controller = new RecipesController();
 
-    router.post("/", controller.generate);
+    router.post("/generate", controller.generate);
     router.post("/difficulty/escalate", controller.escalate);
 
     return router;

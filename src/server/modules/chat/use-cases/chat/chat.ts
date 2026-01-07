@@ -2,7 +2,7 @@ import { zodFunction } from "openai/helpers/zod";
 import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { z } from "zod/v4";
 
-import { createMcpHandler } from "@/src/server/shared/streaming";
+import { createStreamHandler } from "@/src/server/shared/streaming";
 
 import { createChatStreamHandler } from "../../application/services";
 
@@ -163,7 +163,7 @@ const SYSTEM_PROMPT = `You are a helpful recipe assistant. You help users find r
 - Include all ingredients the user mentioned in the suggestions
 - Be conversational and helpful`;
 
-export const chat = createMcpHandler({
+export const chat = createStreamHandler({
     requestSchema: RequestSchema,
     responseSchema: [
         ChatTokenSchema,

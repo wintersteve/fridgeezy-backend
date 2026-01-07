@@ -21,7 +21,7 @@ export type HandlerResult =
     | { type: "stream"; stream: AsyncIterable<any> }
     | { type: "raw"; statusCode: number; data: any };
 
-export interface McpHandlerConfig<
+export interface StreamHandlerConfig<
     TRequestSchema extends z.ZodType,
     TResponseSchema extends z.ZodType | z.ZodType[],
 > {
@@ -93,7 +93,7 @@ function isStreamingSchema(schema: z.ZodType | z.ZodType[]): boolean {
 }
 
 /**
- * Create an MCP endpoint handler with automatic streaming detection and HTTP boilerplate handling.
+ * Create a stream endpoint handler with automatic streaming detection and HTTP boilerplate handling.
  *
  * The factory handles:
  * - CORS preflight (OPTIONS)
@@ -105,7 +105,7 @@ function isStreamingSchema(schema: z.ZodType | z.ZodType[]): boolean {
  *
  * @example
  * ```typescript
- * export const handleMyEndpoint = createMcpHandler({
+ * export const handleMyEndpoint = createStreamHandler({
  *   requestSchema: z.object({ name: z.string() }),
  *   responseSchema: z.object({ result: z.string() }),
  *   handler: async ({ body }) => ({
@@ -115,11 +115,11 @@ function isStreamingSchema(schema: z.ZodType | z.ZodType[]): boolean {
  * });
  * ```
  */
-export function createMcpHandler<
+export function createStreamHandler<
     TRequestSchema extends z.ZodType,
     TResponseSchema extends z.ZodType | z.ZodType[],
 >(
-    config: McpHandlerConfig<TRequestSchema, TResponseSchema>
+    config: StreamHandlerConfig<TRequestSchema, TResponseSchema>
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
     const allowedMethods = config.allowedMethods || ["POST"];
     const corsHeaders = buildCorsHeaders(config.cors);

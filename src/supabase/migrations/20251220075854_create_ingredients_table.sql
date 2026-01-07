@@ -2,6 +2,7 @@ create table ingredients
 (
     id               UUID primary key     default gen_random_uuid(),
     parent_id        UUID        references ingredients (id) on delete set null,
+    canonical_id     TEXT        not null unique,
     name             TEXT        not null unique,
     category_id      UUID        references categories (id) on delete set null,
     description      TEXT,
@@ -9,7 +10,8 @@ create table ingredients
     nutritional_info JSONB,
     storage_tips     TEXT,
     shelf_life       TEXT, -- e.g., "3-5 days refrigerated", "1 year dried"
-    created_at       TIMESTAMPTZ not null default now()
+    created_at       TIMESTAMPTZ not null default now(),
+    embedding        vector(1536)
 );
 
 comment

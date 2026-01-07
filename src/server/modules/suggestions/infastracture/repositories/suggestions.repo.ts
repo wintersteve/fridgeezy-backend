@@ -1,39 +1,29 @@
 import { supabase, TablesInsert } from "@/src/shared/supabase";
 import { fromPersistence, toPersistence } from "@/src/shared/toolkit";
 
-const insert = async (input: TablesInsert<"recipes">) => {
-    const {
-        name,
-        description,
-        difficulty,
-        servings,
-        prep_time,
-        cook_time,
-        tips,
-        instructions,
-    } = toPersistence<TablesInsert<"recipes">>(input);
+const insert = async (input: TablesInsert<"recipe_suggestions">) => {
+    const { name, description, difficulty } =
+        toPersistence<TablesInsert<"recipe_suggestions">>(input);
 
     const { data, ...rest } = await supabase
-        .from("recipes")
+        .from("recipe_suggestions")
         .insert({
             name,
             description,
             difficulty,
-            servings,
-            prep_time,
-            cook_time,
-            tips,
-            instructions,
         })
         .select("*")
         .single();
 
-    return { data: fromPersistence<TablesInsert<"recipes">>(data), ...rest };
+    return {
+        data: fromPersistence<TablesInsert<"recipe_suggestions">>(data),
+        ...rest,
+    };
 };
 
 const getById = async (id: string) => {
     const { data, ...rest } = await supabase
-        .from("recipes")
+        .from("recipe_suggestions")
         .select("*")
         .eq("id", id)
         .single();
@@ -43,7 +33,7 @@ const getById = async (id: string) => {
 
 const getByName = async (name: string) => {
     const { data, ...rest } = await supabase
-        .from("recipes")
+        .from("recipe_suggestions")
         .select("*")
         .eq("name", name)
         .single();
@@ -51,4 +41,4 @@ const getByName = async (name: string) => {
     return { data: fromPersistence(data), ...rest };
 };
 
-export const RecipesRepo = { insert, getById, getByName };
+export const SuggestionsRepo = { insert, getById, getByName };

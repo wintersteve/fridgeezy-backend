@@ -5,7 +5,7 @@ import {
     TipSchema,
 } from "@/src/server/modules/recipes/domain/schemas";
 import { DifficultyValue } from "@/src/server/modules/recipes/domain/value-objects";
-import { createMcpHandler } from "@/src/server/shared/streaming";
+import { createStreamHandler } from "@/src/server/shared/streaming";
 import { fetchTagsCached } from "@/src/server/shared/tags";
 import { fetchUnitsCached } from "@/src/server/shared/units";
 import { openai } from "@/src/shared/openai";
@@ -17,7 +17,7 @@ import {
 } from "../../application";
 import { RecipeIngredientsRepo, RecipesRepo } from "../../infastracture";
 
-export const escalateDifficulty = createMcpHandler({
+export const escalateDifficulty = createStreamHandler({
     requestSchema: EscalateDifficultyRequestSchema,
     responseSchema: [
         HeaderSchema,
@@ -182,7 +182,7 @@ Please elevate this recipe with more refined techniques and additional high-qual
                     InstructionSchema,
                     TipSchema,
                 ],
-                initialServings: existingRecipe.servings,
+                initialState: body as any,
             }),
         };
     },

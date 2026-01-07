@@ -6,7 +6,7 @@ import { generateRecipe } from "./use-cases/generate-recipe";
 export class RecipesController {
     generate = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            res.json(generateRecipe(req, res));
+            return generateRecipe(req, res);
         } catch (err) {
             next(err);
         }
@@ -14,7 +14,7 @@ export class RecipesController {
 
     escalate = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            res.json(escalateDifficulty(req, res));
+            return escalateDifficulty(req, res);
         } catch (err) {
             next(err);
         }

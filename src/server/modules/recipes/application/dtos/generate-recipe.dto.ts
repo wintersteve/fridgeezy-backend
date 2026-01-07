@@ -5,13 +5,16 @@ import { z } from "zod/v4";
  * Defines the contract for external systems calling the generate recipe use-case.
  */
 export const GenerateRecipeRequestSchema = z.object({
-    title: z.string().min(1).describe("Recipe title from the suggestion"),
+    difficulty: z.enum(["easy", "medium", "hard"]),
+    name: z.string().min(1).describe("Recipe name from the suggestion"),
     ingredients: z
         .array(z.string().min(1))
         .min(1)
         .describe("Ingredients from the suggestion"),
     servings: z.number().int().positive().default(4),
-    dietaryRestrictions: z.array(z.string()).nullable().optional(),
+    tags: z.array(z.string()),
 });
 
-export type GenerateRecipeRequest = z.infer<typeof GenerateRecipeRequestSchema>;
+export type GenerateRecipeRequestDto = z.infer<
+    typeof GenerateRecipeRequestSchema
+>;

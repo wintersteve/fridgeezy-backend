@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { z } from "zod/v4";
 
-import { createMcpHandler } from "@/src/server/shared/streaming";
+import { createStreamHandler } from "@/src/server/shared/streaming";
 import { openai } from "@/src/shared/openai";
 
 // Request body schema - accepts base64 image or URL
@@ -30,7 +30,7 @@ const ExtractedIngredientsSchema = z.object({
     confidence: z.enum(["high", "medium", "low"]),
 });
 
-export const extractIngredients = createMcpHandler({
+export const extractIngredients = createStreamHandler({
     requestSchema: RequestSchema,
     responseSchema: ExtractedIngredientsSchema,
     useBufferedParser: true, // Use buffered parser for large base64 images

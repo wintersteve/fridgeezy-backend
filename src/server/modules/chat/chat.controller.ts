@@ -5,7 +5,7 @@ import { chat } from "./use-cases/chat";
 export class ChatController {
     create = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            res.json(chat(req, res));
+            return chat(req, res);
         } catch (err) {
             next(err);
         }

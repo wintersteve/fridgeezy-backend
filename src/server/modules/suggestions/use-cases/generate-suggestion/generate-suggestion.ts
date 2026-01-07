@@ -89,21 +89,21 @@ Each recipe object must include:
             stream: suggestionStream(),
         };
     },
-    onComplete: async ({
-        result,
-    }: {
-        result: GenerateSuggestionResponseDto;
-    }) => {
-        const suggestion = SuggestionsMapper.fromLLM(result);
-
-        const suggestionResponse = await SuggestionsRepo.getByName(
-            suggestion.name
-        );
-
-        const recipeResponse = await RecipesRepo.getByName(suggestion.name);
-
-        if (suggestionResponse.data?.id || recipeResponse.data?.id) return;
-
-        await SuggestionsRepo.insert(result);
-    },
+    // onComplete: async ({
+    //     result,
+    // }: {
+    //     result: GenerateSuggestionResponseDto;
+    // }) => {
+    //     const suggestion = SuggestionsMapper.fromLLM(result);
+    //
+    //     const suggestionResponse = await SuggestionsRepo.getByName(
+    //         suggestion.name
+    //     );
+    //
+    //     const recipeResponse = await RecipesRepo.getByName(suggestion.name);
+    //
+    //     if (suggestionResponse.data?.id || recipeResponse.data?.id) return;
+    //
+    //     await SuggestionsRepo.insert(result);
+    // },
 });

@@ -1,18 +1,13 @@
-import { RecipesRepo } from "@/src/server/modules/recipes";
-import { SuggestionsMapper } from "@/src/server/modules/suggestions/application/mappers/suggestions-mapper/suggestions-mapper";
-import { SuggestionsRepo } from "@/src/server/modules/suggestions/infastracture";
+import {
+    GenerateSuggestionRequestSchema,
+    GenerateSuggestionResponseSchema,
+} from "../../application";
 import {
     createStreamHandler,
     processJsonlStream,
-} from "@/src/server/shared/streaming";
-import { openai } from "@/src/shared/openai";
-import { castArray } from "@/src/shared/toolkit";
-
-import {
-    GenerateSuggestionRequestSchema,
-    GenerateSuggestionResponseDto,
-    GenerateSuggestionResponseSchema,
-} from "../../application";
+} from "../../../../shared/streaming";
+import { castArray } from "@fridgeezy/toolkit";
+import { openai } from "@fridgeezy/openai";
 
 export const generateSuggestion = createStreamHandler({
     requestSchema: GenerateSuggestionRequestSchema,

@@ -13,5 +13,5 @@ export class SuggestionsMapper {
         return Suggestion.create(normalized);
     }
 
-    static toPersistence() {}
+    // static toPersistence() {}
 }

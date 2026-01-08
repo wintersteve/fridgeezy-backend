@@ -1,6 +1,5 @@
+import { supabase, TablesInsert } from "@fridgeezy/supabase";
 import { ObjectToCamel, objectToSnake } from "ts-case-convert";
-
-import { supabase, TablesInsert } from "@/src/shared/supabase";
 
 const upsert = async (
     input: ObjectToCamel<TablesInsert<"recipe_ingredients">>

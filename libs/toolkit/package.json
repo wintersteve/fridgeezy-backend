@@ -15,7 +15,9 @@
             "default": "./dist/index.js"
         }
     },
-    "dependencies": {},
+    "dependencies": {
+        "ts-case-convert": "^2.1.0"
+    },
     "nx": {
         "tags": [
             "scope:shared"

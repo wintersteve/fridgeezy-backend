@@ -1,19 +1,16 @@
-import OpenAI from "openai";
 import type {
     ChatCompletionMessageParam,
     ChatCompletionTool,
 } from "openai/resources/chat/completions";
 import { z } from "zod/v4";
-
 import {
     RecipeOutputSchema,
     SuggestionsOutputSchema,
-} from "@/src/server/modules/chat/use-cases/chat";
-import { persistGenerateRecipe } from "@/src/server/modules/recipes";
-import { RecipeAccumulator } from "@/src/server/modules/recipes/domain";
-import { fetchTagsCached } from "@/src/server/shared/tags";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+} from "../../use-cases/chat";
+import { openai } from "@fridgeezy/openai";
+import { persistGenerateRecipe } from "../../../recipes";
+import { fetchTagsCached } from "../../../../shared/tags";
+import { RecipeAccumulator } from "../../../recipes/domain";
 
 export type ChatStreamEvent =
     | { type: "token"; content: string }

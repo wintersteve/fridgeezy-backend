@@ -1,10 +1,6 @@
-import {
-    CategoriesRepo,
-    IngredientsRepo,
-} from "@/src/server/modules/ingredients";
-import { RecipeAccumulator } from "@/src/server/modules/recipes/domain";
-
 import { RecipeIngredientsRepo, RecipesRepo } from "../../infastracture";
+import { CategoriesRepo, IngredientsRepo } from "../../../ingredients";
+import { RecipeAccumulator } from "../../domain";
 
 /**
  * Resolves a category name to its ID.

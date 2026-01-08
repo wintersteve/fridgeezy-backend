@@ -1,4 +1,4 @@
-import { supabase } from "@/src/shared/supabase";
+import { supabase } from "@fridgeezy/supabase";
 
 // Cache for category name -> ID lookups (5 minute TTL)
 const categoryCache = new Map<string, { id: string; expiresAt: number }>();

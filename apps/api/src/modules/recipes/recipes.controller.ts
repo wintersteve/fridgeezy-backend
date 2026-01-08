@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 
-import { escalateDifficulty } from "./use-cases/escalate-difficulty";
-import { generateRecipe } from "./use-cases/generate-recipe";
+import { escalateDifficulty, generateRecipe } from "./use-cases";
 
 export class RecipesController {
     generate = async (req: Request, res: Response, next: NextFunction) => {

@@ -1,1 +1,1 @@
-export * from "./suggestions-mapper";
+export * from "./suggestions-mapper/suggestions-mapper";

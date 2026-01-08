@@ -2,9 +2,8 @@ import { zodFunction } from "openai/helpers/zod";
 import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { z } from "zod/v4";
 
-import { createStreamHandler } from "@/src/server/shared/streaming";
-
 import { createChatStreamHandler } from "../../application/services";
+import { createStreamHandler } from "../../../../shared/streaming";
 
 // ============================================================================
 // Schemas for structured output tools

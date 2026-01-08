@@ -1,14 +1,4 @@
-import {
-    HeaderSchema,
-    IngredientSchema,
-    InstructionSchema,
-    TipSchema,
-} from "@/src/server/modules/recipes/domain/schemas";
-import { DifficultyValue } from "@/src/server/modules/recipes/domain/value-objects";
-import { createStreamHandler } from "@/src/server/shared/streaming";
-import { fetchTagsCached } from "@/src/server/shared/tags";
-import { fetchUnitsCached } from "@/src/server/shared/units";
-import { openai } from "@/src/shared/openai";
+import { openai } from "@fridgeezy/openai";
 
 import {
     createRecipeStreamHandler,
@@ -16,6 +6,16 @@ import {
     persistGenerateRecipe,
 } from "../../application";
 import { RecipeIngredientsRepo, RecipesRepo } from "../../infastracture";
+import { createStreamHandler } from "../../../../shared/streaming";
+import {
+    DifficultyValue,
+    HeaderSchema,
+    IngredientSchema,
+    InstructionSchema,
+    TipSchema,
+} from "../../domain";
+import { fetchTagsCached } from "../../../../shared/tags";
+import { fetchUnitsCached } from "../../../../shared/units";
 
 export const escalateDifficulty = createStreamHandler({
     requestSchema: EscalateDifficultyRequestSchema,

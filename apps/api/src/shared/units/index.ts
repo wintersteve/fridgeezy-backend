@@ -9,7 +9,7 @@ export interface Unit {
 
 // Simple in-memory cache
 let cachedUnits: Unit[] | null = null;
-let cacheTimestamp: number = 0;
+let cacheTimestamp = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**

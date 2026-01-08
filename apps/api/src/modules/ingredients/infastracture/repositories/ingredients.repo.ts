@@ -1,5 +1,5 @@
-import { supabase, TablesInsert } from "@/src/shared/supabase";
-import { toPersistence } from "@/src/shared/toolkit";
+import { supabase, TablesInsert } from "@fridgeezy/supabase";
+import { toPersistence } from "@fridgeezy/toolkit";
 
 const findByCanonicalId = async (input: string[]) => {
     return supabase.from("ingredients").select("id").in("canonical_id", input);

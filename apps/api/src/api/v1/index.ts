@@ -17,7 +17,7 @@ export function createApiRouter() {
 
     router.use("/recipes", createRecipesRoutes());
 
-    router.get("/health", (req, res) => {
+    router.get("/health", (_, res) => {
         res.json({ status: "ok" });
     });
 

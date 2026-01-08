@@ -1,9 +1,8 @@
 import { z } from "zod/v4";
 
-import { GenerateRecipeRequestDto } from "@/src/server/modules/recipes";
-import { processJsonlStream } from "@/src/server/shared/streaming";
-
 import { RecipeAccumulator } from "../../domain/entities";
+import { GenerateRecipeRequestDto } from "../dtos";
+import { processJsonlStream } from "../../../../shared/streaming";
 
 export interface RecipeStreamConfig {
     schemas: [z.ZodType, z.ZodType, z.ZodType, z.ZodType]; // Header, Ingredient, Instruction, Tip

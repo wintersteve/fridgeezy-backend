@@ -1,16 +1,15 @@
 import {
+    createRecipeStreamHandler,
+    GenerateRecipeRequestSchema,
+} from "../../application";
+import { createStreamHandler } from "../../../../shared/streaming";
+import {
     HeaderSchema,
     IngredientSchema,
     InstructionSchema,
     TipSchema,
-} from "@/src/server/modules/recipes/domain/schemas";
-import { createStreamHandler } from "@/src/server/shared/streaming";
-import { openai } from "@/src/shared/openai";
-
-import {
-    createRecipeStreamHandler,
-    GenerateRecipeRequestSchema,
-} from "../../application";
+} from "../../domain";
+import { openai } from "@fridgeezy/openai";
 
 export const generateRecipe = createStreamHandler({
     requestSchema: GenerateRecipeRequestSchema,

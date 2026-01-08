@@ -1,5 +1,5 @@
-import { supabase, TablesInsert } from "@/src/shared/supabase";
-import { fromPersistence, toPersistence } from "@/src/shared/toolkit";
+import { supabase, TablesInsert } from "@fridgeezy/supabase";
+import { fromPersistence, toPersistence } from "@fridgeezy/toolkit";
 
 const insert = async (input: TablesInsert<"recipe_suggestions">) => {
     const { name, description, difficulty } =

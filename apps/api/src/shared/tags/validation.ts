@@ -1,10 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client
-// Note: You may need to adjust this based on your actual Supabase client setup
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabase } from "@fridgeezy/supabase";
 
 /**
  * Validates that parent_id references a tag of the same type
@@ -18,13 +12,13 @@ export async function validateTagParent(
     parentId: string
 ): Promise<{ valid: boolean; error?: string }> {
     const { data, error } = await supabase
-        .from('tags')
-        .select('type')
-        .eq('id', parentId)
+        .from("tags")
+        .select("type")
+        .eq("id", parentId)
         .single();
 
     if (error || !data) {
-        return { valid: false, error: 'Parent tag not found' };
+        return { valid: false, error: "Parent tag not found" };
     }
 
     if (data.type !== tagType) {
@@ -48,7 +42,7 @@ export async function validateTagParent(
 export async function detectCircularParent(
     tagId: string,
     parentId: string,
-    maxDepth: number = 10
+    maxDepth = 10
 ): Promise<{ circular: boolean; error?: string }> {
     let currentId = parentId;
     let depth = 0;
@@ -58,27 +52,28 @@ export async function detectCircularParent(
         if (currentId === tagId) {
             return {
                 circular: true,
-                error: 'Circular parent relationship detected'
+                error: "Circular parent relationship detected",
             };
         }
 
         // Get the parent of the current tag
         const { data, error } = await supabase
-            .from('tags')
-            .select('parent_id')
-            .eq('id', currentId)
+            .from("tags")
+            .select("parent_id")
+            .eq("id", currentId)
             .single();
 
-        if (error || !data) break;
+        if (error || !data.parent_id) break;
 
         currentId = data.parent_id;
+
         depth++;
     }
 
     if (depth >= maxDepth) {
         return {
             circular: true,
-            error: 'Maximum hierarchy depth exceeded'
+            error: "Maximum hierarchy depth exceeded",
         };
     }
 
@@ -94,7 +89,7 @@ export async function detectCircularParent(
  */
 export async function getTagAncestors(
     tagId: string,
-    maxDepth: number = 10
+    maxDepth = 10
 ): Promise<string[]> {
     const ancestors: string[] = [];
     let currentId = tagId;
@@ -102,9 +97,9 @@ export async function getTagAncestors(
 
     while (currentId && depth < maxDepth) {
         const { data } = await supabase
-            .from('tags')
-            .select('parent_id')
-            .eq('id', currentId)
+            .from("tags")
+            .select("parent_id")
+            .eq("id", currentId)
             .single();
 
         if (!data?.parent_id) break;
@@ -127,11 +122,11 @@ export async function getTagAncestors(
  */
 export async function getTagDescendants(tagId: string): Promise<string[]> {
     const { data } = await supabase
-        .from('tags')
-        .select('id')
-        .eq('parent_id', tagId);
+        .from("tags")
+        .select("id")
+        .eq("parent_id", tagId);
 
-    return data?.map(tag => tag.id) || [];
+    return data?.map((tag) => tag.id) || [];
 }
 
 /**

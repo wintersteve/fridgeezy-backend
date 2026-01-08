@@ -1,8 +1,7 @@
 import OpenAI from "openai";
 import { z } from "zod/v4";
-
-import { createStreamHandler } from "@/src/server/shared/streaming";
-import { openai } from "@/src/shared/openai";
+import { createStreamHandler } from "../../../../shared/streaming";
+import { openai } from "@fridgeezy/openai";
 
 // Request body schema - accepts base64 image or URL
 const RequestSchema = z.object({

@@ -10,6 +10,7 @@ export default defineConfig(() => ({
         dts({
             entryRoot: "src",
             tsconfigPath: path.join(import.meta.dirname, "tsconfig.lib.json"),
+            exclude: ["vite.config.mts"],
         }),
     ],
     // Uncomment this if you are using workers.

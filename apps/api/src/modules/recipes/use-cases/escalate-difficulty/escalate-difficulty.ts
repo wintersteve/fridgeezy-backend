@@ -6,7 +6,6 @@ import {
     persistGenerateRecipe,
 } from "../../application";
 import { RecipeIngredientsRepo, RecipesRepo } from "../../infastracture";
-import { createStreamHandler } from "../../../../shared/streaming";
 import {
     DifficultyValue,
     HeaderSchema,
@@ -16,6 +15,7 @@ import {
 } from "../../domain";
 import { fetchTagsCached } from "../../../../shared/tags";
 import { fetchUnitsCached } from "../../../../shared/units";
+import { createStreamHandler } from "@fridgeezy/server";
 
 export const escalateDifficulty = createStreamHandler({
     requestSchema: EscalateDifficultyRequestSchema,

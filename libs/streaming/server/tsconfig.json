@@ -1,0 +1,10 @@
+{
+    "extends": "../../../tsconfig.base.json",
+    "files": [],
+    "include": ["vite.config.mts"],
+    "references": [
+        {
+            "path": "./tsconfig.lib.json"
+        }
+    ]
+}

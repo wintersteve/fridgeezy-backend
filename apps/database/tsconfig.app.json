@@ -8,4 +8,12 @@
     },
     "include": ["src/**/*.ts"],
     "exclude": ["eslint.config.js", "eslint.config.cjs", "eslint.config.mjs"],
+    "references": [
+        {
+            "path": "../../libs/supabase/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/openai/tsconfig.lib.json"
+        }
+    ]
 }

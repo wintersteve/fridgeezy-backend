@@ -2,7 +2,7 @@ import { z } from "zod/v4";
 
 import { RecipeAccumulator } from "../../domain/entities";
 import { GenerateRecipeRequestDto } from "../dtos";
-import { processJsonlStream } from "../../../../shared/streaming";
+import { processJsonlStream } from "@fridgeezy/server";
 
 export interface RecipeStreamConfig {
     schemas: [z.ZodType, z.ZodType, z.ZodType, z.ZodType]; // Header, Ingredient, Instruction, Tip

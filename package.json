@@ -5,6 +5,7 @@
     "scripts": {
         "api": "nx run api:serve",
         "lint:all": "nx run-many -t lint --all",
+        "lint:app": "nx run-many -t lint --projects=tag:scope:app",
         "lint:shared": "nx run-many -t lint --projects=tag:scope:shared"
     },
     "dependencies": {
@@ -58,7 +59,8 @@
     },
     "workspaces": [
         "apps/*",
-        "libs/*"
+        "libs/*",
+        "libs/streaming/*"
     ],
     "private": true
 }

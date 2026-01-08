@@ -1,15 +1,12 @@
-import { config } from "dotenv";
-config(); // Load environment variables
-
-import { generateBatchEmbeddings } from "@/src/shared/openai";
-import { supabase } from "@/src/shared/supabase";
+import { generateBatchEmbeddings } from "@fridgeezy/openai";
+import { supabase } from "@fridgeezy/supabase";
 
 /**
  * Generate and store embeddings for all canonical dietary tags
  * Only processes canonical tags (where canonical_id = name)
  * Aliases don't need embeddings as they reference canonical tags
  */
-async function generateDietaryTagEmbeddings() {
+export async function generateDietaryTagEmbeddings() {
     console.log("Starting canonical dietary tag embedding generation...\n");
 
     try {
@@ -109,14 +106,3 @@ async function generateDietaryTagEmbeddings() {
         process.exit(1);
     }
 }
-
-// Execute the script
-generateDietaryTagEmbeddings()
-    .then(() => {
-        console.log("\nScript completed successfully!");
-        process.exit(0);
-    })
-    .catch((error) => {
-        console.error("\nScript failed:", error);
-        process.exit(1);
-    });

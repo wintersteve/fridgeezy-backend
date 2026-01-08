@@ -3,42 +3,13 @@
     "version": "0.0.1",
     "private": true,
     "nx": {
+        "tags": ["scope:app"],
         "targets": {
-            "build": {
-                "executor": "@nx/esbuild:esbuild",
-                "outputs": [
-                    "{options.outputPath}"
-                ],
-                "defaultConfiguration": "production",
+            "reset": {
+                "executor": "nx:run-commands",
                 "options": {
-                    "platform": "node",
-                    "outputPath": "apps/database/dist",
-                    "format": [
-                        "cjs"
-                    ],
-                    "bundle": false,
-                    "main": "apps/database/src/main.ts",
-                    "tsConfig": "apps/database/tsconfig.app.json",
-                    "assets": [
-                        "apps/database/src/assets"
-                    ],
-                    "esbuildOptions": {
-                        "sourcemap": true,
-                        "outExtension": {
-                            ".js": ".js"
-                        }
-                    }
-                },
-                "configurations": {
-                    "development": {},
-                    "production": {
-                        "esbuildOptions": {
-                            "sourcemap": false,
-                            "outExtension": {
-                                ".js": ".js"
-                            }
-                        }
-                    }
+                    "command": "supabase db reset --linked",
+                    "cwd": "apps/database/src"
                 }
             },
             "prune-lockfile": {
@@ -74,26 +45,6 @@
                     "copy-workspace-modules"
                 ],
                 "executor": "nx:noop"
-            },
-            "serve": {
-                "continuous": true,
-                "executor": "@nx/js:node",
-                "defaultConfiguration": "development",
-                "dependsOn": [
-                    "build"
-                ],
-                "options": {
-                    "buildTarget": "@fridgeezy/database:build",
-                    "runBuildTargetDependencies": false
-                },
-                "configurations": {
-                    "development": {
-                        "buildTarget": "@fridgeezy/database:build:development"
-                    },
-                    "production": {
-                        "buildTarget": "@fridgeezy/database:build:production"
-                    }
-                }
             }
         }
     },

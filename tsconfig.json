@@ -7,13 +7,16 @@
             "path": "./libs/genai"
         },
         {
-            "path": "./apps/api"
-        },
-        {
             "path": "./libs/openai"
         },
         {
             "path": "./libs/supabase"
+        },
+        {
+            "path": "./libs/toolkit"
+        },
+        {
+            "path": "./apps/api"
         }
     ]
 }

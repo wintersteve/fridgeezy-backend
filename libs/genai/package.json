@@ -2,11 +2,21 @@
     "name": "@fridgeezy/genai",
     "version": "0.0.1",
     "private": true,
-    "type": "commonjs",
-    "main": "./src/index.js",
-    "types": "./src/index.d.ts",
+    "type": "module",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        "./package.json": "./package.json",
+        ".": {
+            "@fridgeezy/source": "./src/index.ts",
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
+        }
+    },
     "dependencies": {
-        "tslib": "^2.3.0"
+        "@google/genai": "^1.34.0"
     },
     "nx": {
         "tags": [

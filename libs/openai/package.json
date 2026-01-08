@@ -15,7 +15,9 @@
             "default": "./dist/index.js"
         }
     },
-    "dependencies": {},
+    "dependencies": {
+        "openai": "^6.15.0"
+    },
     "nx": {
         "tags": [
             "scope:shared"

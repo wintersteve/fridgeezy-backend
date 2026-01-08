@@ -7,8 +7,7 @@
         "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo",
         "emitDeclarationOnly": true,
         "forceConsistentCasingInFileNames": true,
-        "types": ["node", "vite/client"],
-        "moduleResolution": "bundler"
+        "types": ["node", "vite/client"]
     },
     "include": ["src/**/*.ts"],
     "references": []

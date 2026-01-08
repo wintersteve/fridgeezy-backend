@@ -9,6 +9,6 @@
         "forceConsistentCasingInFileNames": true,
         "types": ["node", "vite/client"]
     },
-    "include": ["src/**/*.ts"],
+    "include": ["src/**/*.ts", "vite.config.mts"],
     "references": []
 }

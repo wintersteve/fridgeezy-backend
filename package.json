@@ -13,7 +13,9 @@
         "supabase:reset": "supabase db reset",
         "supabase:reset:linked": "cd src/supabase && supabase db reset --linked --yes",
         "supabase:types": "cd src/supabase && supabase gen types --project-id qkxznjwlybjqpcauaisz > dist/database.types.ts",
-        "generate:tag-embeddings": "ts-node src/supabase/scripts/generate-tag-embeddings.ts"
+        "generate:tag-embeddings": "ts-node src/supabase/scripts/generate-tag-embeddings.ts",
+        "lint:all": "nx run-many -t lint --all",
+        "lint:shared": "nx run-many -t lint --projects=tag:scope:shared"
     },
     "dependencies": {
         "@google/genai": "^1.34.0",

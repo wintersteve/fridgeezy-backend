@@ -3,6 +3,7 @@
     "version": "0.0.1",
     "private": true,
     "nx": {
+        "tags": ["scope:app"],
         "targets": {
             "build": {
                 "executor": "@nx/esbuild:esbuild",

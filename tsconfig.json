@@ -4,10 +4,19 @@
     "files": [],
     "references": [
         {
+            "path": "./apps/api"
+        },
+        {
+            "path": "./apps/database"
+        },
+        {
             "path": "./libs/genai"
         },
         {
             "path": "./libs/openai"
+        },
+        {
+            "path": "./libs/streaming-server"
         },
         {
             "path": "./libs/supabase"
@@ -15,14 +24,5 @@
         {
             "path": "./libs/toolkit"
         },
-        {
-            "path": "./apps/api"
-        },
-        {
-            "path": "./apps/database"
-        },
-        {
-            "path": "./libs/streaming/server"
-        }
     ]
 }

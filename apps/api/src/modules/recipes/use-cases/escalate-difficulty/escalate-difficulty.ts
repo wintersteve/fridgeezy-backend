@@ -15,7 +15,7 @@ import {
 } from "../../domain";
 import { fetchTagsCached } from "../../../../shared/tags";
 import { fetchUnitsCached } from "../../../../shared/units";
-import { createStreamHandler } from "@fridgeezy/server";
+import { createStreamHandler } from "@fridgeezy/streaming-server";
 
 export const escalateDifficulty = createStreamHandler({
     requestSchema: EscalateDifficultyRequestSchema,

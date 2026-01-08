@@ -3,7 +3,7 @@ import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { z } from "zod/v4";
 
 import { createChatStreamHandler } from "../../application/services";
-import { createStreamHandler } from "@fridgeezy/server";
+import { createStreamHandler } from "@fridgeezy/streaming-server";
 
 // ============================================================================
 // Schemas for structured output tools

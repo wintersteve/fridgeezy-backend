@@ -4,6 +4,9 @@
     "description": "",
     "scripts": {
         "api": "nx run api:serve",
+        "build:all": "nx run-many -t build --all",
+        "build:app": "nx run-many -t lint --projects=tag:scope:app",
+        "build:shared": "nx run-many -t build --projects=tag:scope:shared",
         "lint:all": "nx run-many -t lint --all",
         "lint:app": "nx run-many -t lint --projects=tag:scope:app",
         "lint:shared": "nx run-many -t lint --projects=tag:scope:shared"
@@ -59,8 +62,7 @@
     },
     "workspaces": [
         "apps/*",
-        "libs/*",
-        "libs/streaming/*"
+        "libs/*"
     ],
     "private": true
 }

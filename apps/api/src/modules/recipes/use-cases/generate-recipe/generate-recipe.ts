@@ -9,7 +9,7 @@ import {
     TipSchema,
 } from "../../domain";
 import { openai } from "@fridgeezy/openai";
-import { createStreamHandler } from "@fridgeezy/server";
+import { createStreamHandler } from "@fridgeezy/streaming-server";
 
 export const generateRecipe = createStreamHandler({
     requestSchema: GenerateRecipeRequestSchema,

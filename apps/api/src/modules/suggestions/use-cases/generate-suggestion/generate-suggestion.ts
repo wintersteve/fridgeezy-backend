@@ -2,7 +2,10 @@ import {
     GenerateSuggestionRequestSchema,
     GenerateSuggestionResponseSchema,
 } from "../../application";
-import { createStreamHandler, processJsonlStream } from "@fridgeezy/server";
+import {
+    createStreamHandler,
+    processJsonlStream,
+} from "@fridgeezy/streaming-server";
 import { castArray } from "@fridgeezy/toolkit";
 import { openai } from "@fridgeezy/openai";
 

@@ -12,6 +12,13 @@
                     "cwd": "apps/database/src"
                 }
             },
+            "types": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti tools/generate-types.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "prune-lockfile": {
                 "dependsOn": [
                     "build"

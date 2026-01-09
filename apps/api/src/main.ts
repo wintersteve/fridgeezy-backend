@@ -1,4 +1,6 @@
 import "dotenv/config";
+import "reflect-metadata";
+import "./container"; // Initialize DI container
 
 import { randomUUID } from "node:crypto";
 

@@ -10,5 +10,12 @@
         "types": ["node", "vite/client"]
     },
     "include": ["src/**/*.ts"],
-    "references": []
+    "references": [
+        {
+            "path": "../toolkit/tsconfig.lib.json"
+        },
+        {
+            "path": "../fridgeezy/domain/tsconfig.lib.json"
+        }
+    ]
 }

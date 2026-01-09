@@ -4,6 +4,12 @@
     "include": ["vite.config.mts"],
     "references": [
         {
+            "path": "../toolkit"
+        },
+        {
+            "path": "../fridgeezy/domain"
+        },
+        {
             "path": "./tsconfig.lib.json"
         }
     ]

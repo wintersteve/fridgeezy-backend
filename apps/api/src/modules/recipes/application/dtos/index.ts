@@ -1,2 +1,2 @@
-export * from "./generate-recipe.dto";
-export * from "./escalate-difficulty.dto";
+// Re-export from shared schema library
+export * from "@fridgeezy/schemas";

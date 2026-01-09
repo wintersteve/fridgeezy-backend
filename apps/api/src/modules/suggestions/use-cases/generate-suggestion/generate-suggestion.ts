@@ -1,20 +1,28 @@
+import { SuggestionsService } from "@fridgeezy/application";
+import { openai } from "@fridgeezy/openai";
 import {
     GenerateSuggestionRequestSchema,
+    GenerateSuggestionResponseDto,
     GenerateSuggestionResponseSchema,
-} from "../../application";
+} from "@fridgeezy/schemas";
 import {
     createStreamHandler,
     processJsonlStream,
 } from "@fridgeezy/streaming-server";
 import { castArray } from "@fridgeezy/toolkit";
-import { openai } from "@fridgeezy/openai";
 
-export const generateSuggestion = createStreamHandler({
-    requestSchema: GenerateSuggestionRequestSchema,
-    responseSchema: GenerateSuggestionResponseSchema,
+/**
+ * Factory function to create a generateSuggestion handler with dependencies injected
+ */
+export const createGenerateSuggestionHandler = (
+    suggestionsService: SuggestionsService
+) =>
+    createStreamHandler({
+        requestSchema: GenerateSuggestionRequestSchema,
+        responseSchema: GenerateSuggestionResponseSchema,
 
-    handler: async ({ body }) => {
-        const systemPrompt = `You are a recipe suggestion assistant. Generate exactly 5 authentic, real-world recipe suggestions based on the provided ingredients.
+        handler: async ({ body }) => {
+            const systemPrompt = `You are a recipe suggestion assistant. Generate exactly 5 authentic, real-world recipe suggestions based on the provided ingredients.
 ## Rules
 - Suggest 5 authentic, well-known recipes that use the provided ingredients.
 - Each recipe MUST be a real dish (not invented, must be authentic) with their real name.
@@ -45,60 +53,74 @@ Each recipe object must include:
 - tags (array of strings with component, cuisine, and dietary tags)
 `;
 
-        const format = (filter: string, value?: string | string[]) => {
-            const isValid = Array.isArray(value) ? value.length > 0 : !!value;
+            const format = (filter: string, value?: string | string[]) => {
+                const isValid = Array.isArray(value)
+                    ? value.length > 0
+                    : !!value;
 
-            return isValid ? `${filter}: ${castArray(value).join(",")}` : "";
-        };
+                return isValid
+                    ? `${filter}: ${castArray(value).join(",")}`
+                    : "";
+            };
 
-        const userPrompt = [
-            format("Blacklist", body.blacklist),
-            format("Component", body.component),
-            format("Course", body.course),
-            format("Cuisine", body.cuisine),
-            format("Difficulty", body.difficulty),
-            format("Dietary Restrictions", body.dietaryRestrictions),
-            format("Ingredients", body.ingredients),
-        ].join("\n");
+            const userPrompt = [
+                format("Blacklist", body.blacklist),
+                format("Component", body.component),
+                format("Course", body.course),
+                format("Cuisine", body.cuisine),
+                format("Difficulty", body.difficulty),
+                format("Dietary Restrictions", body.dietaryRestrictions),
+                format("Ingredients", body.ingredients),
+            ].join("\n");
 
-        const stream = await openai.chat.completions.create({
-            model: "gpt-4.1",
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userPrompt },
-            ],
-            stream: true,
-        });
+            const stream = await openai.chat.completions.create({
+                model: "gpt-4.1",
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userPrompt },
+                ],
+                stream: true,
+            });
 
-        // Use processJsonlStream to handle buffering and validation
-        async function* suggestionStream() {
-            for await (const { parsed } of processJsonlStream(stream, [
-                GenerateSuggestionResponseSchema,
-            ])) {
-                yield parsed;
+            // Use processJsonlStream to handle buffering and validation
+            async function* suggestionStream() {
+                for await (const { parsed } of processJsonlStream(stream, [
+                    GenerateSuggestionResponseSchema,
+                ])) {
+                    yield parsed;
+                }
             }
-        }
 
-        return {
-            type: "stream" as const,
-            stream: suggestionStream(),
-        };
-    },
-    // onComplete: async ({
-    //     result,
-    // }: {
-    //     result: GenerateSuggestionResponseDto;
-    // }) => {
-    //     const suggestion = SuggestionsMapper.fromLLM(result);
-    //
-    //     const suggestionResponse = await SuggestionsRepo.getByName(
-    //         suggestion.name
-    //     );
-    //
-    //     const recipeResponse = await RecipesRepo.getByName(suggestion.name);
-    //
-    //     if (suggestionResponse.data?.id || recipeResponse.data?.id) return;
-    //
-    //     await SuggestionsRepo.insert(result);
-    // },
-});
+            return {
+                type: "stream" as const,
+                stream: suggestionStream(),
+            };
+        },
+        onComplete: async ({
+            result,
+        }: {
+            result: GenerateSuggestionResponseDto;
+        }) => {
+            // Persist the generated suggestion to the database
+            try {
+                const createResult = await suggestionsService.createSuggestion({
+                    name: result.name,
+                    description: result.description,
+                    difficulty: result.difficulty,
+                });
+
+                if (!createResult.success) {
+                    console.error(
+                        "Failed to persist suggestion:",
+                        createResult.error
+                    );
+                } else {
+                    console.log(
+                        `Successfully persisted suggestion: ${result.name} (ID: ${createResult.value.id})`
+                    );
+                }
+            } catch (error) {
+                console.error("Unexpected error persisting suggestion:", error);
+            }
+        },
+    });

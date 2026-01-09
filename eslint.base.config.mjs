@@ -1,4 +1,5 @@
 import nx from "@nx/eslint-plugin";
+import importPlugin from "eslint-plugin-import";
 
 export default [
     ...nx.configs["flat/base"],
@@ -9,6 +10,18 @@ export default [
     },
     {
         files: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+        plugins: {
+            import: importPlugin,
+        },
+        settings: {
+            "import/resolver": {
+                typescript: {
+                    alwaysTryTypes: true,
+                    project: "./tsconfig.json",
+                },
+                node: true,
+            },
+        },
         rules: {
             "@nx/enforce-module-boundaries": [
                 "error",
@@ -28,6 +41,26 @@ export default [
                 },
             ],
             "@typescript-eslint/no-explicit-any": "off",
+            "import/order": [
+                "error",
+                {
+                    groups: [
+                        "builtin",
+                        "external",
+                        "internal",
+                        "parent",
+                        "sibling",
+                        "index",
+                    ],
+                    "newlines-between": "always",
+                    alphabetize: {
+                        order: "asc",
+                        caseInsensitive: true,
+                    },
+                },
+            ],
+            "import/no-unresolved": "error",
+            "import/no-duplicates": "error",
         },
     },
     {

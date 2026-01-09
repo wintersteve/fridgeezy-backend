@@ -20,6 +20,15 @@
         },
         {
             "path": "../../libs/openai/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/fridgeezy/schemas/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/fridgeezy/application/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/fridgeezy/domain/tsconfig.lib.json"
         }
     ]
 }

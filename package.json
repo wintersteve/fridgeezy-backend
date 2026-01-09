@@ -21,8 +21,10 @@
         "dotenv": "^17.2.3",
         "express": "^5.2.1",
         "openai": "^6.15.0",
+        "reflect-metadata": "^0.2.2",
         "supabase": "^2.67.3",
         "ts-case-convert": "^2.1.0",
+        "tsyringe": "^4.10.0",
         "zod": "^4.2.1"
     },
     "devDependencies": {
@@ -46,6 +48,7 @@
         "esbuild": "0.25.0",
         "eslint": "~8.57.0",
         "eslint-config-prettier": "^10.0.0",
+        "eslint-import-resolver-typescript": "^4.4.4",
         "eslint-plugin-import": "^2.32.0",
         "eslint-plugin-prettier": "^5.5.4",
         "jiti": "2.4.2",
@@ -62,7 +65,8 @@
     },
     "workspaces": [
         "apps/*",
-        "libs/*"
+        "libs/*",
+        "libs/fridgeezy/*"
     ],
     "private": true
 }

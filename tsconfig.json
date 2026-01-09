@@ -24,5 +24,14 @@
         {
             "path": "./libs/toolkit"
         },
+        {
+            "path": "./libs/fridgeezy/domain"
+        },
+        {
+            "path": "./libs/fridgeezy/schemas"
+        },
+        {
+            "path": "./libs/fridgeezy/application"
+        }
     ]
 }

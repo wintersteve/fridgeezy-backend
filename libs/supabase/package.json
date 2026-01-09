@@ -16,6 +16,8 @@
         }
     },
     "dependencies": {
+        "@fridgeezy/domain": "*",
+        "@fridgeezy/toolkit": "*",
         "@supabase/supabase-js": "^2.89.0"
     },
     "nx": {

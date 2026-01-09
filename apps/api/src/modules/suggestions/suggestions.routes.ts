@@ -1,5 +1,5 @@
 import {
-    SuggestionGeneratorService,
+    suggestionGenerator,
     SuggestionsService,
 } from "@fridgeezy/application";
 import { Router } from "express";
@@ -12,13 +12,12 @@ import { createGenerateSuggestionHandler } from "./use-cases/generate-suggestion
 export function createSuggestionsRoutes() {
     const router = Router();
 
-    // Resolve services from DI container
+    // Resolve SuggestionsService from DI container (to be refactored separately)
     const suggestionsService = container.resolve(SuggestionsService);
-    const generatorService = container.resolve(SuggestionGeneratorService);
 
-    // Create the handler with injected dependencies
+    // Use the default exported generator instance (no DI needed)
     const generateHandler = createGenerateSuggestionHandler(
-        generatorService,
+        suggestionGenerator,
         suggestionsService
     );
 

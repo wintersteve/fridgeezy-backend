@@ -1,7 +1,5 @@
-import {
-    SuggestionGeneratorService,
-    SuggestionsService,
-} from "@fridgeezy/application";
+import type { SuggestionGenerator } from "@fridgeezy/application";
+import { SuggestionsService } from "@fridgeezy/application";
 import {
     GenerateSuggestionRequestSchema,
     GenerateSuggestionResponseDto,
@@ -13,12 +11,12 @@ import { createStreamHandler } from "@fridgeezy/streaming-server";
  * Factory function to create a generateSuggestion handler with dependencies injected.
  *
  * Now properly separated:
- * - Generator service: handles AI generation
- * - Suggestions service: handles persistence
+ * - Generator: handles AI generation (factory pattern, no DI)
+ * - Suggestions service: handles persistence (DI, to be refactored separately)
  * - Handler: orchestrates streaming and coordinates services
  */
 export const createGenerateSuggestionHandler = (
-    generatorService: SuggestionGeneratorService,
+    generator: SuggestionGenerator,
     suggestionsService: SuggestionsService
 ) =>
     createStreamHandler({
@@ -26,8 +24,8 @@ export const createGenerateSuggestionHandler = (
         responseSchema: GenerateSuggestionResponseSchema,
 
         handler: async ({ body }) => {
-            // Delegate generation to service
-            const suggestionStream = generatorService.generateSuggestions({
+            // Delegate generation to factory-created generator
+            const suggestionStream = generator.generateSuggestions({
                 ingredients: body.ingredients || [],
                 blacklist: body.blacklist,
                 component: body.component,

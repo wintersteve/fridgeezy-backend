@@ -21,24 +21,3 @@ export interface GeneratedSuggestionDto {
     ingredients: string[];
     tags: string[];
 }
-
-/**
- * Service interface for generating recipe suggestions using AI.
- *
- * Defines the contract for AI-powered recipe suggestion generation.
- * Implementations handle prompt construction, AI service calls, and streaming.
- */
-export interface ISuggestionGeneratorService {
-    /**
-     * Generate recipe suggestions based on provided criteria.
-     *
-     * Returns a stream of suggestions that can be consumed asynchronously.
-     * Each suggestion is validated and typed according to GeneratedSuggestionDto.
-     *
-     * @param request - Generation criteria (ingredients, filters, etc.)
-     * @returns AsyncIterable of generated suggestions
-     */
-    generateSuggestions(
-        request: GenerateSuggestionRequest
-    ): AsyncIterable<GeneratedSuggestionDto>;
-}

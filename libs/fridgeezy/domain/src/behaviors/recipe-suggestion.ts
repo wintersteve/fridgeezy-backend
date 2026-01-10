@@ -1,6 +1,6 @@
-import { RecipeSuggestion } from '../types/recipe-suggestion';
-import { BusinessRuleError } from '../shared/base-error';
-import { nameContains } from '../validation/suggestion-name';
+import { BusinessRuleError } from "../shared";
+import { RecipeSuggestion } from "../types";
+import { nameContains } from "../validation";
 
 /**
  * Recipe Suggestion Behaviors
@@ -17,7 +17,7 @@ import { nameContains } from '../validation/suggestion-name';
  * @returns true if the suggestion can be promoted (not already promoted)
  */
 export function canPromote(suggestion: RecipeSuggestion): boolean {
-  return suggestion.promoted_to_recipe_id === null;
+    return suggestion.promoted_to_recipe_id === null;
 }
 
 /**
@@ -37,21 +37,21 @@ export function canPromote(suggestion: RecipeSuggestion): boolean {
  * ```
  */
 export function promote(
-  suggestion: RecipeSuggestion,
-  recipeId: string
+    suggestion: RecipeSuggestion,
+    recipeId: string
 ): RecipeSuggestion {
-  if (!canPromote(suggestion)) {
-    throw new BusinessRuleError(
-      'Cannot promote a suggestion that is already promoted',
-      'ALREADY_PROMOTED'
-    );
-  }
+    if (!canPromote(suggestion)) {
+        throw new BusinessRuleError(
+            "Cannot promote a suggestion that is already promoted",
+            "ALREADY_PROMOTED"
+        );
+    }
 
-  return {
-    ...suggestion,
-    promoted_to_recipe_id: recipeId,
-    promoted_at: new Date().toISOString(),
-  };
+    return {
+        ...suggestion,
+        promoted_to_recipe_id: recipeId,
+        promoted_at: new Date().toISOString(),
+    };
 }
 
 /**
@@ -61,7 +61,7 @@ export function promote(
  * @returns true if the suggestion has been promoted to a recipe
  */
 export function isPromoted(suggestion: RecipeSuggestion): boolean {
-  return suggestion.promoted_to_recipe_id !== null;
+    return suggestion.promoted_to_recipe_id !== null;
 }
 
 /**
@@ -79,25 +79,25 @@ export function isPromoted(suggestion: RecipeSuggestion): boolean {
  * ```
  */
 export function matchesQuery(
-  suggestion: RecipeSuggestion,
-  query: string
+    suggestion: RecipeSuggestion,
+    query: string
 ): boolean {
-  const lowerQuery = query.toLowerCase();
+    const lowerQuery = query.toLowerCase();
 
-  // Check name (using validation helper)
-  if (nameContains(suggestion.name, query, false)) {
-    return true;
-  }
+    // Check name (using validation helper)
+    if (nameContains(suggestion.name, query, false)) {
+        return true;
+    }
 
-  // Check description
-  if (
-    suggestion.description &&
-    suggestion.description.toLowerCase().includes(lowerQuery)
-  ) {
-    return true;
-  }
+    // Check description
+    if (
+        suggestion.description &&
+        suggestion.description.toLowerCase().includes(lowerQuery)
+    ) {
+        return true;
+    }
 
-  return false;
+    return false;
 }
 
 /**
@@ -110,13 +110,13 @@ export function matchesQuery(
  * @returns A new RecipeSuggestion object with updated description
  */
 export function updateDescription(
-  suggestion: RecipeSuggestion,
-  description: string | null
+    suggestion: RecipeSuggestion,
+    description: string | null
 ): RecipeSuggestion {
-  return {
-    ...suggestion,
-    description,
-  };
+    return {
+        ...suggestion,
+        description,
+    };
 }
 
 /**
@@ -129,13 +129,13 @@ export function updateDescription(
  * @returns A new RecipeSuggestion object with updated difficulty
  */
 export function updateDifficulty(
-  suggestion: RecipeSuggestion,
-  difficulty: 'easy' | 'medium' | 'hard' | null
+    suggestion: RecipeSuggestion,
+    difficulty: "easy" | "medium" | "hard" | null
 ): RecipeSuggestion {
-  return {
-    ...suggestion,
-    difficulty,
-  };
+    return {
+        ...suggestion,
+        difficulty,
+    };
 }
 
 /**
@@ -149,11 +149,11 @@ export function updateDifficulty(
  * @returns A new RecipeSuggestion object with updated name
  */
 export function updateName(
-  suggestion: RecipeSuggestion,
-  name: string
+    suggestion: RecipeSuggestion,
+    name: string
 ): RecipeSuggestion {
-  return {
-    ...suggestion,
-    name,
-  };
+    return {
+        ...suggestion,
+        name,
+    };
 }

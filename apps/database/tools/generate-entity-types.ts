@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
-import { toPascal, toSnake } from "ts-case-convert";
+import { toPascal } from "ts-case-convert";
 
 // eslint-disable-next-line
 // @ts-ignore
@@ -80,8 +80,43 @@ function extractTableNames(content: string) {
     return Array.from(tableNames) as string[];
 }
 
+function singularize(word: string): string {
+    // Handle common irregular plurals
+    const irregulars: Record<string, string> = {
+        aliases: "alias",
+        categories: "category",
+    };
+
+    // Check if the word ends with any irregular plural
+    for (const [plural, singular] of Object.entries(irregulars)) {
+        if (word.endsWith(plural)) {
+            return word.slice(0, -plural.length) + singular;
+        }
+    }
+
+    // Handle words ending in 'ies' -> 'y'
+    if (word.endsWith("ies")) {
+        return word.slice(0, -3) + "y";
+    }
+
+    // Handle words ending in 's' (simple plural)
+    if (word.endsWith("s")) {
+        return word.slice(0, -1);
+    }
+
+    return word;
+}
+
+function toKebabCase(str: string): string {
+    return str
+        .replace(/_/g, "-")
+        .replace(/([A-Z])/g, (match) => `-${match.toLowerCase()}`)
+        .replace(/^-/, "");
+}
+
 function generateEntityTypeFile(tableName: string) {
-    const entityName = toPascal(tableName);
+    const singularName = singularize(tableName);
+    const entityName = toPascal(singularName);
 
     return `import { Tables, TablesInsert, TablesUpdate } from "../database.types";
 
@@ -100,7 +135,11 @@ function generateIndexFile(tableNames: string[]) {
 
 `;
     const exports = tableNames
-        .map((name) => `export * from './${name}';`)
+        .map((name) => {
+            const singularName = singularize(name);
+            const fileName = toKebabCase(singularName);
+            return `export * from './${fileName}';`;
+        })
         .join("\n");
 
     return header + exports + "\n";
@@ -122,7 +161,7 @@ function main() {
     console.log("\nGenerating entity type files...");
 
     tableNames.forEach((tableName) => {
-        const fileName = `${toSnake(tableName)}.ts`;
+        const fileName = `${toKebabCase(tableName)}.ts`;
         const filePath = join(outputDir, fileName);
         const content = generateEntityTypeFile(tableName);
 

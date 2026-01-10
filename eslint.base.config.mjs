@@ -16,6 +16,7 @@ export default [
         settings: {
             "import/resolver": {
                 node: true,
+                typescript: true,
             },
         },
         rules: {

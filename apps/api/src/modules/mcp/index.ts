@@ -37,3 +37,5 @@ export function createMcpServer(): McpServer {
 
     return server;
 }
+
+export { McpController } from "./mcp.controller";

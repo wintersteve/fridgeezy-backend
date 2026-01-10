@@ -10,6 +10,9 @@
             "path": "./apps/database"
         },
         {
+            "path": "./apps/native"
+        },
+        {
             "path": "./libs/genai"
         },
         {
@@ -29,12 +32,6 @@
         },
         {
             "path": "./libs/fridgeezy/schemas"
-        },
-        {
-            "path": "./libs/fridgeezy/application"
-        },
-        {
-            "path": "./apps/native"
         },
         {
             "path": "./libs/fridgeezy/types"

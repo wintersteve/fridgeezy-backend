@@ -1,9 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 
-import { extractIngredients } from "./use-cases/extract-ingredients";
+import { extractIngredients } from "./usecases/extract-ingredients";
 
 export class IngredientsController {
-    extract = async (req: Request, res: Response, next: NextFunction) => {
+    static extract = async (
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) => {
         try {
             return extractIngredients(req, res);
         } catch (err) {

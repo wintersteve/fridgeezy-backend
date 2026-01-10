@@ -2,13 +2,9 @@ import { Router } from "express";
 
 import { RecipesController } from "./recipes.controller";
 
-export function createRecipesRoutes() {
-    const router = Router();
+const router = Router();
 
-    const controller = new RecipesController();
+router.post("/generate", RecipesController.generate);
+router.post("/difficulty/escalate", RecipesController.escalate);
 
-    router.post("/generate", controller.generate);
-    router.post("/difficulty/escalate", controller.escalate);
-
-    return router;
-}
+export const RecipesRoutes = router;

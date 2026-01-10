@@ -15,10 +15,6 @@ export default [
         },
         settings: {
             "import/resolver": {
-                typescript: {
-                    alwaysTryTypes: true,
-                    project: "./tsconfig.json",
-                },
                 node: true,
             },
         },
@@ -59,7 +55,12 @@ export default [
                     },
                 },
             ],
-            "import/no-unresolved": "error",
+            "import/no-unresolved": [
+                "error",
+                {
+                    ignore: ["^\\.\\.?/"], // Ignore relative imports - TypeScript handles these
+                },
+            ],
             "import/no-duplicates": "error",
         },
     },

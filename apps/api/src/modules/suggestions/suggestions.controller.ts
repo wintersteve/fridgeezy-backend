@@ -1,17 +1,15 @@
 import { Request, Response, NextFunction } from "express";
 
-import { createGenerateSuggestionHandler } from "./use-cases/generate-suggestion";
+import { generateSuggestion } from "./usecases";
 
 export class SuggestionsController {
-    constructor(
-        private readonly generateHandler: ReturnType<
-            typeof createGenerateSuggestionHandler
-        >
-    ) {}
-
-    generate = async (req: Request, res: Response, next: NextFunction) => {
+    static generate = async (
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) => {
         try {
-            return this.generateHandler(req, res);
+            return generateSuggestion(req, res);
         } catch (err) {
             next(err);
         }

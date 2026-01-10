@@ -4,10 +4,10 @@ import {
     ISuggestionsRepository,
     NotFoundError,
     PersistenceError,
-    RecipeSuggestion,
     Result,
     success,
 } from "@fridgeezy/domain";
+import { RecipeSuggestion } from "@fridgeezy/types";
 
 import { supabase } from "../../client";
 

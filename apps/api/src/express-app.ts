@@ -19,7 +19,7 @@ export function createExpressApp() {
     // consume the stream before the handlers can read it, causing requests to hang.
 
     // Request logging
-    app.use((req, res, next) => {
+    app.use((req, _, next) => {
         console.log(`${req.method} ${req.path}`);
         next();
     });

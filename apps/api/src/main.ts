@@ -1,6 +1,5 @@
 import "dotenv/config";
 import "reflect-metadata";
-import "./container"; // Initialize DI container
 
 import { randomUUID } from "node:crypto";
 
@@ -63,24 +62,8 @@ app.all("/mcp", async (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Endpoints:`);
-    console.log(
-        `  POST /chat                     - Conversational interface (SSE streaming)`
-    );
-    console.log(
-        `  POST /suggestions              - Get recipe suggestions (SSE)`
-    );
-    console.log(
-        `  POST /recipe                   - Generate full recipe (SSE)`
-    );
-    console.log(
-        `  POST /escalate-difficulty      - Escalate recipe difficulty (SSE)`
-    );
-    console.log(
-        `  POST /extract-ingredients      - Extract ingredients from image`
-    );
-    console.log(
-        `  POST /generate-category-image  - Generate and upload category image`
-    );
-    console.log(`  POST /mcp                      - MCP protocol endpoint`);
-    console.log(`  GET  /health                   - Health check`);
+    console.log(`  POST /suggestions  - Get recipe suggestions (SSE)`);
+    console.log(`  POST /recipes      - Generate full recipe (SSE)`);
+    console.log(`  POST /mcp          - MCP protocol endpoint`);
+    console.log(`  GET  /health       - Health check`);
 });

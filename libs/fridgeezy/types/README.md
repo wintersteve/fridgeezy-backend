@@ -57,6 +57,4 @@ This package is the foundation of the 3-layer architecture:
 @fridgeezy/domain (business logic, validation, behaviors)
        ↓
 @fridgeezy/supabase (infrastructure, repositories)
-       ↓
-@fridgeezy/application (application services)
 ```

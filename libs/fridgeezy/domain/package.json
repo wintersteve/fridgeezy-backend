@@ -16,8 +16,7 @@
         }
     },
     "dependencies": {
-        "@fridgeezy/types": "*",
-        "tslib": "^2.3.0"
+        "@fridgeezy/types": "*"
     },
     "nx": {
         "tags": [

@@ -1,5 +1,5 @@
-import { Result } from '../shared/result';
-import { DomainError } from '../shared/base-error';
+import { DomainError } from "../base-error";
+import { Result } from "../result";
 
 /**
  * Base repository interface defining standard CRUD operations.
@@ -16,70 +16,77 @@ import { DomainError } from '../shared/base-error';
  * ```
  */
 export interface IBaseRepository<TEntity, TId = string> {
-  /**
-   * Find an entity by its identifier
-   */
-  findById(id: TId): Promise<Result<TEntity | null, DomainError>>;
+    /**
+     * Find an entity by its identifier
+     */
+    findById(id: TId): Promise<Result<TEntity | null, DomainError>>;
 
-  /**
-   * Find all entities (use with caution for large datasets)
-   * Consider using findMany with pagination instead
-   */
-  findAll(): Promise<Result<TEntity[], DomainError>>;
+    /**
+     * Find all entities (use with caution for large datasets)
+     * Consider using findMany with pagination instead
+     */
+    findAll(): Promise<Result<TEntity[], DomainError>>;
 
-  /**
-   * Create a new entity
-   */
-  create(entity: Omit<TEntity, 'id' | 'createdAt'>): Promise<Result<TEntity, DomainError>>;
+    /**
+     * Create a new entity
+     */
+    create(
+        entity: Omit<TEntity, "id" | "createdAt">
+    ): Promise<Result<TEntity, DomainError>>;
 
-  /**
-   * Update an existing entity
-   */
-  update(id: TId, data: Partial<TEntity>): Promise<Result<TEntity, DomainError>>;
+    /**
+     * Update an existing entity
+     */
+    update(
+        id: TId,
+        data: Partial<TEntity>
+    ): Promise<Result<TEntity, DomainError>>;
 
-  /**
-   * Delete an entity by its identifier
-   */
-  delete(id: TId): Promise<Result<void, DomainError>>;
+    /**
+     * Delete an entity by its identifier
+     */
+    delete(id: TId): Promise<Result<void, DomainError>>;
 }
 
 /**
  * Query options for filtering, pagination, and sorting
  */
 export interface QueryOptions {
-  /**
-   * Maximum number of records to return
-   */
-  limit?: number;
+    /**
+     * Maximum number of records to return
+     */
+    limit?: number;
 
-  /**
-   * Number of records to skip
-   */
-  offset?: number;
+    /**
+     * Number of records to skip
+     */
+    offset?: number;
 
-  /**
-   * Field to order by
-   */
-  orderBy?: string;
+    /**
+     * Field to order by
+     */
+    orderBy?: string;
 
-  /**
-   * Sort order
-   */
-  order?: 'asc' | 'desc';
+    /**
+     * Sort order
+     */
+    order?: "asc" | "desc";
 }
 
 /**
  * Extended repository interface with pagination support
  */
-export interface IPaginatedRepository<TEntity, TId = string>
-  extends IBaseRepository<TEntity, TId> {
-  /**
-   * Find entities with pagination and filtering
-   */
-  findMany(options: QueryOptions): Promise<Result<TEntity[], DomainError>>;
+export interface IPaginatedRepository<
+    TEntity,
+    TId = string,
+> extends IBaseRepository<TEntity, TId> {
+    /**
+     * Find entities with pagination and filtering
+     */
+    findMany(options: QueryOptions): Promise<Result<TEntity[], DomainError>>;
 
-  /**
-   * Count total number of entities (useful for pagination)
-   */
-  count(): Promise<Result<number, DomainError>>;
+    /**
+     * Count total number of entities (useful for pagination)
+     */
+    count(): Promise<Result<number, DomainError>>;
 }

@@ -1,9 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 
-import { escalateDifficulty, generateRecipe } from "./use-cases";
+import { generateRecipe } from "./usecases";
 
 export class RecipesController {
-    generate = async (req: Request, res: Response, next: NextFunction) => {
+    static generate = async (
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) => {
         try {
             return generateRecipe(req, res);
         } catch (err) {
@@ -11,9 +15,13 @@ export class RecipesController {
         }
     };
 
-    escalate = async (req: Request, res: Response, next: NextFunction) => {
+    static escalate = async (
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) => {
         try {
-            return escalateDifficulty(req, res);
+            return next();
         } catch (err) {
             next(err);
         }

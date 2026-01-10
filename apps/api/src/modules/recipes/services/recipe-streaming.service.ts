@@ -1,0 +1,75 @@
+import { GenerateRecipeRequestDto, RecipeResponse } from "@fridgeezy/schemas";
+import { processJsonlStream } from "@fridgeezy/streaming-server";
+import { z } from "zod/v4";
+
+export interface RecipeStreamConfig {
+    schemas: [z.ZodType, z.ZodType, z.ZodType, z.ZodType]; // Header, Ingredient, Instruction, Tip
+    initialState: GenerateRecipeRequestDto;
+}
+
+export async function* createRecipeStreamHandler(
+    openaiStream: AsyncIterable<any>,
+    config: RecipeStreamConfig
+): AsyncGenerator<any, RecipeResponse> {
+    const recipe: RecipeResponse = {
+        ...config.initialState,
+        description: "",
+        prepTime: 0,
+        cookTime: 0,
+        ingredients: [],
+        instructions: [],
+        tips: [],
+    };
+
+    yield {
+        type: "initial",
+        ...config.initialState,
+    };
+
+    for await (const { parsed, schemaIndex } of processJsonlStream(
+        openaiStream,
+        config.schemas
+    )) {
+        // Schema 0: Header
+        if (schemaIndex === 0) {
+            recipe.description = parsed.description;
+            recipe.prepTime = parsed.prepTime;
+            recipe.cookTime = parsed.cookTime;
+        }
+        // Schema 1: Ingredient
+        else if (schemaIndex === 1) {
+            recipe.ingredients.push({
+                name: parsed.name,
+                category: parsed.category,
+                parent: parsed.parent,
+                quantity: parsed.quantity,
+                unit: parsed.unit,
+            });
+        }
+        // Schema 2: Instruction
+        else if (schemaIndex === 2) {
+            recipe.instructions.push({
+                text: parsed.text,
+                ingredients: parsed.ingredients,
+            });
+        }
+        // Schema 3: Tip
+        else if (schemaIndex === 3) {
+            recipe.tips?.push(parsed.text);
+        }
+
+        // Yield for SSE streaming
+        yield parsed;
+    }
+
+    // Finalize: set tips to null if empty (database expects null, not empty array)
+    if (recipe.tips?.length === 0) {
+        recipe.tips = null;
+    }
+
+    // Send completion event
+    yield { type: "complete", saved: true };
+
+    // Return accumulated data for persistence
+    return recipe;
+}

@@ -107,7 +107,6 @@
         "zod": "^4.2.1",
         "ts-case-convert": "^2.1.0",
         "@fridgeezy/domain": "0.0.1",
-        "@fridgeezy/application": "0.0.1",
         "@fridgeezy/schemas": "0.0.1",
         "@fridgeezy/openai": "0.0.1",
         "@fridgeezy/supabase": "0.0.1",

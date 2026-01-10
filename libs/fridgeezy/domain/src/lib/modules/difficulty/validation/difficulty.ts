@@ -1,10 +1,9 @@
-import { ValidationError } from '../shared/base-error';
-import { Result, success, failure } from '../shared/result';
+import { ValidationError, Result, success, failure } from "../../shared";
 
 /**
  * Valid difficulty levels for recipe suggestions
  */
-export type DifficultyLevel = 'easy' | 'medium' | 'hard';
+export type DifficultyLevel = "easy" | "medium" | "hard";
 
 /**
  * Validate a difficulty level
@@ -23,17 +22,17 @@ export type DifficultyLevel = 'easy' | 'medium' | 'hard';
  * ```
  */
 export function validateDifficulty(
-  value: string
+    value: string
 ): Result<DifficultyLevel, ValidationError> {
-  if (!isValidDifficulty(value)) {
-    return failure(
-      new ValidationError(
-        `Invalid difficulty level: "${value}". Must be one of: easy, medium, hard`,
-        'difficulty'
-      )
-    );
-  }
-  return success(value as DifficultyLevel);
+    if (!isValidDifficulty(value)) {
+        return failure(
+            new ValidationError(
+                `Invalid difficulty level: "${value}". Must be one of: easy, medium, hard`,
+                "difficulty"
+            )
+        );
+    }
+    return success(value as DifficultyLevel);
 }
 
 /**
@@ -43,7 +42,7 @@ export function validateDifficulty(
  * @returns true if value is a valid DifficultyLevel
  */
 export function isValidDifficulty(value: string): value is DifficultyLevel {
-  return ['easy', 'medium', 'hard'].includes(value);
+    return ["easy", "medium", "hard"].includes(value);
 }
 
 /**
@@ -60,15 +59,15 @@ export function isValidDifficulty(value: string): value is DifficultyLevel {
  * ```
  */
 export function difficultyIsHarderThan(
-  a: DifficultyLevel,
-  b: DifficultyLevel
+    a: DifficultyLevel,
+    b: DifficultyLevel
 ): boolean {
-  const order: Record<DifficultyLevel, number> = {
-    easy: 1,
-    medium: 2,
-    hard: 3,
-  };
-  return order[a] > order[b];
+    const order: Record<DifficultyLevel, number> = {
+        easy: 1,
+        medium: 2,
+        hard: 3,
+    };
+    return order[a] > order[b];
 }
 
 /**
@@ -79,15 +78,15 @@ export function difficultyIsHarderThan(
  * @returns true if a is easier than b
  */
 export function difficultyIsEasierThan(
-  a: DifficultyLevel,
-  b: DifficultyLevel
+    a: DifficultyLevel,
+    b: DifficultyLevel
 ): boolean {
-  const order: Record<DifficultyLevel, number> = {
-    easy: 1,
-    medium: 2,
-    hard: 3,
-  };
-  return order[a] < order[b];
+    const order: Record<DifficultyLevel, number> = {
+        easy: 1,
+        medium: 2,
+        hard: 3,
+    };
+    return order[a] < order[b];
 }
 
 /**
@@ -97,12 +96,12 @@ export function difficultyIsEasierThan(
  * @returns Numeric representation
  */
 export function difficultyToNumeric(difficulty: DifficultyLevel): number {
-  const order: Record<DifficultyLevel, number> = {
-    easy: 1,
-    medium: 2,
-    hard: 3,
-  };
-  return order[difficulty];
+    const order: Record<DifficultyLevel, number> = {
+        easy: 1,
+        medium: 2,
+        hard: 3,
+    };
+    return order[difficulty];
 }
 
 /**
@@ -113,8 +112,8 @@ export function difficultyToNumeric(difficulty: DifficultyLevel): number {
  * @returns true if equal
  */
 export function difficultiesEqual(
-  a: DifficultyLevel,
-  b: DifficultyLevel
+    a: DifficultyLevel,
+    b: DifficultyLevel
 ): boolean {
-  return a === b;
+    return a === b;
 }

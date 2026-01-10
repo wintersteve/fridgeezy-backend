@@ -1,5 +1,6 @@
-import { RecipeSuggestion } from "../types";
-import { DomainError, Result } from "../shared";
+import { RecipeSuggestion } from "@fridgeezy/types";
+
+import { DomainError, Result } from "../../shared";
 
 /**
  * Repository interface for RecipeSuggestion aggregate.

@@ -136,8 +136,7 @@ function generateIndexFile(tableNames: string[]) {
 `;
     const exports = tableNames
         .map((name) => {
-            const singularName = singularize(name);
-            const fileName = toKebabCase(singularName);
+            const fileName = toKebabCase(name);
             return `export * from './${fileName}';`;
         })
         .join("\n");

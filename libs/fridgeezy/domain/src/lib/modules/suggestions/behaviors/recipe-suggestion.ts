@@ -1,5 +1,6 @@
-import { BusinessRuleError } from "../shared";
-import { RecipeSuggestion } from "../types";
+import { RecipeSuggestion } from "@fridgeezy/types";
+
+import { BusinessRuleError } from "../../shared";
 import { nameContains } from "../validation";
 
 /**

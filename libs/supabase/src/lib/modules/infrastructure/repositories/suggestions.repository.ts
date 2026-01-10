@@ -1,6 +1,5 @@
 import {
     ConflictError,
-    eventDispatcher,
     failure,
     ISuggestionsRepository,
     NotFoundError,
@@ -9,12 +8,9 @@ import {
     Result,
     success,
 } from "@fridgeezy/domain";
-import { fromPersistence, toPersistence } from "@fridgeezy/toolkit";
-import { injectable } from "tsyringe";
 
 import { supabase } from "../../client";
 
-@injectable()
 export class SuggestionsRepository implements ISuggestionsRepository {
     /**
      * Find a suggestion by its ID
@@ -41,17 +37,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
                 return success(null);
             }
 
-            // Convert from snake_case (database) to camelCase (domain)
-            const domainData = fromPersistence(data);
-
-            if (!domainData) {
-                return success(null);
-            }
-
-            // Reconstitute domain entity
-            const suggestion = RecipeSuggestion.fromPersistence(domainData);
-
-            return success(suggestion);
+            return success(data);
         } catch (error) {
             return failure(
                 new PersistenceError(
@@ -82,15 +68,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
                 return success(null);
             }
 
-            const domainData = fromPersistence(data);
-
-            if (!domainData) {
-                return success(null);
-            }
-
-            const suggestion = RecipeSuggestion.fromPersistence(domainData);
-
-            return success(suggestion);
+            return success(data);
         } catch (error) {
             return failure(
                 new PersistenceError(
@@ -114,19 +92,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
                 return failure(new PersistenceError(error.message));
             }
 
-            const suggestions = (data || [])
-                .map((item) => fromPersistence(item))
-                .filter(
-                    (
-                        domainData
-                    ): domainData is NonNullable<typeof domainData> =>
-                        domainData !== null
-                )
-                .map((domainData) =>
-                    RecipeSuggestion.fromPersistence(domainData)
-                );
-
-            return success(suggestions);
+            return success(data || []);
         } catch (error) {
             return failure(
                 new PersistenceError(
@@ -153,19 +119,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
                 return failure(new PersistenceError(error.message));
             }
 
-            const suggestions = (data || [])
-                .map((item) => fromPersistence(item))
-                .filter(
-                    (
-                        domainData
-                    ): domainData is NonNullable<typeof domainData> =>
-                        domainData !== null
-                )
-                .map((domainData) =>
-                    RecipeSuggestion.fromPersistence(domainData)
-                );
-
-            return success(suggestions);
+            return success(data || []);
         } catch (error) {
             return failure(
                 new PersistenceError(
@@ -182,12 +136,9 @@ export class SuggestionsRepository implements ISuggestionsRepository {
         suggestion: RecipeSuggestion
     ): Promise<Result<RecipeSuggestion, PersistenceError | ConflictError>> {
         try {
-            // Convert domain entity to persistence format
-            const persistenceData = toPersistence(suggestion.toPersistence());
-
             const { data, error } = await supabase
                 .from("recipe_suggestions")
-                .insert(persistenceData)
+                .insert(suggestion)
                 .select("*")
                 .single();
 
@@ -204,26 +155,11 @@ export class SuggestionsRepository implements ISuggestionsRepository {
                 return failure(new PersistenceError(error.message));
             }
 
-            // Reconstitute the created entity
-            const domainData = fromPersistence(data);
-
-            if (!domainData) {
-                return failure(
-                    new PersistenceError(
-                        "Failed to reconstitute created entity"
-                    )
-                );
+            if (!data) {
+                return failure(new PersistenceError("Failed to create entity"));
             }
 
-            const created = RecipeSuggestion.fromPersistence(domainData);
-
-            // Dispatch domain events
-            for (const event of suggestion.domainEvents) {
-                await eventDispatcher.dispatch(event);
-            }
-            suggestion.clearDomainEvents();
-
-            return success(created);
+            return success(data);
         } catch (error) {
             return failure(
                 new PersistenceError(
@@ -240,12 +176,9 @@ export class SuggestionsRepository implements ISuggestionsRepository {
         suggestion: RecipeSuggestion
     ): Promise<Result<RecipeSuggestion, PersistenceError | NotFoundError>> {
         try {
-            // Convert domain entity to persistence format
-            const persistenceData = toPersistence(suggestion.toPersistence());
-
             const { data, error } = await supabase
                 .from("recipe_suggestions")
-                .update(persistenceData)
+                .update(suggestion)
                 .eq("id", suggestion.id)
                 .select("*")
                 .single();
@@ -259,26 +192,11 @@ export class SuggestionsRepository implements ISuggestionsRepository {
                 return failure(new PersistenceError(error.message));
             }
 
-            // Reconstitute the updated entity
-            const domainData = fromPersistence(data);
-
-            if (!domainData) {
-                return failure(
-                    new PersistenceError(
-                        "Failed to reconstitute updated entity"
-                    )
-                );
+            if (!data) {
+                return failure(new PersistenceError("Failed to update entity"));
             }
 
-            const updated = RecipeSuggestion.fromPersistence(domainData);
-
-            // Dispatch domain events
-            for (const event of suggestion.domainEvents) {
-                await eventDispatcher.dispatch(event);
-            }
-            suggestion.clearDomainEvents();
-
-            return success(updated);
+            return success(data);
         } catch (error) {
             return failure(
                 new PersistenceError(

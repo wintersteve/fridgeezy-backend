@@ -16,7 +16,8 @@
         }
     },
     "dependencies": {
-        "openai": "^6.15.0"
+        "openai": "^6.15.0",
+    "vite": "^7.0.0"
     },
     "nx": {
         "tags": [

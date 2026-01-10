@@ -31,7 +31,7 @@
     },
     "dependencies": {
         "@fridgeezy/domain": "*",
-        "@fridgeezy/toolkit": "*",
+        "@fridgeezy/types": "*",
         "@supabase/supabase-js": "^2.89.0"
     },
     "publishConfig": {

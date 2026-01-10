@@ -1,8 +1,11 @@
 {
     "extends": "../../../tsconfig.base.json",
     "files": [],
-    "include": [],
+    "include": ["vite.config.mts"],
     "references": [
+        {
+            "path": "../types"
+        },
         {
             "path": "./tsconfig.lib.json"
         }

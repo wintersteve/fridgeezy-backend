@@ -1,8 +1,23 @@
 {
     "extends": "../../../tsconfig.base.json",
     "files": [],
-    "include": [],
+    "include": ["vite.config.mts"],
     "references": [
+        {
+            "path": "../../toolkit"
+        },
+        {
+            "path": "../../streaming-server"
+        },
+        {
+            "path": "../schemas"
+        },
+        {
+            "path": "../../openai"
+        },
+        {
+            "path": "../domain"
+        },
         {
             "path": "./tsconfig.lib.json"
         }

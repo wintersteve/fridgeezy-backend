@@ -15,7 +15,10 @@
             "default": "./dist/index.js"
         }
     },
-    "dependencies": {},
+    "dependencies": {
+    "zod": "^4.2.1",
+    "vite": "^7.0.0"
+  },
     "nx": {
         "tags": [
             "scope:shared"

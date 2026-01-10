@@ -1,6 +1,5 @@
+import { Database } from "@fridgeezy/types";
 import { createClient } from "@supabase/supabase-js";
-
-import { Database } from "../types/database.types";
 
 if (!process.env.SUPABASE_URL) throw new Error("Missing SUPABASE_URL");
 

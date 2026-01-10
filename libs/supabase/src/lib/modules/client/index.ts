@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { Database } from "./database.types";
+import { Database } from "../types/database.types";
 
 if (!process.env.SUPABASE_URL) throw new Error("Missing SUPABASE_URL");
 

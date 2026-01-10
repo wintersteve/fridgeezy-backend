@@ -1,7 +1,7 @@
 {
     "name": "@fridgeezy/supabase",
     "version": "0.0.1",
-    "private": true,
+    "description": "Supabase client utilities and helpers for Fridgeezy applications",
     "type": "module",
     "main": "./dist/index.js",
     "module": "./dist/index.js",
@@ -15,10 +15,27 @@
             "default": "./dist/index.js"
         }
     },
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "keywords": [
+        "fridgeezy",
+        "supabase",
+        "database",
+        "client"
+    ],
+    "license": "MIT",
+    "scripts": {
+        "generate:types": "node ../../tools/scripts/generate-entity-types.mjs"
+    },
     "dependencies": {
         "@fridgeezy/domain": "*",
         "@fridgeezy/toolkit": "*",
         "@supabase/supabase-js": "^2.89.0"
+    },
+    "publishConfig": {
+        "access": "public"
     },
     "nx": {
         "tags": [

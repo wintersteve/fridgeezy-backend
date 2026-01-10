@@ -32,6 +32,9 @@
         },
         {
             "path": "./libs/fridgeezy/application"
+        },
+        {
+            "path": "./apps/native"
         }
     ]
 }

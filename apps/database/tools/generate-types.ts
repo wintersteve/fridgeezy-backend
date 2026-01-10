@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+
 import { config } from "dotenv";
 
 config();

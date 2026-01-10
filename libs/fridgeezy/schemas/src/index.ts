@@ -5,8 +5,5 @@
  * Platform-agnostic - works in Node.js and React Native.
  */
 
-// Suggestions module schemas
-export * from './suggestions';
-
-// Recipes module schemas
-export * from './recipes';
+export * from "./lib/suggestions";
+export * from "./lib/recipes";

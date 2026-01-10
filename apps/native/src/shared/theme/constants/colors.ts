@@ -1,0 +1,42 @@
+import { DefaultTheme } from "react-native-paper";
+
+export const COLORS = {
+  COMMON: {
+    ...DefaultTheme.colors,
+    outline: "rgba(232,228,224,0.5)",
+    primary: "#F4A67A",
+    primaryContainer: "#FFF5EE",
+    secondary: "#93C5A8",
+    secondaryContainer: "#F0F7F2",
+    error: "#E8A0A0",
+    black: "#060606",
+    difficultyEasy: "#A8D5BA",
+    difficultyMedium: "#F4C78A",
+    difficultyHard: "#E8A0A0",
+    transparent: "rgba(255,255,255,0.0)",
+  },
+  LIGHT: {
+    background: "#FDFBF9",
+    backgroundVariant: "#FAF8F6",
+    surface: "#FFFFFF",
+    surfaceDisabled: "#f3f1ef",
+    surfaceVariant: "#FAF8F6",
+    onBackground: "#5C5450",
+    onBackgroundVariant: "#C4C1BE",
+    onSurface: "#5C5450",
+    onSurfaceDisabled: "#C9C5C2",
+    onSurfaceVariant: "#8A8380",
+  },
+  DARK: {
+    background: "#FDFBF9",
+    backgroundVariant: "#FAF8F6",
+    surface: "#FFFFFF",
+    surfaceDisabled: "#f3f1ef",
+    surfaceVariant: "#FAF8F6",
+    onBackground: "#5C5450",
+    onBackgroundVariant: "#C4C1BE",
+    onSurface: "#5C5450",
+    onSurfaceDisabled: "#C9C5C2",
+    onSurfaceVariant: "#8A8380",
+  },
+};

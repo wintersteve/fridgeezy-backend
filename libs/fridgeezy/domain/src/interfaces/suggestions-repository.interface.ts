@@ -1,4 +1,4 @@
-import { RecipeSuggestion } from "../entities";
+import { RecipeSuggestion } from "../types";
 import { DomainError, Result } from "../shared";
 
 /**

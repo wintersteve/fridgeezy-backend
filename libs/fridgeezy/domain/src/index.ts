@@ -1,20 +1,23 @@
 /**
  * @fridgeezy/domain
  *
- * Pure domain layer containing business logic, entities, value objects,
+ * Business logic layer containing domain types, validation, behaviors,
  * and domain events. Platform-agnostic - works in Node.js and React Native.
  */
 
-// Entities
-export * from './entities';
+// Domain Types (re-exports from @fridgeezy/types with singular naming)
+export * from './types';
 
-// Value Objects
-export * from './value-objects';
+// Validation Functions
+export * from './validation';
+
+// Business Behaviors
+export * from './behaviors';
 
 // Events
 export * from './events';
 
-// Interfaces
+// Repository Interfaces
 export * from './interfaces';
 
 // Shared (Result, errors, common types)

@@ -9,7 +9,7 @@ import {
 } from "@fridgeezy/schemas";
 import { createStreamHandler } from "@fridgeezy/streaming-server";
 
-import { createRecipeStreamHandler } from "../../services";
+import { createRecipeStream } from "../../services";
 
 const SYSTEM_PROMPT = `Generate exactly an authentic, real-world recipe based on the provided ingredients
 
@@ -66,7 +66,7 @@ export const generateRecipe = createStreamHandler({
 
         return {
             type: "stream" as const,
-            stream: createRecipeStreamHandler(stream, {
+            stream: createRecipeStream(stream, {
                 schemas: [
                     HeaderSchema,
                     IngredientSchema,

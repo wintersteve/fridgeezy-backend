@@ -11,9 +11,6 @@ export interface GeneratedImage {
     mimeType: string;
 }
 
-/**
- * Generate an image using Google's Imagen model
- */
 export async function generateImage(
     options: GenerateImageOptions
 ): Promise<GeneratedImage> {
@@ -21,12 +18,9 @@ export async function generateImage(
 
     try {
         const response = await genai.models.generateImages({
-            model: "imagen-3.0-generate-001",
+            model: "imagen-4.0-generate-001",
+            config: { numberOfImages, aspectRatio },
             prompt,
-            config: {
-                numberOfImages,
-                aspectRatio,
-            },
         });
 
         // Extract the first image from the response

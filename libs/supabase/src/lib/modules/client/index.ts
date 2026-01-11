@@ -10,3 +10,17 @@ export const supabase = createClient<Database>(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY
 );
+
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY)
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+
+export const supabaseAdmin = createClient<Database>(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    {
+        auth: {
+            autoRefreshToken: false,
+            persistSession: false
+        }
+    }
+);

@@ -1,2 +1,2 @@
 export * from "./lib/modules/client";
-export * from "./lib/modules/images/utils/generate-image";
+export * from "./lib/modules/images/services/generate-image";

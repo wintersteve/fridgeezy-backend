@@ -1,1 +1,1 @@
-export * from "./recipe-streaming.service";
+export * from "./create-recipe-stream";

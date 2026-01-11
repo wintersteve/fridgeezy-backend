@@ -78,8 +78,9 @@ export async function* createRecipeStream(
         recipe.tips = null;
     }
 
-    // Send completion event
-    yield { type: "complete", saved: true };
+    // Send completion event with recipe data
+    // The onComplete hook receives the last yielded item
+    yield { type: "complete", saved: true, recipe };
 
     // Return accumulated data for persistence
     return recipe;

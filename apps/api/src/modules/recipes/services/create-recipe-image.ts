@@ -21,7 +21,7 @@ Mood: authentic, comforting, artisanal, and timeless — evokes home cooking and
 
 export async function generateAndUploadRecipeImage(
     name: string
-): Promise<void> {
+): Promise<string> {
     try {
         const { base64Data, mimeType } = await generateImage({
             prompt: buildPrompt(name),
@@ -47,9 +47,17 @@ export async function generateAndUploadRecipeImage(
 
         if (error) {
             console.error("Failed to upload recipe image:", error);
+            return ""; // Return empty string on upload error
         }
+
+        // Get public URL
+        const { data } = supabaseAdmin.storage
+            .from("recipes")
+            .getPublicUrl(filePath);
+
+        return data.publicUrl;
     } catch (error) {
         console.error("Failed to generate and upload recipe image:", error);
-        // Don't throw - we don't want to break the recipe generation if image generation fails
+        return ""; // Return empty string on error
     }
 }

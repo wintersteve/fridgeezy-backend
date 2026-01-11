@@ -10,6 +10,7 @@ import {
 import { createStreamHandler } from "@fridgeezy/streaming-server";
 
 import { createRecipeStream } from "../../services";
+import { persistRecipe } from "../../services/persist-recipe";
 
 const SYSTEM_PROMPT = `Generate exactly an authentic, real-world recipe based on the provided ingredients
 
@@ -76,5 +77,26 @@ export const generateRecipe = createStreamHandler({
                 initialState: body,
             }),
         };
+    },
+
+    onComplete: async ({ result }) => {
+        // result is the last yielded item: { type: "complete", saved: true, recipe }
+        if (result?.recipe) {
+            const persistResult = await persistRecipe(result.recipe);
+
+            if (persistResult.success) {
+                console.log(
+                    `Recipe persisted successfully with ID: ${persistResult.value}`
+                );
+            } else {
+                console.error(
+                    "Failed to persist recipe:",
+                    persistResult.error.message
+                );
+                // Don't throw - stream already completed
+            }
+        } else {
+            console.warn("No recipe data in completion result");
+        }
     },
 });

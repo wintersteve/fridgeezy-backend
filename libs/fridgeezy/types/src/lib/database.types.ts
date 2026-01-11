@@ -267,10 +267,12 @@ export type Database = {
       }
       ingredients: {
         Row: {
+          canonical_id: string
           category_id: string | null
           created_at: string
           default_shelf_life_days: number | null
           description: string | null
+          embedding: string | null
           expires_by_default: boolean
           id: string
           image_url: string | null
@@ -281,10 +283,12 @@ export type Database = {
           storage_tips: string | null
         }
         Insert: {
+          canonical_id: string
           category_id?: string | null
           created_at?: string
           default_shelf_life_days?: number | null
           description?: string | null
+          embedding?: string | null
           expires_by_default?: boolean
           id?: string
           image_url?: string | null
@@ -295,10 +299,12 @@ export type Database = {
           storage_tips?: string | null
         }
         Update: {
+          canonical_id?: string
           category_id?: string | null
           created_at?: string
           default_shelf_life_days?: number | null
           description?: string | null
+          embedding?: string | null
           expires_by_default?: boolean
           id?: string
           image_url?: string | null
@@ -896,6 +902,7 @@ export type Database = {
           difficulty: Database["public"]["Enums"]["difficulty_type"] | null
           fts: string | null
           id: string
+          image: string | null
           instructions: string[]
           name: string
           prep_time: string | null
@@ -910,6 +917,7 @@ export type Database = {
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           fts?: string | null
           id?: string
+          image?: string | null
           instructions?: string[]
           name: string
           prep_time?: string | null
@@ -924,6 +932,7 @@ export type Database = {
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           fts?: string | null
           id?: string
+          image?: string | null
           instructions?: string[]
           name?: string
           prep_time?: string | null
@@ -1234,6 +1243,26 @@ export type Database = {
       http_set_curlopt: {
         Args: { curlopt: string; value: string }
         Returns: boolean
+      }
+      normalize_to_canonical_id: {
+        Args: { input_text: string }
+        Returns: string
+      }
+      persist_recipe: {
+        Args: {
+          p_cook_time: string
+          p_description: string
+          p_difficulty: Database["public"]["Enums"]["difficulty_type"]
+          p_image: string
+          p_ingredients: Json
+          p_instructions: Json
+          p_name: string
+          p_prep_time: string
+          p_servings: number
+          p_tags: string[]
+          p_tips: string[]
+        }
+        Returns: string
       }
       search_recipes: {
         Args: {

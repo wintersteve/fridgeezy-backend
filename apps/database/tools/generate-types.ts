@@ -15,7 +15,7 @@ if (!projectId) {
 
 const outputPath = resolve(
     process.cwd(),
-    "../../libs/supabase/src/lib/modules/client/database.types.ts"
+    "../../libs/fridgeezy/types/src/lib/database.types.ts"
 );
 
 try {

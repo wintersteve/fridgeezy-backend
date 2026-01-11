@@ -4,6 +4,9 @@
     "include": ["vite.config.mts"],
     "references": [
         {
+            "path": "../fridgeezy/schemas"
+        },
+        {
             "path": "../fridgeezy/types"
         },
         {

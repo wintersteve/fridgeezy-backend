@@ -11,6 +11,7 @@ create table recipes
     cook_time    TEXT,
     instructions TEXT[] not null default '{}',
     tips         TEXT[],
+    image        TEXT,
     created_at   TIMESTAMPTZ not null default now(),
     updated_at   TIMESTAMPTZ not null default now()
 );

@@ -4,7 +4,7 @@ returns trigger as $$
 begin
   new.canonical_id
 :=
-    regexp_replace(lower(trim(new.alias)), '[^a-z0-9]+', '_', 'g');
+    regexp_replace(lower(trim(new.name)), '[^a-z0-9]+', '_', 'g');
 return new;
 end;
 $$

@@ -5,6 +5,7 @@ import {
     IngredientSchema,
     InstructionSchema,
     GenerateRecipeResponseDto,
+    NutritionSchema,
     TipSchema,
 } from "@fridgeezy/schemas";
 import { createStreamHandler } from "@fridgeezy/streaming-server";
@@ -74,7 +75,10 @@ Output the recipe as multiple JSON lines in this exact order:
 Line 1 - Header with basic info:
 {"type":"header","description":"Brief description","prepTime":15,"cookTime":30}
 
-Lines 2-N - One line per ingredient (use approved unit abbreviations only):
+Line 2 - Nutrition information (per serving):
+{"type":"nutrition","kcal":450,"carbs":35,"protein":25,"fat":15}
+
+Lines 3-N - One line per ingredient (use approved unit abbreviations only):
 {"type":"ingredient","name":"ingredient_name","category":"meat","parent":"lamb","quantity":100,"unit":"g"}
 
 Lines N+1-M - One line per instruction step (include ingredients array with names of ingredients used in this step):
@@ -120,6 +124,7 @@ export const escalateDifficulty = createStreamHandler({
     requestSchema: EscalateDifficultyRequestSchema,
     responseSchema: [
         HeaderSchema,
+        NutritionSchema,
         IngredientSchema,
         InstructionSchema,
         TipSchema,
@@ -175,6 +180,7 @@ export const escalateDifficulty = createStreamHandler({
             stream: createRecipeStream(stream, {
                 schemas: [
                     HeaderSchema,
+                    NutritionSchema,
                     IngredientSchema,
                     InstructionSchema,
                     TipSchema,

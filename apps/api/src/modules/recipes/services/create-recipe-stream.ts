@@ -10,7 +10,7 @@ import { z } from "zod/v4";
 import { generateAndUploadRecipeImage } from "./create-recipe-image";
 
 export interface RecipeStreamConfig {
-    schemas: [z.ZodType, z.ZodType, z.ZodType, z.ZodType]; // Header, Ingredient, Instruction, Tip
+    schemas: [z.ZodType, z.ZodType, z.ZodType, z.ZodType, z.ZodType]; // Header, Nutrition, Ingredient, Instruction, Tip
     initialState: GenerateRecipeRequestDto;
 }
 
@@ -23,6 +23,10 @@ export async function* createRecipeStream(
         description: "",
         prepTime: 0,
         cookTime: 0,
+        kcal: 0,
+        carbs: 0,
+        protein: 0,
+        fat: 0,
         ingredients: [],
         instructions: [],
         tips: [],
@@ -50,8 +54,15 @@ export async function* createRecipeStream(
                 }
             );
         }
-        // Schema 1: Ingredient
+        // Schema 1: Nutrition
         else if (schemaIndex === 1) {
+            recipe.kcal = parsed.kcal;
+            recipe.carbs = parsed.carbs;
+            recipe.protein = parsed.protein;
+            recipe.fat = parsed.fat;
+        }
+        // Schema 2: Ingredient
+        else if (schemaIndex === 2) {
             recipe.ingredients.push({
                 name: parsed.name,
                 category: parsed.category,
@@ -60,15 +71,15 @@ export async function* createRecipeStream(
                 unit: parsed.unit,
             });
         }
-        // Schema 2: Instruction
-        else if (schemaIndex === 2) {
+        // Schema 3: Instruction
+        else if (schemaIndex === 3) {
             recipe.instructions.push({
                 text: parsed.text,
                 ingredients: parsed.ingredients,
             });
         }
-        // Schema 3: Tip
-        else if (schemaIndex === 3) {
+        // Schema 4: Tip
+        else if (schemaIndex === 4) {
             recipe.tips?.push(parsed.text);
         }
 

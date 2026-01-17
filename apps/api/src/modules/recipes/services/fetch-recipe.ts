@@ -14,6 +14,10 @@ export async function fetchRecipe(
             servings,
             prep_time,
             cook_time,
+            kcal,
+            carbs,
+            protein,
+            fat,
             tips,
             recipe_ingredients (
                 quantity,
@@ -48,6 +52,10 @@ export async function fetchRecipe(
         servings: recipe.servings,
         prepTime: parseInt(recipe.prep_time?.replace(" min", "") || "0"),
         cookTime: parseInt(recipe.cook_time?.replace(" min", "") || "0"),
+        kcal: recipe.kcal || 0,
+        carbs: recipe.carbs || 0,
+        protein: recipe.protein || 0,
+        fat: recipe.fat || 0,
         ingredients: recipe.recipe_ingredients.map((ri) => ({
             name: ri.ingredient.name,
             category: ri.ingredient.category?.name ?? "",

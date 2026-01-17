@@ -23,6 +23,10 @@ create or replace function persist_recipe(
     p_servings INT,
     p_prep_time TEXT,
     p_cook_time TEXT,
+    p_kcal INT,
+    p_carbs INT,
+    p_protein INT,
+    p_fat INT,
     p_tips TEXT[],
     p_image TEXT,
     p_ingredients JSONB,
@@ -45,8 +49,8 @@ declare
     v_ingredient_name TEXT;
 begin
     -- Insert recipe and get ID
-    INSERT INTO recipes (name, description, difficulty, servings, prep_time, cook_time, tips, image)
-    VALUES (p_name, p_description, p_difficulty, p_servings, p_prep_time, p_cook_time, p_tips, p_image)
+    INSERT INTO recipes (name, description, difficulty, servings, prep_time, cook_time, kcal, carbs, protein, fat, tips, image)
+    VALUES (p_name, p_description, p_difficulty, p_servings, p_prep_time, p_cook_time, p_kcal, p_carbs, p_protein, p_fat, p_tips, p_image)
     RETURNING id INTO v_recipe_id;
 
     -- Process ingredients
@@ -154,6 +158,10 @@ Parameters:
 - p_servings: Number of servings
 - p_prep_time: Preparation time as text (e.g., "15 min")
 - p_cook_time: Cooking time as text (e.g., "30 min")
+- p_kcal: Calories per serving
+- p_carbs: Carbohydrates in grams per serving
+- p_protein: Protein in grams per serving
+- p_fat: Fat in grams per serving
 - p_tips: Array of cooking tips
 - p_image: Image URL
 - p_ingredients: JSONB array of ingredients [{name, category, parent, quantity, unit}]

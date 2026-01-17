@@ -38,3 +38,12 @@ export const TipSchema = z.object({
     type: z.literal("tip"),
     text: z.string(),
 });
+
+// Schema for nutrition information (per serving)
+export const NutritionSchema = z.object({
+    type: z.literal("nutrition"),
+    kcal: z.number(),
+    carbs: z.number(),
+    protein: z.number(),
+    fat: z.number(),
+});

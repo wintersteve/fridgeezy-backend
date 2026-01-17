@@ -105,59 +105,80 @@ export const generateRecipe = createStreamHandler({
             stream: true,
         });
 
-        return {
-            type: "stream" as const,
-            stream: createRecipeStream(stream, {
-                schemas: [
-                    HeaderSchema,
-                    NutritionSchema,
-                    IngredientSchema,
-                    InstructionSchema,
-                    TipSchema,
-                ],
-                initialState: body,
-            }),
-        };
-    },
+        const recipeStream = createRecipeStream(stream, {
+            schemas: [
+                HeaderSchema,
+                NutritionSchema,
+                IngredientSchema,
+                InstructionSchema,
+                TipSchema,
+            ],
+            initialState: body,
+        });
 
-    onComplete: async ({ result, body }) => {
-        // result is the last yielded item: { type: "complete", saved: true, recipe }
-        if (result?.recipe) {
-            const persistResult = await persistRecipe(result.recipe);
+        // Wrap the stream to persist the recipe and include the ID in the final message
+        async function* wrappedStream() {
+            let lastResult;
 
-            if (persistResult.success) {
-                console.log(
-                    `Recipe persisted successfully with ID: ${persistResult.value}`
-                );
+            for await (const chunk of recipeStream) {
+                lastResult = chunk;
 
-                // Delete the suggestion if a suggestionId was provided
-                if (body.suggestionId) {
-                    const suggestionsRepo = new SuggestionsRepository();
-                    const deleteResult = await suggestionsRepo.delete(
-                        body.suggestionId
+                // Yield all chunks except the final completion
+                if (chunk.type !== "complete") {
+                    yield chunk;
+                }
+            }
+
+            // After stream completes, persist the recipe and yield final message with ID
+            if (lastResult?.type === "complete" && lastResult.recipe) {
+                const persistResult = await persistRecipe(lastResult.recipe);
+
+                if (persistResult.success) {
+                    console.log(
+                        `Recipe persisted successfully with ID: ${persistResult.value}`
                     );
 
-                    if (deleteResult.success) {
-                        console.log(
-                            `Suggestion ${body.suggestionId} removed after promotion to recipe`
+                    // Delete the suggestion if a suggestionId was provided
+                    if (body.suggestionId) {
+                        const suggestionsRepo = new SuggestionsRepository();
+                        const deleteResult = await suggestionsRepo.delete(
+                            body.suggestionId
                         );
-                    } else {
-                        console.error(
-                            "Failed to delete suggestion:",
-                            deleteResult.error.message
-                        );
-                        // Don't throw - recipe was already persisted successfully
+
+                        if (deleteResult.success) {
+                            console.log(
+                                `Suggestion ${body.suggestionId} removed after promotion to recipe`
+                            );
+                        } else {
+                            console.error(
+                                "Failed to delete suggestion:",
+                                deleteResult.error.message
+                            );
+                        }
                     }
+
+                    // Yield final completion with recipe ID
+                    yield {
+                        ...lastResult,
+                        recipeId: persistResult.value,
+                    };
+                } else {
+                    console.error(
+                        "Failed to persist recipe:",
+                        persistResult.error.message
+                    );
+                    // Yield completion without ID if persistence failed
+                    yield lastResult;
                 }
-            } else {
-                console.error(
-                    "Failed to persist recipe:",
-                    persistResult.error.message
-                );
-                // Don't throw - stream already completed
+            } else if (lastResult) {
+                // Yield the last result if it wasn't a complete type
+                yield lastResult;
             }
-        } else {
-            console.warn("No recipe data in completion result");
         }
+
+        return {
+            type: "stream" as const,
+            stream: wrappedStream(),
+        };
     },
 });

@@ -1,5 +1,6 @@
 import { openai } from "@fridgeezy/openai";
 import {
+    EnrichedSuggestionResponseDto,
     GenerateSuggestionRequestDto,
     GenerateSuggestionResponseDto,
     GenerateSuggestionResponseSchema,
@@ -7,6 +8,8 @@ import {
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { castArray } from "@fridgeezy/toolkit";
 import type OpenAI from "openai";
+
+import { persistSuggestion } from "./persist-suggestion";
 
 const SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly 5 authentic, real-world recipe suggestions based on the provided ingredients.
 
@@ -28,6 +31,9 @@ const SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly 5
   - Use "dish" for regular finished dishes/meals
 - EXACTLY 1 cuisine tag per recipe (the most accurate cuisine origin)
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free if the recipe qualifies)
+
+## Ingredients
+- MUST be singular
 
 ## Output Format
 Output EXACTLY 5 recipes, one JSON object per line (JSONL format). No markdown, no code blocks, no extra text.
@@ -61,7 +67,7 @@ const buildUserPrompt = (request: GenerateSuggestionRequestDto): string => {
 export async function* generateSuggestionsStream(
     request: GenerateSuggestionRequestDto,
     client: OpenAI = openai
-) {
+): AsyncGenerator<EnrichedSuggestionResponseDto> {
     const stream = await client.chat.completions.create({
         model: "gpt-4.1",
         messages: [
@@ -75,6 +81,27 @@ export async function* generateSuggestionsStream(
     for await (const { parsed } of processJsonlStream(stream, [
         GenerateSuggestionResponseSchema,
     ])) {
-        yield parsed as GenerateSuggestionResponseDto;
+        const suggestion = parsed as GenerateSuggestionResponseDto;
+
+        // Persist suggestion and get ingredient/tag data with IDs and names
+        const persistResult = await persistSuggestion(suggestion);
+
+        if (!persistResult.success) {
+            console.error(
+                `[Suggestions] Failed to persist: ${suggestion.name}`,
+                persistResult.error
+            );
+            // Skip this suggestion if persistence fails
+            continue;
+        }
+
+        // Yield to client with enriched ingredient and tag data (id + name)
+        yield {
+            name: suggestion.name,
+            description: suggestion.description,
+            difficulty: suggestion.difficulty,
+            ingredients: persistResult.value.ingredients,
+            tags: persistResult.value.tags,
+        };
     }
 }

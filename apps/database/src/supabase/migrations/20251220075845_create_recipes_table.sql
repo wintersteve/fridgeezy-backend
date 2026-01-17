@@ -9,7 +9,6 @@ create table recipes
     servings     INTEGER     not null default 4,
     prep_time    TEXT,
     cook_time    TEXT,
-    instructions TEXT[] not null default '{}',
     tips         TEXT[],
     image        TEXT,
     created_at   TIMESTAMPTZ not null default now(),

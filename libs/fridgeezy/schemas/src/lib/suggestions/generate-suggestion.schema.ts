@@ -15,8 +15,8 @@ export const GenerateSuggestionRequestSchema = z.object({
 });
 
 /**
- * Response schema for generated recipe suggestions.
- * Used by the API to validate outgoing responses.
+ * Response schema for generated recipe suggestions (from LLM).
+ * Used to validate LLM output with string arrays.
  */
 export const GenerateSuggestionResponseSchema = z.object({
     name: z.string(),
@@ -26,10 +26,46 @@ export const GenerateSuggestionResponseSchema = z.object({
     tags: z.array(z.string()),
 });
 
+/**
+ * Ingredient with ID and name
+ */
+export const SuggestionIngredientSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+});
+
+/**
+ * Tag with ID and name
+ */
+export const SuggestionTagSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+});
+
+/**
+ * Enriched response schema with ingredient and tag IDs
+ * Used by the API to stream to clients after persistence.
+ */
+export const EnrichedSuggestionResponseSchema = z.object({
+    name: z.string(),
+    description: z.string().max(50),
+    difficulty: z.enum(["easy", "medium", "hard"]),
+    ingredients: z.array(SuggestionIngredientSchema),
+    tags: z.array(SuggestionTagSchema),
+});
+
 export type GenerateSuggestionRequestDto = z.infer<
     typeof GenerateSuggestionRequestSchema
 >;
 
 export type GenerateSuggestionResponseDto = z.infer<
     typeof GenerateSuggestionResponseSchema
+>;
+
+export type SuggestionIngredientDto = z.infer<typeof SuggestionIngredientSchema>;
+
+export type SuggestionTagDto = z.infer<typeof SuggestionTagSchema>;
+
+export type EnrichedSuggestionResponseDto = z.infer<
+    typeof EnrichedSuggestionResponseSchema
 >;

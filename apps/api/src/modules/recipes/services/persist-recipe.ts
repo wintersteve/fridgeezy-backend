@@ -1,5 +1,5 @@
 import { failure, PersistenceError, Result } from "@fridgeezy/domain";
-import { RecipeResponse } from "@fridgeezy/schemas";
+import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
 import { RecipesRepository } from "@fridgeezy/supabase";
 
 import { generateAndUploadRecipeImage } from "./create-recipe-image";
@@ -17,7 +17,7 @@ const DEFAULT_IMAGE_URL = "";
  * @returns Result containing the recipe UUID or error
  */
 export async function persistRecipe(
-    recipe: RecipeResponse
+    recipe: GenerateRecipeResponseDto
 ): Promise<Result<string, PersistenceError>> {
     try {
         // Wait for image generation to complete

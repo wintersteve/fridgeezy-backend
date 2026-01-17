@@ -5,7 +5,7 @@ import {
     Result,
     success,
 } from "@fridgeezy/domain";
-import { RecipeResponse } from "@fridgeezy/schemas";
+import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
 
 import { supabaseAdmin } from "../../client";
 
@@ -22,7 +22,7 @@ export class RecipesRepository implements IRecipesRepository {
      * - Recipe-tag associations
      */
     async persist(
-        recipe: RecipeResponse,
+        recipe: GenerateRecipeResponseDto,
         imageUrl: string
     ): Promise<Result<string, PersistenceError>> {
         try {
@@ -33,7 +33,7 @@ export class RecipesRepository implements IRecipesRepository {
                 p_servings: recipe.servings,
                 p_prep_time: `${recipe.prepTime} min`,
                 p_cook_time: `${recipe.cookTime} min`,
-                p_tips: recipe.tips || [],
+                p_tips: recipe.tips?.map((tip) => tip.text) || [],
                 p_image: imageUrl,
                 p_ingredients: recipe.ingredients,
                 p_instructions: recipe.instructions.map((inst, idx) => ({

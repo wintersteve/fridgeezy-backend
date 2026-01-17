@@ -1,4 +1,4 @@
-import { RecipeResponse } from "@fridgeezy/schemas";
+import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
 
 import { DomainError, Result } from "../../shared";
 
@@ -34,7 +34,7 @@ export interface IRecipesRepository {
      * @returns Result containing the recipe UUID or error
      */
     persist(
-        recipe: RecipeResponse,
+        recipe: GenerateRecipeResponseDto,
         imageUrl: string
     ): Promise<Result<string, DomainError>>;
 }

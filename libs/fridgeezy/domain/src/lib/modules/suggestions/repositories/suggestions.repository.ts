@@ -1,4 +1,4 @@
-import { RecipeSuggestion } from "@fridgeezy/types";
+import { RecipeSuggestion, RecipeSuggestionInsertPayload } from "@fridgeezy/types";
 
 import { DomainError, Result } from "../../shared";
 
@@ -80,4 +80,20 @@ export interface ISuggestionsRepository {
      * @returns Result indicating success or failure
      */
     delete(id: string): Promise<Result<void, DomainError>>;
+
+    /**
+     * Persist a suggestion with its ingredient and tag relations atomically
+     *
+     * This method creates a suggestion and its associations in a single transaction.
+     *
+     * @param suggestion The suggestion data to persist
+     * @param ingredientIds Array of ingredient UUIDs to associate
+     * @param tagIds Array of tag UUIDs to associate
+     * @returns Result containing the created suggestion UUID
+     */
+    persistWithRelations(
+        suggestion: RecipeSuggestionInsertPayload,
+        ingredientIds: string[],
+        tagIds: string[]
+    ): Promise<Result<string, DomainError>>;
 }

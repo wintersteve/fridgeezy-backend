@@ -3,21 +3,23 @@ import { supabaseAdmin } from "@fridgeezy/supabase";
 
 const buildPrompt = (
     name: string
-) => `An illustrated, bird’s-eye (top-down) view of a ${name}, presented simply and elegantly.
+) => `An illustrated, bird's-eye (top-down) view of a ${name}, presented simply and elegantly.
 
 The dish is centered on a clean, neutral plate with subtle handmade ceramic texture. No utensils, no background props, no clutter — the entire focus is on the food itself.
 
 Illustration style: refined, modern editorial food illustration with soft hand-drawn details; minimalistic but warm; not photorealistic.
 
-Color palette: warm, natural tones aligned with a soft culinary app aesthetic — peach (#F4A67A), sage green (#93C5A8), creamy off-white (#FFF5EE), muted beige and stone tones (#FDFBF9, #FAF8F6). Avoid harsh blacks; use deep charcoal (#060606) only for subtle linework or contrast.
+Color palette: warm, natural tones aligned with a soft culinary app aesthetic — soft peach, sage green, creamy off-white, muted beige and warm stone tones. Avoid harsh blacks; use deep charcoal only for subtle linework or contrast.
 
 Lighting and shading: gentle, diffuse light with soft shadows; calm, inviting atmosphere.
 
-Background: solid or lightly textured off-white/cream background (#FDFBF9 or #FAF8F6), flat and unobtrusive.
+Background: solid or lightly textured warm cream background, flat and unobtrusive.
 
 Composition: perfectly centered, balanced, and spacious, suitable for a recipe app hero image.
 
-Mood: authentic, comforting, artisanal, and timeless — evokes home cooking and cultural tradition without stereotypes.`;
+Mood: authentic, comforting, artisanal, and timeless — evokes home cooking and cultural tradition without stereotypes.
+
+IMPORTANT: Generate only the illustration. Do not include any text, labels, codes, or annotations in the image.`;
 
 export async function generateAndUploadRecipeImage(
     name: string
@@ -29,6 +31,11 @@ export async function generateAndUploadRecipeImage(
             aspectRatio: "3:4",
         });
 
+        if (!base64Data) {
+            console.error("No image data received from generateImage");
+            return ""; // Return empty string if no image data
+        }
+
         // Convert base64 to buffer
         const buffer = Buffer.from(base64Data, "base64");
 
@@ -39,7 +46,7 @@ export async function generateAndUploadRecipeImage(
 
         // Upload to Supabase storage
         const { error } = await supabaseAdmin.storage
-            .from("category_images")
+            .from("recipes")
             .upload(filePath, buffer, {
                 contentType: mimeType,
                 upsert: true,

@@ -1,6 +1,6 @@
 import {
+    EnrichedSuggestionResponseSchema,
     GenerateSuggestionRequestSchema,
-    GenerateSuggestionResponseSchema,
 } from "@fridgeezy/schemas";
 import { createStreamHandler } from "@fridgeezy/streaming-server";
 
@@ -8,7 +8,7 @@ import { generateSuggestionsStream } from "../../services";
 
 export const generateSuggestion = createStreamHandler({
     requestSchema: GenerateSuggestionRequestSchema,
-    responseSchema: GenerateSuggestionResponseSchema,
+    responseSchema: EnrichedSuggestionResponseSchema,
     handler: async ({ body }) => {
         const stream = generateSuggestionsStream({
             ingredients: body.ingredients || [],

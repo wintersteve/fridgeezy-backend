@@ -10,9 +10,6 @@
             "path": "./apps/database"
         },
         {
-            "path": "./apps/native"
-        },
-        {
             "path": "./libs/genai"
         },
         {

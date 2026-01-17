@@ -5,6 +5,13 @@
     "nx": {
         "tags": ["scope:app"],
         "targets": {
+            "cuisine-images": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti tools/generate-category-images.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "reset": {
                 "executor": "nx:run-commands",
                 "options": {
@@ -16,6 +23,13 @@
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "npx jiti tools/generate-types.ts && npx jiti tools/generate-entity-types.ts",
+                    "cwd": "apps/database"
+                }
+            },
+            "generate-category-images": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti tools/generate-category-images.ts",
                     "cwd": "apps/database"
                 }
             },

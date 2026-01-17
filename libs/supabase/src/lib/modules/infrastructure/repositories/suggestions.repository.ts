@@ -7,7 +7,7 @@ import {
     Result,
     success,
 } from "@fridgeezy/domain";
-import { RecipeSuggestion } from "@fridgeezy/types";
+import { RecipeSuggestion, RecipeSuggestionInsertPayload } from "@fridgeezy/types";
 
 import { supabase } from "../../client";
 
@@ -225,6 +225,43 @@ export class SuggestionsRepository implements ISuggestionsRepository {
             return failure(
                 new PersistenceError(
                     `Failed to delete suggestion: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
+
+    /**
+     * Persist a suggestion with its ingredient and tag relations atomically
+     */
+    async persistWithRelations(
+        suggestion: RecipeSuggestionInsertPayload,
+        ingredientIds: string[],
+        tagIds: string[]
+    ): Promise<Result<string, PersistenceError>> {
+        try {
+            const { data, error } = await supabase.rpc("persist_suggestion", {
+                p_name: suggestion.name,
+                p_description: suggestion.description!,
+                p_difficulty: suggestion.difficulty!,
+                p_ingredient_ids: ingredientIds,
+                p_tag_ids: tagIds,
+            });
+
+            if (error) {
+                return failure(new PersistenceError(error.message));
+            }
+
+            if (!data) {
+                return failure(
+                    new PersistenceError("Failed to persist suggestion")
+                );
+            }
+
+            return success(data as string);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to persist suggestion with relations: ${error instanceof Error ? error.message : "Unknown error"}`
                 )
             );
         }

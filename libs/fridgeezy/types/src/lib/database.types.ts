@@ -903,7 +903,6 @@ export type Database = {
           fts: string | null
           id: string
           image: string | null
-          instructions: string[]
           name: string
           prep_time: string | null
           servings: number
@@ -918,7 +917,6 @@ export type Database = {
           fts?: string | null
           id?: string
           image?: string | null
-          instructions?: string[]
           name: string
           prep_time?: string | null
           servings?: number
@@ -933,7 +931,6 @@ export type Database = {
           fts?: string | null
           id?: string
           image?: string | null
-          instructions?: string[]
           name?: string
           prep_time?: string | null
           servings?: number
@@ -1263,6 +1260,28 @@ export type Database = {
           p_tips: string[]
         }
         Returns: string
+      }
+      persist_suggestion: {
+        Args: {
+          p_description: string
+          p_difficulty: Database["public"]["Enums"]["difficulty_type"]
+          p_ingredient_ids: string[]
+          p_name: string
+          p_tag_ids: string[]
+        }
+        Returns: string
+      }
+      search_ingredients: {
+        Args: {
+          match_count?: number
+          match_threshold?: number
+          query_embedding: string
+        }
+        Returns: {
+          id: string
+          name: string
+          similarity: number
+        }[]
       }
       search_recipes: {
         Args: {

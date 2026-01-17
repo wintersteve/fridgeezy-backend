@@ -1,4 +1,7 @@
-import { GenerateRecipeRequestDto, RecipeResponse } from "@fridgeezy/schemas";
+import {
+    GenerateRecipeRequestDto,
+    GenerateRecipeResponseDto,
+} from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { Stream } from "openai/core/streaming.mjs";
 import { ChatCompletionChunk } from "openai/resources/index.mjs";
@@ -14,8 +17,8 @@ export interface RecipeStreamConfig {
 export async function* createRecipeStream(
     openaiStream: Stream<ChatCompletionChunk>,
     config: RecipeStreamConfig
-): AsyncGenerator<any, RecipeResponse> {
-    const recipe: RecipeResponse = {
+): AsyncGenerator<any, GenerateRecipeResponseDto> {
+    const recipe: GenerateRecipeResponseDto = {
         ...config.initialState,
         description: "",
         prepTime: 0,

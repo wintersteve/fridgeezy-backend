@@ -1,5 +1,11 @@
 import { z } from "zod/v4";
 
+import {
+    IngredientSchema,
+    InstructionSchema,
+    TipSchema,
+} from "./recipe.schemas";
+
 /**
  * Request schema for generating a recipe from a suggestion.
  * Defines the contract for external systems calling the generate recipe use-case.
@@ -17,4 +23,26 @@ export const GenerateRecipeRequestSchema = z.object({
 
 export type GenerateRecipeRequestDto = z.infer<
     typeof GenerateRecipeRequestSchema
+>;
+
+/**
+ * Full recipe schema for persistence.
+ * Used by both generate-recipe and escalate-difficulty use-cases.
+ * Composed from the schemas above without the type discriminator.
+ */
+export const GenerateRecipeResponseDtoSchema = z.object({
+    name: z.string(),
+    description: z.string(),
+    difficulty: z.enum(["easy", "medium", "hard"]),
+    servings: z.number(),
+    prepTime: z.number(),
+    cookTime: z.number(),
+    ingredients: z.array(IngredientSchema.omit({ type: true })),
+    instructions: z.array(InstructionSchema.omit({ type: true })),
+    tips: z.array(TipSchema.omit({ type: true })).nullable(),
+    tags: z.array(z.string()),
+});
+
+export type GenerateRecipeResponseDto = z.infer<
+    typeof GenerateRecipeResponseDtoSchema
 >;

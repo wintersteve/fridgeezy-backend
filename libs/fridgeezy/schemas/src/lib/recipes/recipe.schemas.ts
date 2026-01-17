@@ -38,26 +38,3 @@ export const TipSchema = z.object({
     type: z.literal("tip"),
     text: z.string(),
 });
-
-/**
- * Full recipe type for persistence.
- * Used by both generate-recipe and escalate-difficulty use-cases.
- */
-export type RecipeResponse = {
-    name: string;
-    description: string;
-    difficulty: "easy" | "medium" | "hard";
-    servings: number;
-    prepTime: number;
-    cookTime: number;
-    ingredients: {
-        name: string;
-        category: string;
-        parent: string | null;
-        quantity: number;
-        unit: string;
-    }[];
-    instructions: { text: string; ingredients?: string[] }[];
-    tips: string[] | null;
-    tags: string[];
-};

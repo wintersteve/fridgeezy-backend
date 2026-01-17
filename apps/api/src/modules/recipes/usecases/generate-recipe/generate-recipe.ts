@@ -9,6 +9,7 @@ import {
     TipSchema,
 } from "@fridgeezy/schemas";
 import { createStreamHandler } from "@fridgeezy/streaming-server";
+import { SuggestionsRepository } from "@fridgeezy/supabase";
 
 import {
     createRecipeStream,
@@ -119,7 +120,7 @@ export const generateRecipe = createStreamHandler({
         };
     },
 
-    onComplete: async ({ result }) => {
+    onComplete: async ({ result, body }) => {
         // result is the last yielded item: { type: "complete", saved: true, recipe }
         if (result?.recipe) {
             const persistResult = await persistRecipe(result.recipe);
@@ -128,6 +129,26 @@ export const generateRecipe = createStreamHandler({
                 console.log(
                     `Recipe persisted successfully with ID: ${persistResult.value}`
                 );
+
+                // Delete the suggestion if a suggestionId was provided
+                if (body.suggestionId) {
+                    const suggestionsRepo = new SuggestionsRepository();
+                    const deleteResult = await suggestionsRepo.delete(
+                        body.suggestionId
+                    );
+
+                    if (deleteResult.success) {
+                        console.log(
+                            `Suggestion ${body.suggestionId} removed after promotion to recipe`
+                        );
+                    } else {
+                        console.error(
+                            "Failed to delete suggestion:",
+                            deleteResult.error.message
+                        );
+                        // Don't throw - recipe was already persisted successfully
+                    }
+                }
             } else {
                 console.error(
                     "Failed to persist recipe:",

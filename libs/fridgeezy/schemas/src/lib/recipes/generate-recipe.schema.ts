@@ -19,6 +19,13 @@ export const GenerateRecipeRequestSchema = z.object({
         .describe("Ingredients from the suggestion"),
     servings: z.number().int().positive().default(4),
     tags: z.array(z.string()),
+    suggestionId: z
+        .string()
+        .uuid()
+        .optional()
+        .describe(
+            "Optional suggestion ID - if provided, the suggestion will be deleted after the recipe is persisted"
+        ),
 });
 
 export type GenerateRecipeRequestDto = z.infer<

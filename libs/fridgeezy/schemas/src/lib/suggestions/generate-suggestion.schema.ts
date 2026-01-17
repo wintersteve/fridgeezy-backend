@@ -47,6 +47,7 @@ export const SuggestionTagSchema = z.object({
  * Used by the API to stream to clients after persistence.
  */
 export const EnrichedSuggestionResponseSchema = z.object({
+    id: z.uuid(),
     name: z.string(),
     description: z.string().max(50),
     difficulty: z.enum(["easy", "medium", "hard"]),
@@ -62,7 +63,9 @@ export type GenerateSuggestionResponseDto = z.infer<
     typeof GenerateSuggestionResponseSchema
 >;
 
-export type SuggestionIngredientDto = z.infer<typeof SuggestionIngredientSchema>;
+export type SuggestionIngredientDto = z.infer<
+    typeof SuggestionIngredientSchema
+>;
 
 export type SuggestionTagDto = z.infer<typeof SuggestionTagSchema>;
 

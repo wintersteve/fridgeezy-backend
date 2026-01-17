@@ -19,8 +19,7 @@ export const GenerateRecipeRequestSchema = z.object({
         .describe("Ingredients from the suggestion"),
     servings: z.number().int().positive().default(4),
     tags: z.array(z.string()),
-    suggestionId: z
-        .string()
+    id: z
         .uuid()
         .optional()
         .describe(
@@ -38,6 +37,7 @@ export type GenerateRecipeRequestDto = z.infer<
  * Composed from the schemas above without the type discriminator.
  */
 export const GenerateRecipeResponseDtoSchema = z.object({
+    id: z.uuid(),
     name: z.string(),
     description: z.string(),
     difficulty: z.enum(["easy", "medium", "hard"]),

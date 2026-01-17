@@ -896,43 +896,55 @@ export type Database = {
       }
       recipes: {
         Row: {
+          carbs: number | null
           cook_time: string | null
           created_at: string
           description: string | null
           difficulty: Database["public"]["Enums"]["difficulty_type"] | null
+          fat: number | null
           fts: string | null
           id: string
           image: string | null
+          kcal: number | null
           name: string
           prep_time: string | null
+          protein: number | null
           servings: number
           tips: string[] | null
           updated_at: string
         }
         Insert: {
+          carbs?: number | null
           cook_time?: string | null
           created_at?: string
           description?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
+          fat?: number | null
           fts?: string | null
           id?: string
           image?: string | null
+          kcal?: number | null
           name: string
           prep_time?: string | null
+          protein?: number | null
           servings?: number
           tips?: string[] | null
           updated_at?: string
         }
         Update: {
+          carbs?: number | null
           cook_time?: string | null
           created_at?: string
           description?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
+          fat?: number | null
           fts?: string | null
           id?: string
           image?: string | null
+          kcal?: number | null
           name?: string
           prep_time?: string | null
+          protein?: number | null
           servings?: number
           tips?: string[] | null
           updated_at?: string
@@ -1247,14 +1259,18 @@ export type Database = {
       }
       persist_recipe: {
         Args: {
+          p_carbs: number
           p_cook_time: string
           p_description: string
           p_difficulty: Database["public"]["Enums"]["difficulty_type"]
+          p_fat: number
           p_image: string
           p_ingredients: Json
           p_instructions: Json
+          p_kcal: number
           p_name: string
           p_prep_time: string
+          p_protein: number
           p_servings: number
           p_tags: string[]
           p_tips: string[]

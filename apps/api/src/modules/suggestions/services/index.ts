@@ -1,3 +1,4 @@
+export * from "./fetch-enriched-suggestion";
 export * from "./generate-suggestions-stream";
 export * from "./match-ingredients";
 export * from "./match-tags";

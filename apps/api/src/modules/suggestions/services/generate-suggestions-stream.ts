@@ -97,6 +97,7 @@ export async function* generateSuggestionsStream(
 
         // Yield to client with enriched ingredient and tag data (id + name)
         yield {
+            id: persistResult.value.suggestionId,
             name: suggestion.name,
             description: suggestion.description,
             difficulty: suggestion.difficulty,

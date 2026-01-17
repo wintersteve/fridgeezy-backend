@@ -1,23 +1,25 @@
 import { openai } from "@fridgeezy/openai";
 import {
     GenerateRecipeRequestDto,
-    GenerateRecipeRequestSchema,
+    PromoteSuggestionRequestSchema,
     HeaderSchema,
+    NutritionSchema,
     IngredientSchema,
     InstructionSchema,
-    NutritionSchema,
     TipSchema,
 } from "@fridgeezy/schemas";
 import { createStreamHandler } from "@fridgeezy/streaming-server";
 import { SuggestionsRepository } from "@fridgeezy/supabase";
+import { Request } from "express";
 
 import {
     createRecipeStream,
     fetchRecipeMetadata,
     formatUnitsForPrompt,
     formatTagsForPrompt,
-} from "../../services";
-import { persistRecipe } from "../../services/persist-recipe";
+} from "../../../recipes/services";
+import { persistRecipe } from "../../../recipes/services/persist-recipe";
+import { fetchEnrichedSuggestion } from "../../services";
 
 const buildSystemPrompt = (
     units: string,
@@ -77,8 +79,8 @@ const buildUserPrompt = (
 Required ingredients to use: ${request.ingredients.join(", ")}
 Servings: ${request.servings}`;
 
-export const generateRecipe = createStreamHandler({
-    requestSchema: GenerateRecipeRequestSchema,
+export const promoteSuggestion = createStreamHandler({
+    requestSchema: PromoteSuggestionRequestSchema,
     responseSchema: [
         HeaderSchema,
         NutritionSchema,
@@ -87,7 +89,54 @@ export const generateRecipe = createStreamHandler({
         TipSchema,
     ],
 
-    handler: async ({ body }) => {
+    handler: async ({ body, req }) => {
+        // Cast to Express Request to access params
+        const expressReq = req as unknown as Request;
+        const { id } = expressReq.params;
+
+        if (!id) {
+            throw new Error("Suggestion ID is required");
+        }
+
+        // Fetch the enriched suggestion by ID
+        const suggestionResult = await fetchEnrichedSuggestion(id);
+
+        if (!suggestionResult.success) {
+            const error = suggestionResult.error;
+
+            // Handle NotFoundError with 404
+            if (error.name === "NotFoundError") {
+                return {
+                    type: "raw" as const,
+                    statusCode: 404,
+                    data: { error: `Suggestion with ID ${id} not found` },
+                };
+            }
+
+            // Handle other persistence errors
+            return {
+                type: "raw" as const,
+                statusCode: 500,
+                data: { error: error.message },
+            };
+        }
+
+        const suggestion = suggestionResult.value;
+
+        // Transform enriched data: extract names from {id, name} objects
+        const ingredients = suggestion.ingredients.map((i) => i.name);
+        const tags = suggestion.tags.map((t) => t.name);
+
+        // Build the recipe request with transformed data
+        const recipeRequest: GenerateRecipeRequestDto = {
+            name: suggestion.name,
+            difficulty: suggestion.difficulty,
+            ingredients: ingredients,
+            tags: tags,
+            servings: body.servings,
+            id: id, // Include the suggestion ID so it gets deleted after recipe creation
+        };
+
         // Fetch metadata from Supabase
         const metadata = await fetchRecipeMetadata();
         const unitsPrompt = formatUnitsForPrompt(metadata.units);
@@ -100,7 +149,7 @@ export const generateRecipe = createStreamHandler({
                     role: "system",
                     content: buildSystemPrompt(unitsPrompt, tagsPrompt),
                 },
-                { role: "user", content: buildUserPrompt(body) },
+                { role: "user", content: buildUserPrompt(recipeRequest) },
             ],
             stream: true,
         });
@@ -113,7 +162,7 @@ export const generateRecipe = createStreamHandler({
                 InstructionSchema,
                 TipSchema,
             ],
-            initialState: body,
+            initialState: recipeRequest,
         });
 
         // Wrap the stream to persist the recipe and include the ID in the final message
@@ -138,30 +187,25 @@ export const generateRecipe = createStreamHandler({
                         `Recipe persisted successfully with ID: ${persistResult.value}`
                     );
 
-                    // Delete the suggestion if a suggestionId was provided
-                    if (body.id) {
-                        const suggestionsRepo = new SuggestionsRepository();
+                    // Delete the suggestion after successful recipe creation
+                    const suggestionsRepo = new SuggestionsRepository();
+                    const deleteResult = await suggestionsRepo.delete(id);
 
-                        const deleteResult = await suggestionsRepo.delete(
-                            body.id
+                    if (deleteResult.success) {
+                        console.log(
+                            `Suggestion ${id} removed after promotion to recipe`
                         );
-
-                        if (deleteResult.success) {
-                            console.log(
-                                `Suggestion ${body.id} removed after promotion to recipe`
-                            );
-                        } else {
-                            console.error(
-                                "Failed to delete suggestion:",
-                                deleteResult.error.message
-                            );
-                        }
+                    } else {
+                        console.error(
+                            "Failed to delete suggestion:",
+                            deleteResult.error.message
+                        );
                     }
 
                     // Yield final completion with recipe ID
                     yield {
                         ...lastResult,
-                        recipeId: persistResult.value,
+                        id: persistResult.value,
                     };
                 } else {
                     console.error(

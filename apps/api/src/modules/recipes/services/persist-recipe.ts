@@ -42,6 +42,7 @@ export async function persistRecipe(
 
         // Persist to database via repository
         const repository = new RecipesRepository();
+
         const result = await repository.persist(recipe, imageUrl);
 
         return result;

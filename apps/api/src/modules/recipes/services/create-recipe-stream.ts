@@ -19,7 +19,11 @@ export async function* createRecipeStream(
     config: RecipeStreamConfig
 ): AsyncGenerator<any, GenerateRecipeResponseDto> {
     const recipe: GenerateRecipeResponseDto = {
-        ...config.initialState,
+        id: "",
+        name: config.initialState.name,
+        difficulty: config.initialState.difficulty,
+        servings: config.initialState.servings,
+        tags: config.initialState.tags,
         description: "",
         prepTime: 0,
         cookTime: 0,
@@ -80,7 +84,7 @@ export async function* createRecipeStream(
         }
         // Schema 4: Tip
         else if (schemaIndex === 4) {
-            recipe.tips?.push(parsed.text);
+            recipe.tips?.push({ text: parsed.text });
         }
 
         // Yield for SSE streaming

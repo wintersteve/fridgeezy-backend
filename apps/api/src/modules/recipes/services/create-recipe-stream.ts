@@ -12,6 +12,7 @@ import { generateAndUploadRecipeImage } from "./create-recipe-image";
 export interface RecipeStreamConfig {
     schemas: [z.ZodType, z.ZodType, z.ZodType, z.ZodType, z.ZodType]; // Header, Nutrition, Ingredient, Instruction, Tip
     initialState: GenerateRecipeRequestDto;
+    skipImageGeneration?: boolean; // Skip image generation if reusing existing image
 }
 
 export async function* createRecipeStream(
@@ -52,11 +53,14 @@ export async function* createRecipeStream(
             recipe.cookTime = parsed.cookTime;
 
             // Generate and upload recipe image in parallel (don't await)
-            generateAndUploadRecipeImage(config.initialState.name).catch(
-                (error) => {
-                    console.error("Image generation failed:", error);
-                }
-            );
+            // Skip if we're reusing an existing image (e.g., escalate-difficulty use case)
+            if (!config.skipImageGeneration) {
+                generateAndUploadRecipeImage(config.initialState.name).catch(
+                    (error) => {
+                        console.error("Image generation failed:", error);
+                    }
+                );
+            }
         }
         // Schema 1: Nutrition
         else if (schemaIndex === 1) {

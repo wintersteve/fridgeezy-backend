@@ -166,8 +166,8 @@ export const promoteSuggestion = createStreamHandler({
         });
 
         // Wrap the stream to persist the recipe and include the ID in the final message
-        async function* wrappedStream() {
-            let lastResult;
+        async function* wrappedStream(): AsyncGenerator<any> {
+            let lastResult: any;
 
             for await (const chunk of recipeStream) {
                 lastResult = chunk;

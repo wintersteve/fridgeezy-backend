@@ -5,8 +5,10 @@ import { z } from "zod/v4";
  * Defines the contract for external systems calling the escalate difficulty use-case.
  */
 export const EscalateDifficultyRequestSchema = z.object({
-    recipeId: z.uuid().describe("UUID of the recipe to escalate"),
-    targetDifficulty: z.enum(["easy", "medium", "hard"]).describe("Target difficulty level"),
+    id: z.uuid().describe("UUID of the recipe to escalate"),
+    difficulty: z
+        .enum(["easy", "medium", "hard"])
+        .describe("Target difficulty level"),
 });
 
 export type EscalateDifficultyRequestDto = z.infer<

@@ -3,11 +3,12 @@ import { supabaseAdmin } from "@fridgeezy/supabase";
 
 export async function fetchRecipe(
     recipeId: string
-): Promise<GenerateRecipeResponseDto | null> {
+): Promise<(GenerateRecipeResponseDto & { imageUrl?: string }) | null> {
     const { data: recipe, error } = await supabaseAdmin
         .from("recipes")
         .select(
             `
+            id,
             name,
             description,
             difficulty,
@@ -19,6 +20,7 @@ export async function fetchRecipe(
             protein,
             fat,
             tips,
+            image,
             recipe_ingredients (
                 quantity,
                 ingredient:ingredients (
@@ -46,6 +48,7 @@ export async function fetchRecipe(
 
     // Transform database format to RecipeResponse format
     return {
+        id: recipe.id,
         name: recipe.name,
         description: recipe.description || "",
         difficulty: recipe.difficulty!,
@@ -75,5 +78,6 @@ export async function fetchRecipe(
                 ? recipe.tips.map((text) => ({ text }))
                 : null,
         tags: recipe.recipe_tags.map((rt) => rt.tag.name),
-    };
+        imageUrl: recipe.image, // Include image URL for reuse
+    } as GenerateRecipeResponseDto & { imageUrl?: string };
 }

@@ -10,34 +10,45 @@ const DEFAULT_IMAGE_URL = "";
  * Persist a complete recipe to Supabase.
  *
  * This service orchestrates:
- * 1. Image generation and upload
+ * 1. Image generation and upload (or reuse existing image if provided)
  * 2. Database persistence via repository
  *
  * @param recipe The recipe data to persist
+ * @param existingImageUrl Optional existing image URL to reuse instead of generating a new one
  * @returns Result containing the recipe UUID or error
  */
 export async function persistRecipe(
-    recipe: GenerateRecipeResponseDto
+    recipe: GenerateRecipeResponseDto,
+    existingImageUrl?: string
 ): Promise<Result<string, PersistenceError>> {
     try {
-        // Wait for image generation to complete
+        // Use existing image URL if provided, otherwise generate new one
         let imageUrl: string;
-        try {
-            imageUrl = await generateAndUploadRecipeImage(recipe.name);
 
-            // If image generation returns empty string, use default
-            if (!imageUrl) {
-                console.warn(
-                    `Image generation returned empty URL for recipe: ${recipe.name}, using default`
+        if (existingImageUrl) {
+            console.log(
+                `Reusing existing image for recipe: ${recipe.name}`
+            );
+            imageUrl = existingImageUrl;
+        } else {
+            // Wait for image generation to complete
+            try {
+                imageUrl = await generateAndUploadRecipeImage(recipe.name);
+
+                // If image generation returns empty string, use default
+                if (!imageUrl) {
+                    console.warn(
+                        `Image generation returned empty URL for recipe: ${recipe.name}, using default`
+                    );
+                    imageUrl = DEFAULT_IMAGE_URL;
+                }
+            } catch (error) {
+                console.error(
+                    "Image generation failed, using default:",
+                    error instanceof Error ? error.message : error
                 );
                 imageUrl = DEFAULT_IMAGE_URL;
             }
-        } catch (error) {
-            console.error(
-                "Image generation failed, using default:",
-                error instanceof Error ? error.message : error
-            );
-            imageUrl = DEFAULT_IMAGE_URL;
         }
 
         // Persist to database via repository

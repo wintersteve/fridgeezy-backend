@@ -29,27 +29,33 @@ const buildSystemPrompt = (
 ## Transformation Rules
 
 ### Core Constraints (MUST PRESERVE)
+- Keep the recipe NAME exactly as provided (never change it)
+- Keep ALL recipe TAGS exactly as provided (dietary restrictions like shellfish-free, vegan, gluten-free must remain unchanged)
 - Keep ALL main/core ingredients (proteins, primary vegetables, base components)
 - Maintain the same cuisine and dish identity
 - Use ONLY unit abbreviations and tags from the approved lists below
 
-### Difficulty Modifications
+### What Should Change Based on Difficulty
 
 When INCREASING difficulty:
-- Use more advanced cooking techniques (e.g., "sauté and deglaze" vs "fry")
-- Add optional ingredients for depth (fresh herbs, specialty aromatics, garnishes)
-- Include detailed technique explanations with precision (temperatures, timing)
-- Increase step granularity
+- **Cooking Techniques**: Use more advanced techniques (e.g., "sauté and deglaze" vs "fry")
+- **Ingredients**: Add optional ingredients for depth (fresh herbs, specialty aromatics, garnishes)
+- **Instructions**: Include detailed technique explanations with precision (temperatures, timing), increase step granularity
+- **Time**: Increase prepTime and cookTime to reflect more complex preparation and techniques
+- **Nutrition**: Adjust nutritional values (kcal, carbs, protein, fat) based on added ingredients and cooking methods
 
 When DECREASING difficulty:
-- Simplify cooking techniques (e.g., "mix" vs "emulsify")
-- Remove optional/garnish ingredients while keeping core ingredients
-- Combine steps where possible
-- Use simpler language, reduce precision requirements
+- **Cooking Techniques**: Simplify techniques (e.g., "mix" vs "emulsify")
+- **Ingredients**: Remove optional/garnish ingredients while keeping core ingredients
+- **Instructions**: Combine steps where possible, use simpler language, reduce precision requirements
+- **Time**: Decrease prepTime and cookTime to reflect simpler preparation
+- **Nutrition**: Adjust nutritional values (kcal, carbs, protein, fat) based on removed ingredients and simpler methods
 
 ### Output Rules
 - For each instruction step, include an "ingredients" array listing the ingredient names used in that specific step
 - Each step MUST be authentic and achievable at the target difficulty level
+- Times (prepTime, cookTime) MUST be realistic for the target difficulty level
+- Nutritional values MUST accurately reflect the adjusted ingredient list
 - ALWAYS use unit abbreviations from the approved list below (never invent new units)
 - ALWAYS use tag names from the approved list below (never invent new tags)
 
@@ -64,18 +70,17 @@ Use ONLY these tags when tagging recipes. Tags must accurately represent the rec
 ${tags}
 
 ## Tagging Rules
-- EXACTLY 1 component tag per recipe (use "dish" for regular finished dishes/meals)
-- EXACTLY 1 cuisine tag per recipe (the most accurate cuisine origin)
-- At least 1 course tag (appetizer, starter, main, side, or dessert)
-- Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free if the recipe qualifies)
+- Use EXACTLY the same tags as the original recipe (do not add, remove, or modify any tags)
+- Tags include component, cuisine, course, and dietary restriction tags
+- Dietary tags (shellfish-free, vegan, gluten-free, etc.) MUST remain unchanged regardless of difficulty
 
 ## Output Format (JSONL - one JSON object per line)
 Output the recipe as multiple JSON lines in this exact order:
 
-Line 1 - Header with basic info:
+Line 1 - Header with basic info (adjust prepTime and cookTime for target difficulty):
 {"type":"header","description":"Brief description","prepTime":15,"cookTime":30}
 
-Line 2 - Nutrition information (per serving):
+Line 2 - Nutrition information (per serving, adjust based on ingredient changes):
 {"type":"nutrition","kcal":450,"carbs":35,"protein":25,"fat":15}
 
 Lines 3-N - One line per ingredient (use approved unit abbreviations only):
@@ -101,11 +106,19 @@ const buildUserPrompt = (
         .map((inst, idx) => `${idx + 1}. ${inst.text}`)
         .join("\n");
 
+    const nutritionInfo = `Calories: ${existingRecipe.kcal}kcal, Carbs: ${existingRecipe.carbs}g, Protein: ${existingRecipe.protein}g, Fat: ${existingRecipe.fat}g`;
+
     return `Transform this recipe to ${targetDifficulty} difficulty:
 
 Recipe Name: ${existingRecipe.name}
+Description: ${existingRecipe.description}
 Current Difficulty: ${existingRecipe.difficulty}
 Servings: ${existingRecipe.servings}
+Prep Time: ${existingRecipe.prepTime} min
+Cook Time: ${existingRecipe.cookTime} min
+
+Current Nutrition (per serving):
+${nutritionInfo}
 
 Current Ingredients:
 ${ingredientsList}
@@ -113,12 +126,22 @@ ${ingredientsList}
 Current Instructions:
 ${instructionsList}
 
-${existingRecipe.tips?.length ? `Tips:\n${existingRecipe.tips.join("\n")}` : ""}
+${existingRecipe.tips?.length ? `Tips:\n${existingRecipe.tips.map((t) => t.text).join("\n")}` : ""}
 
 Tags: ${existingRecipe.tags.join(", ")}
 
-IMPORTANT: Keep recipe name "${existingRecipe.name}" and all core ingredients. Only modify techniques, optional ingredients, and instruction complexity.`;
+IMPORTANT CONSTRAINTS:
+- Keep recipe name "${existingRecipe.name}" EXACTLY as is
+- Use EXACTLY this description in the header: "${existingRecipe.description}"
+- Use EXACTLY these tags: ${existingRecipe.tags.join(", ")} (do not add, remove, or modify any tags)
+- Keep all core ingredients (proteins, primary vegetables, base components)
+- Adjust prepTime and cookTime to be realistic for ${targetDifficulty} difficulty
+- Adjust nutritional values based on any ingredient changes
+- Modify techniques, optional ingredients, and instruction complexity to match ${targetDifficulty} difficulty`;
 };
+
+// Store existing image URL for reuse in onComplete
+let existingImageUrl: string | undefined;
 
 export const escalateDifficulty = createStreamHandler({
     requestSchema: EscalateDifficultyRequestSchema,
@@ -132,16 +155,19 @@ export const escalateDifficulty = createStreamHandler({
 
     handler: async ({ body }) => {
         // 1. Fetch existing recipe
-        const existingRecipe = await fetchRecipe(body.recipeId);
+        const existingRecipe = await fetchRecipe(body.id);
 
         if (!existingRecipe) {
-            throw new Error(`Recipe not found: ${body.recipeId}`);
+            throw new Error(`Recipe not found: ${body.id}`);
         }
 
+        // Store the existing image URL to reuse it (avoid regenerating)
+        existingImageUrl = (existingRecipe as any).imageUrl;
+
         // 2. Validate difficulty transition
-        if (existingRecipe.difficulty === body.targetDifficulty) {
+        if (existingRecipe.difficulty === body.difficulty) {
             throw new Error(
-                `Recipe is already at ${body.targetDifficulty} difficulty`
+                `Recipe is already at ${body.difficulty} difficulty`
             );
         }
 
@@ -160,15 +186,12 @@ export const escalateDifficulty = createStreamHandler({
                         unitsPrompt,
                         tagsPrompt,
                         existingRecipe.difficulty,
-                        body.targetDifficulty
+                        body.difficulty
                     ),
                 },
                 {
                     role: "user",
-                    content: buildUserPrompt(
-                        existingRecipe,
-                        body.targetDifficulty
-                    ),
+                    content: buildUserPrompt(existingRecipe, body.difficulty),
                 },
             ],
             stream: true,
@@ -186,19 +209,21 @@ export const escalateDifficulty = createStreamHandler({
                     TipSchema,
                 ],
                 initialState: {
-                    name: existingRecipe.name,
-                    difficulty: body.targetDifficulty, // TARGET difficulty
+                    name: existingRecipe.name, // MUST remain constant
+                    difficulty: body.difficulty, // TARGET difficulty
                     servings: existingRecipe.servings,
-                    tags: existingRecipe.tags,
-                    ingredients: [], // AI will populate
+                    tags: existingRecipe.tags, // MUST remain constant
+                    ingredients: existingRecipe.ingredients.map((ing) => ing.name), // Ingredient names for context
                 },
+                skipImageGeneration: true, // Reuse existing image instead of generating new one
             }),
         };
     },
 
     onComplete: async ({ result }) => {
         if (result?.recipe) {
-            const persistResult = await persistRecipe(result.recipe);
+            // Reuse existing image URL instead of generating a new one
+            const persistResult = await persistRecipe(result.recipe, existingImageUrl);
 
             if (persistResult.success) {
                 console.log(

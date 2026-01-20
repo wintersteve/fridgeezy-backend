@@ -48,16 +48,22 @@ export class SuggestionsRepository implements ISuggestionsRepository {
     }
 
     /**
-     * Find a suggestion by its name
+     * Find a suggestion by its name using canonical_id for consistent matching
      */
     async findByName(
         name: string
     ): Promise<Result<RecipeSuggestion | null, PersistenceError>> {
         try {
+            // Normalize the name to canonical_id format for matching
+            const canonicalId = name
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '_');
+
             const { data, error } = await supabase
                 .from("recipe_suggestions")
                 .select("*")
-                .eq("name", name)
+                .eq("canonical_id", canonicalId)
                 .maybeSingle(); // Use maybeSingle to handle 0 or 1 results
 
             if (error) {

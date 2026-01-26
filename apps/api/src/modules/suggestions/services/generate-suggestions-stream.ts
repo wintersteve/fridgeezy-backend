@@ -6,9 +6,11 @@ import {
     GenerateSuggestionResponseSchema,
 } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
+import { SuggestionsRepository } from "@fridgeezy/supabase";
 import { castArray } from "@fridgeezy/toolkit";
 import type OpenAI from "openai";
 
+import { fetchEnrichedSuggestion } from "./fetch-enriched-suggestion";
 import { persistSuggestion } from "./persist-suggestion";
 
 const SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly 5 authentic, real-world recipe suggestions based on the provided ingredients.
@@ -78,6 +80,8 @@ export async function* generateSuggestionsStream(
         stream: true,
     });
 
+    const suggestionsRepo = new SuggestionsRepository();
+
     // Process JSONL stream with validation
     for await (const { parsed } of processJsonlStream(stream, [
         GenerateSuggestionResponseSchema,
@@ -85,7 +89,43 @@ export async function* generateSuggestionsStream(
         console.log(parsed);
         const suggestion = parsed as GenerateSuggestionResponseDto;
 
-        // Persist suggestion and get ingredient/tag data with IDs and names
+        // Check if a similar suggestion already exists (similarity threshold: 0.95)
+        const searchResult = await suggestionsRepo.searchSimilar(
+            suggestion.name,
+            0.95,
+            1
+        );
+
+        if (!searchResult.success) {
+            console.error(
+                `[Suggestions] Failed to search similar suggestions for "${suggestion.name}":`,
+                searchResult.error
+            );
+            // Continue with persistence if search fails
+        } else if (searchResult.value.length > 0) {
+            // Similar suggestion exists, fetch enriched data and yield it
+            const existingSuggestion = searchResult.value[0];
+            console.log(
+                `[Suggestions] Found similar suggestion: ${existingSuggestion.name} (score: ${existingSuggestion.score.toFixed(3)}) - reusing instead of creating duplicate`
+            );
+
+            const enrichedResult = await fetchEnrichedSuggestion(
+                existingSuggestion.id
+            );
+
+            if (enrichedResult.success) {
+                yield enrichedResult.value;
+                continue;
+            } else {
+                console.error(
+                    `[Suggestions] Failed to fetch enriched suggestion ${existingSuggestion.id}:`,
+                    enrichedResult.error
+                );
+                // Fall through to create new suggestion
+            }
+        }
+
+        // No similar suggestion found or fetch failed, persist new suggestion
         const persistResult = await persistSuggestion(suggestion);
 
         if (!persistResult.success) {

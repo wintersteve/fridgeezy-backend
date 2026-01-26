@@ -826,40 +826,29 @@ export type Database = {
           created_at: string
           description: string | null
           difficulty: Database["public"]["Enums"]["difficulty_type"] | null
+          embedding: string | null
           id: string
           name: string
-          promoted_at: string | null
-          promoted_to_recipe_id: string | null
         }
         Insert: {
           canonical_id: string
           created_at?: string
           description?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
+          embedding?: string | null
           id?: string
           name: string
-          promoted_at?: string | null
-          promoted_to_recipe_id?: string | null
         }
         Update: {
           canonical_id?: string
           created_at?: string
           description?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
+          embedding?: string | null
           id?: string
           name?: string
-          promoted_at?: string | null
-          promoted_to_recipe_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "recipe_suggestions_promoted_to_recipe_id_fkey"
-            columns: ["promoted_to_recipe_id"]
-            isOneToOne: false
-            referencedRelation: "recipes"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       recipe_tags: {
         Row: {
@@ -1125,10 +1114,10 @@ export type Database = {
       delete_expired_pantry_items: { Args: never; Returns: number }
       find_recipes: {
         Args: {
-          ingredients: string[]
+          ingredients?: string[]
           limit_count?: number
-          p_difficulty: string
-          tags: string[]
+          p_difficulty?: string
+          tags?: string[]
         }
         Returns: Database["public"]["CompositeTypes"]["find_recipes_result"][]
         SetofOptions: {
@@ -1317,6 +1306,20 @@ export type Database = {
           similarity: number
         }[]
       }
+      search_recipe_suggestions: {
+        Args: {
+          match_count?: number
+          match_threshold?: number
+          search_query: string
+        }
+        Returns: {
+          description: string
+          difficulty: Database["public"]["Enums"]["difficulty_type"]
+          id: string
+          name: string
+          score: number
+        }[]
+      }
       search_recipes: {
         Args: {
           match_count?: number
@@ -1379,6 +1382,7 @@ export type Database = {
       find_recipes_result: {
         id: string | null
         name: string | null
+        description: string | null
         image: string | null
         difficulty: string | null
         ingredients: Json | null

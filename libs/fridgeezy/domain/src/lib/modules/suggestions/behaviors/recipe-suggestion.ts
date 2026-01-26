@@ -1,6 +1,5 @@
 import { RecipeSuggestion } from "@fridgeezy/types";
 
-import { BusinessRuleError } from "../../shared";
 import { nameContains } from "../validation";
 
 /**
@@ -10,60 +9,6 @@ import { nameContains } from "../validation";
  * These functions operate on RecipeSuggestion data and return new objects
  * (immutable pattern).
  */
-
-/**
- * Check if a suggestion can be promoted to a recipe
- *
- * @param suggestion The suggestion to check
- * @returns true if the suggestion can be promoted (not already promoted)
- */
-export function canPromote(suggestion: RecipeSuggestion): boolean {
-    return suggestion.promoted_to_recipe_id === null;
-}
-
-/**
- * Promote a suggestion to a recipe
- *
- * Returns a new suggestion object with promotion fields set.
- * Throws an error if already promoted.
- *
- * @param suggestion The suggestion to promote
- * @param recipeId The ID of the recipe this suggestion is promoted to
- * @returns A new RecipeSuggestion object with promotion data
- * @throws BusinessRuleError if already promoted
- *
- * @example
- * ```typescript
- * const promoted = promote(suggestion, 'recipe-123');
- * ```
- */
-export function promote(
-    suggestion: RecipeSuggestion,
-    recipeId: string
-): RecipeSuggestion {
-    if (!canPromote(suggestion)) {
-        throw new BusinessRuleError(
-            "Cannot promote a suggestion that is already promoted",
-            "ALREADY_PROMOTED"
-        );
-    }
-
-    return {
-        ...suggestion,
-        promoted_to_recipe_id: recipeId,
-        promoted_at: new Date().toISOString(),
-    };
-}
-
-/**
- * Check if a suggestion is promoted
- *
- * @param suggestion The suggestion to check
- * @returns true if the suggestion has been promoted to a recipe
- */
-export function isPromoted(suggestion: RecipeSuggestion): boolean {
-    return suggestion.promoted_to_recipe_id !== null;
-}
 
 /**
  * Check if a suggestion matches a search query

@@ -111,32 +111,6 @@ export class SuggestionsRepository implements ISuggestionsRepository {
         }
     }
 
-    /**
-     * Find suggestions that haven't been promoted
-     */
-    async findUnpromoted(): Promise<
-        Result<RecipeSuggestion[], PersistenceError>
-    > {
-        try {
-            const { data, error } = await supabase
-                .from("recipe_suggestions")
-                .select("*")
-                .is("promoted_to_recipe_id", null)
-                .order("created_at", { ascending: false });
-
-            if (error) {
-                return failure(new PersistenceError(error.message));
-            }
-
-            return success(data || []);
-        } catch (error) {
-            return failure(
-                new PersistenceError(
-                    `Failed to fetch unpromoted suggestions: ${error instanceof Error ? error.message : "Unknown error"}`
-                )
-            );
-        }
-    }
 
     /**
      * Create a new suggestion
@@ -234,6 +208,58 @@ export class SuggestionsRepository implements ISuggestionsRepository {
             return failure(
                 new PersistenceError(
                     `Failed to delete suggestion: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
+
+    /**
+     * Search for similar suggestions using vector similarity
+     */
+    async searchSimilar(
+        query: string,
+        matchThreshold: number = 0.95,
+        matchCount: number = 1
+    ): Promise<
+        Result<
+            Array<{
+                id: string;
+                name: string;
+                description: string;
+                difficulty: string;
+                score: number;
+            }>,
+            PersistenceError
+        >
+    > {
+        try {
+            const { data, error } = await supabase.rpc(
+                "search_recipe_suggestions",
+                {
+                    search_query: query,
+                    match_threshold: matchThreshold,
+                    match_count: matchCount,
+                }
+            ) as {
+                data: Array<{
+                    id: string;
+                    name: string;
+                    description: string;
+                    difficulty: string;
+                    score: number;
+                }> | null;
+                error: any;
+            };
+
+            if (error) {
+                return failure(new PersistenceError(error.message));
+            }
+
+            return success(data || []);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to search similar suggestions: ${error instanceof Error ? error.message : "Unknown error"}`
                 )
             );
         }

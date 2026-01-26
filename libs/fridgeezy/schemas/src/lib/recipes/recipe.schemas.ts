@@ -21,6 +21,7 @@ export const IngredientSchema = z.object({
     parent: z.string().nullable(),
     quantity: z.number(),
     unit: z.string(),
+    comment: z.string().optional(),
 });
 
 // Schema for instruction line

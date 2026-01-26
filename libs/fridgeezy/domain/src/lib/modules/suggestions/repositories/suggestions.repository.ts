@@ -44,13 +44,6 @@ export interface ISuggestionsRepository {
     findAll(): Promise<Result<RecipeSuggestion[], DomainError>>;
 
     /**
-     * Find suggestions that have not been promoted
-     *
-     * @returns Result containing array of unpromoted suggestions
-     */
-    findUnpromoted(): Promise<Result<RecipeSuggestion[], DomainError>>;
-
-    /**
      * Create a new suggestion
      *
      * @param suggestion The suggestion entity to create

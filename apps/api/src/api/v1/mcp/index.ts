@@ -5,7 +5,7 @@ import { McpRoutes } from "../../../modules/mcp/mcp.routes";
 export function createMcpRouter() {
     const router = Router();
 
-    router.use("/chat", McpRoutes);
+    router.use("/", McpRoutes);
 
     return router;
 }

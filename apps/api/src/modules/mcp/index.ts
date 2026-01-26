@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
+import { getRecipeSuggestionsTool } from "./tools";
+
 export interface Session {
     server: McpServer;
     transport: StreamableHTTPServerTransport;
@@ -22,6 +24,13 @@ export function createMcpServer(): McpServer {
     //     "search_similar_recipes",
     //     "substitute_ingredients",
     // ];
+
+    // Register GET_RECIPE_SUGGESTIONS tool
+    server.registerTool(
+        getRecipeSuggestionsTool.name,
+        getRecipeSuggestionsTool.definition,
+        getRecipeSuggestionsTool.handler
+    );
 
     // server.registerTool(
     //     "GET_TAGS",

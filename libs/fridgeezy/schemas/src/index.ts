@@ -7,3 +7,4 @@
 
 export * from "./lib/suggestions";
 export * from "./lib/recipes";
+export * from "./lib/chat";

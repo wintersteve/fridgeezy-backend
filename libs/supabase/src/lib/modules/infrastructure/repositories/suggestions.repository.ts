@@ -7,7 +7,10 @@ import {
     Result,
     success,
 } from "@fridgeezy/domain";
-import { RecipeSuggestion, RecipeSuggestionInsertPayload } from "@fridgeezy/types";
+import {
+    RecipeSuggestion,
+    RecipeSuggestionInsertPayload,
+} from "@fridgeezy/types";
 
 import { supabase } from "../../client";
 
@@ -58,7 +61,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
             const canonicalId = name
                 .trim()
                 .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '_');
+                .replace(/[^a-z0-9]+/g, "_");
 
             const { data, error } = await supabase
                 .from("recipe_suggestions")
@@ -240,7 +243,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
      * Persist a suggestion with its ingredient and tag relations atomically
      */
     async persistWithRelations(
-        suggestion: RecipeSuggestionInsertPayload,
+        suggestion: Omit<RecipeSuggestionInsertPayload, "canonical_id">,
         ingredientIds: string[],
         tagIds: string[]
     ): Promise<Result<string, PersistenceError>> {

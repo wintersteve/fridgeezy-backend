@@ -9,8 +9,10 @@ export class SuggestionsController {
         next: NextFunction
     ) => {
         try {
+            console.log("test");
             return generateSuggestion(req, res);
         } catch (err) {
+            console.log("error", err);
             next(err);
         }
     };

@@ -121,6 +121,7 @@ export function createStreamHandler<
 >(
     config: StreamHandlerConfig<TRequestSchema, TResponseSchema>
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+    console.log("asd");
     const allowedMethods = config.allowedMethods || ["POST"];
     const corsHeaders = buildCorsHeaders(config.cors);
     const isStreaming = isStreamingSchema(config.responseSchema);

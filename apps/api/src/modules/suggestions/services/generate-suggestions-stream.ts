@@ -82,6 +82,7 @@ export async function* generateSuggestionsStream(
     for await (const { parsed } of processJsonlStream(stream, [
         GenerateSuggestionResponseSchema,
     ])) {
+        console.log(parsed);
         const suggestion = parsed as GenerateSuggestionResponseDto;
 
         // Persist suggestion and get ingredient/tag data with IDs and names

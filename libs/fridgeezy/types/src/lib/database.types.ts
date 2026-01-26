@@ -822,6 +822,7 @@ export type Database = {
       }
       recipe_suggestions: {
         Row: {
+          canonical_id: string
           created_at: string
           description: string | null
           difficulty: Database["public"]["Enums"]["difficulty_type"] | null
@@ -831,6 +832,7 @@ export type Database = {
           promoted_to_recipe_id: string | null
         }
         Insert: {
+          canonical_id: string
           created_at?: string
           description?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
@@ -840,6 +842,7 @@ export type Database = {
           promoted_to_recipe_id?: string | null
         }
         Update: {
+          canonical_id?: string
           created_at?: string
           description?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
@@ -1120,6 +1123,21 @@ export type Database = {
     Functions: {
       bytea_to_text: { Args: { data: string }; Returns: string }
       delete_expired_pantry_items: { Args: never; Returns: number }
+      find_recipes: {
+        Args: {
+          ingredients: string[]
+          limit_count?: number
+          p_difficulty: string
+          tags: string[]
+        }
+        Returns: Database["public"]["CompositeTypes"]["find_recipes_result"][]
+        SetofOptions: {
+          from: "*"
+          to: "find_recipes_result"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       generate_embedding: { Args: { input_text: string }; Returns: string }
       get_prompt_variable_types: {
         Args: never
@@ -1358,6 +1376,15 @@ export type Database = {
       unit_type: "weight" | "volume" | "count"
     }
     CompositeTypes: {
+      find_recipes_result: {
+        id: string | null
+        name: string | null
+        image: string | null
+        difficulty: string | null
+        ingredients: Json | null
+        tags: Json | null
+        source: string | null
+      }
       http_header: {
         field: string | null
         value: string | null

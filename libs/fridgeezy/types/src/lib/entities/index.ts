@@ -9,6 +9,7 @@ export * from './cooking-action-aliases';
 export * from './cooking-action-categories';
 export * from './cooking-actions';
 export * from './ingredient-aliases';
+export * from './ingredient-pairings';
 export * from './ingredient-substitutes';
 export * from './ingredients';
 export * from './pantry-items';

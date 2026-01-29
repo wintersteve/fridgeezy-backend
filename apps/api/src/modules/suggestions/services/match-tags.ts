@@ -1,93 +1,187 @@
 import { failure, PersistenceError, Result, success } from "@fridgeezy/domain";
+import { generateEmbedding } from "@fridgeezy/openai";
 import { TagsRepository } from "@fridgeezy/supabase";
 
-import { inferTagType } from "./utils/infer-tag-type";
+export type TagType = "dietary" | "cuisine" | "component" | "course";
+
+export interface TagInput {
+    name: string;
+    type?: TagType;
+}
 
 export interface TagMatch {
     originalName: string;
     tagId: string;
     tagType: string;
-    matchType: "exact_name" | "created";
+    matchType: "canonical_id" | "vector" | "created";
+    confidence?: number;
 }
 
 /**
- * Matches tag names using a simple 2-step strategy:
- * 1. Direct name match on tags table
- * 2. Create new tag if no match found (with inferred type)
+ * Matches tag names using a 2-step fallback strategy:
+ * 1. Canonical ID lookup (direct match)
+ * 2. Vector search using embeddings (similarity threshold: 0.75)
+ * 3. For cuisine tags only: auto-create if not matched
  *
- * @param names Array of tag names to match
+ * @param inputs Array of tag names (strings) or TagInput objects with optional type
  * @returns Result containing array of tag matches
  */
 export async function matchTags(
-    names: string[]
+    inputs: Array<string | TagInput>
 ): Promise<Result<TagMatch[], PersistenceError>> {
     const tagsRepo = new TagsRepository();
     const matches: TagMatch[] = [];
-    let unmatched = [...names];
+
+    // Helper function to convert name to canonical ID
+    const toCanonicalId = (name: string): string =>
+        name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "");
+
+    // Normalize inputs to TagInput format
+    const normalizedInputs: TagInput[] = inputs.map((input) =>
+        typeof input === "string" ? { name: input } : input
+    );
+
+    // Create mapping from canonical ID to TagInput
+    const canonicalToInput = new Map<string, TagInput>();
+    normalizedInputs.forEach((input) => {
+        canonicalToInput.set(toCanonicalId(input.name), input);
+    });
+
+    let unmatchedCanonicalIds = Array.from(canonicalToInput.keys());
 
     try {
-        // Step 1: Direct name match (batch)
-        const nameMatchesResult = await tagsRepo.findByNames(unmatched);
-        if (nameMatchesResult.success === false) {
-            return nameMatchesResult;
+        // Step 1: Canonical ID lookup (batch)
+        const canonicalMatchesResult =
+            await tagsRepo.findByCanonicalIds(unmatchedCanonicalIds);
+        if (canonicalMatchesResult.success === false) {
+            return canonicalMatchesResult;
         }
 
-        const nameMatches = nameMatchesResult.value;
-        nameMatches.forEach((tag, name) => {
-            matches.push({
-                originalName: name,
-                tagId: tag.id,
-                tagType: tag.type,
-                matchType: "exact_name",
-            });
+        const canonicalMatches = canonicalMatchesResult.value;
+        canonicalMatches.forEach((tag, canonicalId) => {
+            const input = canonicalToInput.get(canonicalId);
+            if (input) {
+                matches.push({
+                    originalName: input.name,
+                    tagId: tag.id,
+                    tagType: tag.type,
+                    matchType: "canonical_id",
+                });
+            }
         });
 
-        unmatched = unmatched.filter((name) => !nameMatches.has(name));
+        unmatchedCanonicalIds = unmatchedCanonicalIds.filter(
+            (id) => !canonicalMatches.has(id)
+        );
 
-        // Step 2: Create new tags
-        for (const name of unmatched) {
+        // Get TagInputs for still unmatched canonical IDs
+        let unmatchedInputs = unmatchedCanonicalIds
+            .map((id) => canonicalToInput.get(id))
+            .filter((input): input is TagInput => input !== undefined);
+
+        // Step 2: Vector search (embedding generated server-side)
+        if (unmatchedInputs.length > 0) {
+            const stillUnmatched: TagInput[] = [];
+
+            for (const input of unmatchedInputs) {
+                try {
+                    // Search for similar tags across all types
+                    // Embedding is generated server-side by the search_tags function
+                    const vectorMatchResult = await tagsRepo.vectorSearch(
+                        input.name,
+                        0.75
+                    );
+                    if (vectorMatchResult.success === false) {
+                        console.error(
+                            `Vector search failed for "${input.name}":`,
+                            vectorMatchResult.error
+                        );
+                        stillUnmatched.push(input);
+                        continue;
+                    }
+
+                    const vectorMatch = vectorMatchResult.value;
+                    if (vectorMatch) {
+                        matches.push({
+                            originalName: input.name,
+                            tagId: vectorMatch.tag.id,
+                            tagType: vectorMatch.tag.type,
+                            matchType: "vector",
+                            confidence: vectorMatch.similarity,
+                        });
+                    } else {
+                        stillUnmatched.push(input);
+                    }
+                } catch (error) {
+                    console.error(
+                        `Vector search failed for "${input.name}":`,
+                        error
+                    );
+                    stillUnmatched.push(input);
+                }
+            }
+
+            unmatchedInputs = stillUnmatched;
+        }
+
+        // Step 3: Auto-create unmatched cuisine tags
+        const cuisineInputs = unmatchedInputs.filter(
+            (input) => input.type === "cuisine"
+        );
+        const nonCuisineInputs = unmatchedInputs.filter(
+            (input) => input.type !== "cuisine"
+        );
+
+        for (const input of cuisineInputs) {
             try {
-                // Infer tag type from name
-                const tagType = inferTagType(name);
+                // Generate embedding for the new tag
+                const embedding = await generateEmbedding(input.name);
 
-                // Normalize to canonical ID
-                const canonicalId = name
-                    .toLowerCase()
-                    .replace(/[^a-z0-9]+/g, "_")
-                    .replace(/^_+|_+$/g, "");
-
+                const canonicalId = toCanonicalId(input.name);
                 const createResult = await tagsRepo.create({
-                    name,
+                    name: input.name.toLowerCase(),
                     canonical_id: canonicalId,
-                    type: tagType,
+                    type: "cuisine",
+                    embedding: JSON.stringify(embedding),
                 });
 
                 if (createResult.success === false) {
                     console.error(
-                        `Failed to create tag "${name}":`,
+                        `Failed to create cuisine tag "${input.name}":`,
                         createResult.error
                     );
-                    return failure(
-                        new PersistenceError(
-                            `Failed to create tag "${name}": ${createResult.error.message}`
-                        )
-                    );
+                    nonCuisineInputs.push(input); // Track as unmatched
+                    continue;
                 }
 
+                const newTag = createResult.value;
+                console.log(
+                    `[Tags] Created new cuisine tag: ${newTag.name} (${newTag.id})`
+                );
+
                 matches.push({
-                    originalName: name,
-                    tagId: createResult.value.id,
-                    tagType: createResult.value.type,
+                    originalName: input.name,
+                    tagId: newTag.id,
+                    tagType: "cuisine",
                     matchType: "created",
                 });
             } catch (error) {
-                console.error(`Failed to create tag "${name}":`, error);
-                return failure(
-                    new PersistenceError(
-                        `Failed to create tag "${name}": ${error instanceof Error ? error.message : "Unknown error"}`
-                    )
+                console.error(
+                    `Failed to create cuisine tag "${input.name}":`,
+                    error
                 );
+                nonCuisineInputs.push(input); // Track as unmatched
             }
+        }
+
+        // Log any tags that couldn't be matched (excluding created cuisine tags)
+        if (nonCuisineInputs.length > 0) {
+            console.warn(
+                `Could not match tags: ${nonCuisineInputs.map((i) => i.name).join(", ")}`
+            );
         }
 
         return success(matches);

@@ -226,6 +226,45 @@ export type Database = {
           },
         ]
       }
+      ingredient_pairings: {
+        Row: {
+          created_at: string
+          id: string
+          ingredient_id: string
+          notes: string | null
+          paired_ingredient_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ingredient_id: string
+          notes?: string | null
+          paired_ingredient_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ingredient_id?: string
+          notes?: string | null
+          paired_ingredient_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingredient_pairings_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingredient_pairings_paired_ingredient_id_fkey"
+            columns: ["paired_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ingredient_substitutes: {
         Row: {
           created_at: string
@@ -647,6 +686,7 @@ export type Database = {
       }
       recipe_ingredients: {
         Row: {
+          comment: string | null
           created_at: string
           id: string
           ingredient_id: string
@@ -655,6 +695,7 @@ export type Database = {
           unit_id: string
         }
         Insert: {
+          comment?: string | null
           created_at?: string
           id?: string
           ingredient_id: string
@@ -663,6 +704,7 @@ export type Database = {
           unit_id: string
         }
         Update: {
+          comment?: string | null
           created_at?: string
           id?: string
           ingredient_id?: string
@@ -1128,6 +1170,10 @@ export type Database = {
         }
       }
       generate_embedding: { Args: { input_text: string }; Returns: string }
+      generate_embedding_small: {
+        Args: { input_text: string }
+        Returns: string
+      }
       get_prompt_variable_types: {
         Args: never
         Returns: {
@@ -1337,7 +1383,7 @@ export type Database = {
           match_count?: number
           match_threshold?: number
           match_type: Database["public"]["Enums"]["tag_type"]
-          query_embedding: string
+          search_query: string
         }
         Returns: {
           canonical_id: string

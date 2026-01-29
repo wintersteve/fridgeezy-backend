@@ -126,7 +126,9 @@ export async function* generateSuggestionsStream(
         }
 
         // No similar suggestion found or fetch failed, persist new suggestion
-        const persistResult = await persistSuggestion(suggestion);
+        const persistResult = await persistSuggestion(suggestion, {
+            cuisineTag: request.cuisine,
+        });
 
         if (!persistResult.success) {
             console.error(

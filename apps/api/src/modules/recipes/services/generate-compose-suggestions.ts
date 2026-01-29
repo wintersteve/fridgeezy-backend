@@ -250,13 +250,24 @@ export async function* generateComposeRecipes(
         }
 
         // No match found - create new suggestion
-        const persistResult = await persistSuggestion({
-            name: suggestion.name,
-            description: suggestion.description,
-            difficulty: suggestion.difficulty,
-            ingredients: suggestion.ingredients,
-            tags: suggestion.tags,
-        });
+        // Extract cuisine tag from suggestion tags (not a course, not "dish")
+        const suggestionCuisine = suggestion.tags.find(
+            (tag) =>
+                !courseTagNames.some((course) =>
+                    tag.toLowerCase().includes(course.toLowerCase())
+                ) && tag.toLowerCase() !== "dish"
+        );
+
+        const persistResult = await persistSuggestion(
+            {
+                name: suggestion.name,
+                description: suggestion.description,
+                difficulty: suggestion.difficulty,
+                ingredients: suggestion.ingredients,
+                tags: suggestion.tags,
+            },
+            { cuisineTag: suggestionCuisine }
+        );
 
         if (!persistResult.success) {
             console.error(

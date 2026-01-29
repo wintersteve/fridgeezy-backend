@@ -1,23 +1,25 @@
 import { generateBatchEmbeddings } from "@fridgeezy/openai";
 import { supabase } from "@fridgeezy/supabase";
+import { config } from "dotenv";
+
+config();
 
 /**
- * Generate and store embeddings for all canonical dietary tags
- * Only processes canonical tags (where canonical_id = name)
- * Aliases don't need embeddings as they reference canonical tags
+ * Generate and store embeddings for all tags
+ * Processes tags of all types (dietary, cuisine, component, course)
  */
-export async function generateDietaryTagEmbeddings() {
-    console.log("Starting canonical dietary tag embedding generation...\n");
+export async function generateTagEmbeddings() {
+    console.log("Starting tag embedding generation...\n");
 
     try {
-        // 1. Fetch all canonical dietary tags that don't have embeddings
-        console.log("Fetching canonical dietary tags from database...");
+        // 1. Fetch all tags that don't have embeddings
+        console.log("Fetching tags from database...");
 
         const { data: tags, error: fetchError } = await supabase
             .from("tags")
             .select("id, name, canonical_id, type")
-            .eq("type", "dietary")
             .is("embedding", null)
+            .order("type")
             .order("name");
 
         if (fetchError) {
@@ -25,19 +27,25 @@ export async function generateDietaryTagEmbeddings() {
         }
 
         if (!tags || tags.length === 0) {
-            console.log(
-                "No canonical dietary tags found without embeddings. Nothing to do!"
-            );
+            console.log("No tags found without embeddings. Nothing to do!");
             return;
         }
 
-        console.log(
-            `Found ${tags.length} canonical dietary tags to process:\n`
+        console.log(`Found ${tags.length} tags to process:\n`);
+
+        // Group by type for display
+        const byType = tags.reduce(
+            (acc, tag) => {
+                acc[tag.type] = acc[tag.type] || [];
+                acc[tag.type].push(tag.name);
+                return acc;
+            },
+            {} as Record<string, string[]>
         );
 
-        tags.forEach((tag, index) => {
-            console.log(`  ${index + 1}. ${tag.name}`);
-        });
+        for (const [type, names] of Object.entries(byType)) {
+            console.log(`  ${type}: ${names.length} tags`);
+        }
 
         console.log("");
 
@@ -106,3 +114,13 @@ export async function generateDietaryTagEmbeddings() {
         process.exit(1);
     }
 }
+
+generateTagEmbeddings()
+    .then(() => {
+        console.log("\nScript completed successfully!");
+        process.exit(0);
+    })
+    .catch((error) => {
+        console.error("\nScript failed:", error);
+        process.exit(1);
+    });

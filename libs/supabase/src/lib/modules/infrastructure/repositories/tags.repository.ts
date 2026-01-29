@@ -1,5 +1,6 @@
 import {
     ITagsRepository,
+    TagVectorMatch,
     DomainError,
     failure,
     PersistenceError,
@@ -36,6 +37,107 @@ export class TagsRepository implements ITagsRepository {
             return failure(
                 new PersistenceError(
                     `Failed to find tags by names: ${error instanceof Error ? error.message : String(error)}`
+                )
+            );
+        }
+    }
+
+    async findByCanonicalIds(
+        canonicalIds: string[]
+    ): Promise<Result<Map<string, Tag>, DomainError>> {
+        try {
+            const { data, error } = await supabase
+                .from("tags")
+                .select("*")
+                .in("canonical_id", canonicalIds);
+
+            if (error) {
+                return failure(new PersistenceError(error.message));
+            }
+
+            const resultMap = new Map<string, Tag>();
+            if (data) {
+                data.forEach((tag) => {
+                    resultMap.set(tag.canonical_id, tag as Tag);
+                });
+            }
+
+            return success(resultMap);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to find tags by canonical IDs: ${error instanceof Error ? error.message : String(error)}`
+                )
+            );
+        }
+    }
+
+    async vectorSearch(
+        query: string,
+        threshold: number
+    ): Promise<Result<TagVectorMatch | null, DomainError>> {
+        try {
+            const tagTypes = [
+                "dietary",
+                "cuisine",
+                "component",
+                "course",
+            ] as const;
+
+            // Search all tag types in parallel
+            const searchPromises = tagTypes.map((type) =>
+                supabase.rpc("search_tags", {
+                    search_query: query,
+                    match_type: type,
+                    match_threshold: threshold,
+                    match_count: 1,
+                })
+            );
+
+            const results = await Promise.all(searchPromises);
+
+            // Check for errors and collect matches
+            const matches: Array<{ id: string; similarity: number }> = [];
+            for (const result of results) {
+                if (result.error) {
+                    return failure(new PersistenceError(result.error.message));
+                }
+                if (result.data && result.data.length > 0) {
+                    matches.push({
+                        id: result.data[0].id,
+                        similarity: result.data[0].similarity,
+                    });
+                }
+            }
+
+            if (matches.length === 0) {
+                return success(null);
+            }
+
+            // Find the best match (highest similarity)
+            const bestMatch = matches.reduce((best, current) =>
+                current.similarity > best.similarity ? current : best
+            );
+
+            // Fetch the full tag data
+            const { data: tagData, error: tagError } = await supabase
+                .from("tags")
+                .select("*")
+                .eq("id", bestMatch.id)
+                .single();
+
+            if (tagError) {
+                return failure(new PersistenceError(tagError.message));
+            }
+
+            return success({
+                tag: tagData as Tag,
+                similarity: bestMatch.similarity,
+            });
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to perform vector search: ${error instanceof Error ? error.message : String(error)}`
                 )
             );
         }

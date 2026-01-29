@@ -3,7 +3,12 @@ import { GenerateSuggestionResponseDto } from "@fridgeezy/schemas";
 import { SuggestionsRepository } from "@fridgeezy/supabase";
 
 import { matchIngredients, IngredientMatch } from "./match-ingredients";
-import { matchTags, TagMatch } from "./match-tags";
+import { matchTags, TagInput, TagMatch } from "./match-tags";
+
+export interface PersistSuggestionContext {
+    /** The cuisine from the original request - will be marked as type: "cuisine" for auto-creation */
+    cuisineTag?: string;
+}
 
 export interface PersistedIngredient {
     id: string;
@@ -26,14 +31,16 @@ export interface PersistedSuggestion {
  *
  * This orchestrator:
  * 1. Matches ingredients using 4-step fallback (name → alias → vector → create)
- * 2. Matches tags using 2-step fallback (name → create)
+ * 2. Matches tags using 3-step fallback (canonical_id → vector → create for cuisines)
  * 3. Atomically persists suggestion with all relations
  *
  * @param suggestion The suggestion to persist
+ * @param context Optional context with cuisine tag from the original request
  * @returns Result containing the created suggestion UUID and matched ingredient/tag IDs
  */
 export async function persistSuggestion(
-    suggestion: GenerateSuggestionResponseDto
+    suggestion: GenerateSuggestionResponseDto,
+    context?: PersistSuggestionContext
 ): Promise<Result<PersistedSuggestion, PersistenceError>> {
     try {
         // Match ingredients
@@ -50,8 +57,20 @@ export async function persistSuggestion(
 
         const ingredientMatches = ingredientMatchesResult.value;
 
+        // Build typed tag inputs - mark the cuisine tag from context as type: "cuisine"
+        const tagInputs: TagInput[] = suggestion.tags.map((tag) => {
+            // If this tag matches the cuisine from context, mark it as cuisine type
+            if (
+                context?.cuisineTag &&
+                tag.toLowerCase() === context.cuisineTag.toLowerCase()
+            ) {
+                return { name: tag, type: "cuisine" as const };
+            }
+            return { name: tag };
+        });
+
         // Match tags
-        const tagMatchesResult = await matchTags(suggestion.tags);
+        const tagMatchesResult = await matchTags(tagInputs);
         if (!tagMatchesResult.success) {
             console.error(
                 `Failed to match tags for "${suggestion.name}":`,
@@ -99,8 +118,11 @@ export async function persistSuggestion(
         };
 
         const tagStats = {
-            exact: tagMatches.filter(
-                (m: TagMatch) => m.matchType === "exact_name"
+            canonical_id: tagMatches.filter(
+                (m: TagMatch) => m.matchType === "canonical_id"
+            ).length,
+            vector: tagMatches.filter(
+                (m: TagMatch) => m.matchType === "vector"
             ).length,
             created: tagMatches.filter(
                 (m: TagMatch) => m.matchType === "created"

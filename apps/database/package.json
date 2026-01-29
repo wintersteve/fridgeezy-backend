@@ -5,10 +5,24 @@
     "nx": {
         "tags": ["scope:app"],
         "targets": {
+            "generate-ingredients": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti scripts/generate-ingredient-seeds.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "cuisine-images": {
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "npx jiti tools/generate-category-images.ts",
+                    "cwd": "apps/database"
+                }
+            },
+            "embed-tags": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/scripts/generate-tag-embeddings.ts",
                     "cwd": "apps/database"
                 }
             },

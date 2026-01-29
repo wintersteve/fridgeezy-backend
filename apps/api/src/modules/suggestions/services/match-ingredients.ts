@@ -1,6 +1,6 @@
 import { failure, PersistenceError, Result, success } from "@fridgeezy/domain";
 import { generateEmbedding } from "@fridgeezy/openai";
-import { IngredientsRepository } from "@fridgeezy/supabase";
+import { CategoriesRepository, IngredientsRepository } from "@fridgeezy/supabase";
 
 export interface IngredientMatch {
     originalName: string;
@@ -23,6 +23,7 @@ export async function matchIngredients(
     names: string[]
 ): Promise<Result<IngredientMatch[], PersistenceError>> {
     const ingredientsRepo = new IngredientsRepository();
+    const categoriesRepo = new CategoriesRepository();
     const matches: IngredientMatch[] = [];
 
     // Helper function to convert name to canonical ID
@@ -130,14 +131,13 @@ export async function matchIngredients(
             unmatchedOriginalNames = stillUnmatched;
         }
 
-        // Step 4: Create new ingredients
+        // Step 4: Create new ingredients with auto-assigned categories
         for (const name of unmatchedOriginalNames) {
             try {
-                // Normalize to canonical ID
                 const canonicalId = toCanonicalId(name);
 
-                // Generate embedding for the new ingredient
-                let embedding: number[] | null = null;
+                // Generate embedding - required for both ingredient storage and category matching
+                let embedding: number[];
                 try {
                     embedding = await generateEmbedding(name);
                 } catch (error) {
@@ -145,14 +145,32 @@ export async function matchIngredients(
                         `Failed to generate embedding for new ingredient "${name}":`,
                         error
                     );
-                    // Continue without embedding
+                    return failure(
+                        new PersistenceError(
+                            `Failed to generate embedding for "${name}": ${error instanceof Error ? error.message : "Unknown error"}`
+                        )
+                    );
                 }
+
+                // Find best matching category (always returns a match)
+                const categoryMatch = await categoriesRepo.findBestMatch(embedding);
+                if (!categoryMatch.success) {
+                    console.error(
+                        `Failed to find category for "${name}":`,
+                        categoryMatch.error
+                    );
+                    return failure(categoryMatch.error);
+                }
+
+                console.log(
+                    `[Ingredients] Auto-assigned "${name}" to category "${categoryMatch.value.category.name}" (similarity: ${categoryMatch.value.similarity.toFixed(3)})`
+                );
 
                 const createResult = await ingredientsRepo.create({
                     name,
                     canonical_id: canonicalId,
-                    category_id: null, // No default category per user requirement
-                    embedding: embedding ? JSON.stringify(embedding) : null,
+                    category_id: categoryMatch.value.category.id,
+                    embedding: JSON.stringify(embedding),
                 });
 
                 if (createResult.success === false) {

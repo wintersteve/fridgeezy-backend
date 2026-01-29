@@ -27,26 +27,26 @@ declare
     cat_baking UUID;
 begin
     -- Get all category IDs
-    select id into cat_meats from categories where name = 'meats';
-    select id into cat_seafood from categories where name = 'seafood';
-    select id into cat_eggs from categories where name = 'eggs';
-    select id into cat_dairy from categories where name = 'dairy';
-    select id into cat_vegetables from categories where name = 'vegetables';
-    select id into cat_fruits from categories where name = 'fruits';
-    select id into cat_grains from categories where name = 'grains';
-    select id into cat_legumes from categories where name = 'legumes';
-    select id into cat_nuts_seeds from categories where name = 'nuts_seeds';
-    select id into cat_herbs_spices from categories where name = 'herbs_spices';
-    select id into cat_mushrooms from categories where name = 'mushrooms';
-    select id into cat_noodles from categories where name = 'noodles';
-    select id into cat_breads from categories where name = 'breads';
-    select id into cat_fats_oils from categories where name = 'fats_oils';
-    select id into cat_sweeteners from categories where name = 'sweeteners';
-    select id into cat_stocks from categories where name = 'stocks';
-    select id into cat_sauces from categories where name = 'sauces';
-    select id into cat_vinegars from categories where name = 'vinegars';
-    select id into cat_beverages from categories where name = 'beverages';
-    select id into cat_baking from categories where name = 'baking';
+    select id into cat_meats from categories where canonical_id = 'meats';
+    select id into cat_seafood from categories where canonical_id = 'seafood';
+    select id into cat_eggs from categories where canonical_id = 'eggs';
+    select id into cat_dairy from categories where canonical_id = 'dairy';
+    select id into cat_vegetables from categories where canonical_id = 'vegetables';
+    select id into cat_fruits from categories where canonical_id = 'fruits';
+    select id into cat_grains from categories where canonical_id = 'grains';
+    select id into cat_legumes from categories where canonical_id = 'legumes';
+    select id into cat_nuts_seeds from categories where canonical_id = 'nuts_seeds';
+    select id into cat_herbs_spices from categories where canonical_id = 'herbs_spices';
+    select id into cat_mushrooms from categories where canonical_id = 'mushrooms';
+    select id into cat_noodles from categories where canonical_id = 'noodles';
+    select id into cat_breads from categories where canonical_id = 'breads';
+    select id into cat_fats_oils from categories where canonical_id = 'fats_oils';
+    select id into cat_sweeteners from categories where canonical_id = 'sweeteners';
+    select id into cat_stocks from categories where canonical_id = 'stocks';
+    select id into cat_sauces from categories where canonical_id = 'sauces';
+    select id into cat_vinegars from categories where canonical_id = 'vinegars';
+    select id into cat_beverages from categories where canonical_id = 'beverages';
+    select id into cat_baking from categories where canonical_id = 'baking';
 
 -- ========== PROTEINS ==========
 

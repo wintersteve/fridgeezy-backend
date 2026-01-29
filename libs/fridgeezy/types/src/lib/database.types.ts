@@ -16,22 +16,28 @@ export type Database = {
     Tables: {
       categories: {
         Row: {
+          canonical_id: string
           created_at: string
           description: string | null
+          embedding: string | null
           id: string
           image_url: string | null
           name: string
         }
         Insert: {
+          canonical_id: string
           created_at?: string
           description?: string | null
+          embedding?: string | null
           id?: string
           image_url?: string | null
           name: string
         }
         Update: {
+          canonical_id?: string
           created_at?: string
           description?: string | null
+          embedding?: string | null
           id?: string
           image_url?: string | null
           name?: string
@@ -1339,6 +1345,15 @@ export type Database = {
           p_tag_ids: string[]
         }
         Returns: string
+      }
+      search_categories: {
+        Args: { match_count?: number; query_embedding: string }
+        Returns: {
+          canonical_id: string
+          id: string
+          name: string
+          similarity: number
+        }[]
       }
       search_ingredients: {
         Args: {

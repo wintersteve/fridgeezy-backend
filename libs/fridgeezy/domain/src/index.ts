@@ -5,6 +5,7 @@
  * and domain events. Platform-agnostic - works in Node.js and React Native.
  */
 
+export * from "./lib/modules/categories";
 export * from "./lib/modules/difficulty";
 export * from "./lib/modules/ingredients";
 export * from "./lib/modules/recipes";

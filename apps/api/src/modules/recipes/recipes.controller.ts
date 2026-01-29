@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 
-import { generateRecipe, escalateDifficulty, adjustServings, composeRecipe } from "./usecases";
+import { generateRecipe, escalateDifficulty, composeRecipe } from "./usecases";
 
 export class RecipesController {
     static generate = async (
@@ -22,18 +22,6 @@ export class RecipesController {
     ) => {
         try {
             return escalateDifficulty(req, res);
-        } catch (err) {
-            next(err);
-        }
-    };
-
-    static adjustServings = async (
-        req: Request,
-        res: Response,
-        next: NextFunction
-    ) => {
-        try {
-            return adjustServings(req, res);
         } catch (err) {
             next(err);
         }

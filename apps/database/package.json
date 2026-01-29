@@ -19,6 +19,13 @@
                     "cwd": "apps/database"
                 }
             },
+            "embed-categories": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/scripts/generate-category-embeddings.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "embed-tags": {
                 "executor": "nx:run-commands",
                 "options": {

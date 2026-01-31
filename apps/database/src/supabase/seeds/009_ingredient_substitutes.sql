@@ -1,170 +1,170 @@
--- Seed data for ingredient substitutes
--- Common substitutions for ingredients
-
--- Butter → Margarine
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; may alter flavor slightly'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Butter'
-  AND i2.name = 'Margarine';
-
--- Butter → Coconut Oil
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; adds subtle coconut flavor'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Butter'
-  AND i2.name = 'Coconut Oil';
-
--- Milk → Almond Milk
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; dairy-free alternative'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Milk'
-  AND i2.name = 'Almond Milk';
-
--- Milk → Oat Milk
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; creamy dairy-free alternative'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Milk'
-  AND i2.name = 'Oat Milk';
-
--- Milk → Coconut Milk
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; adds coconut flavor'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Milk'
-  AND i2.name = 'Coconut Milk';
-
--- Eggs → Flax Eggs
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, '1 egg = 1 tbsp ground flaxseed + 3 tbsp water; vegan alternative'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Eggs'
-  AND i2.name = 'Flax Eggs';
-
--- Eggs → Applesauce
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, '1 egg = 1/4 cup applesauce; works well in baking'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Eggs'
-  AND i2.name = 'Applesauce';
-
--- Sugar → Honey
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use 3/4 cup honey per 1 cup sugar; reduce liquid by 1/4 cup'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Sugar'
-  AND i2.name = 'Honey';
-
--- Sugar → Maple Syrup
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use 3/4 cup maple syrup per 1 cup sugar; reduce liquid by 3 tbsp'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Sugar'
-  AND i2.name = 'Maple Syrup';
-
--- All-Purpose Flour → Whole Wheat Flour
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; results in denser texture'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'All-Purpose Flour'
-  AND i2.name = 'Whole Wheat Flour';
-
--- All-Purpose Flour → Almond Flour
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use 1:1 ratio but may need adjustments; gluten-free'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'All-Purpose Flour'
-  AND i2.name = 'Almond Flour';
-
--- Sour Cream → Greek Yogurt
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; healthier alternative'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Sour Cream'
-  AND i2.name = 'Greek Yogurt';
-
--- Heavy Cream → Coconut Cream
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; dairy-free alternative'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Heavy Cream'
-  AND i2.name = 'Coconut Cream';
-
--- Olive Oil → Vegetable Oil
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; more neutral flavor'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Olive Oil'
-  AND i2.name = 'Vegetable Oil';
-
--- Olive Oil → Avocado Oil
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; higher smoke point'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Olive Oil'
-  AND i2.name = 'Avocado Oil';
-
--- Lemon Juice → Lime Juice
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; similar acidity'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Lemon Juice'
-  AND i2.name = 'Lime Juice';
-
--- Lemon Juice → Vinegar
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; similar acidity'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Lemon Juice'
-  AND i2.name = 'Vinegar';
-
--- Ground Beef → Ground Turkey
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; leaner alternative'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Ground Beef'
-  AND i2.name = 'Ground Turkey';
-
--- Chicken Breast → Chicken Thighs
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; more flavorful and moist'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'Chicken Breast'
-  AND i2.name = 'Chicken Thighs';
-
--- White Rice → Brown Rice
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; requires longer cooking time'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'White Rice'
-  AND i2.name = 'Brown Rice';
-
--- White Rice → Quinoa
-INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
-SELECT i1.id, i2.id, 'Use equal amounts; higher protein content'
-FROM ingredients i1,
-     ingredients i2
-WHERE i1.name = 'White Rice'
-  AND i2.name = 'Quinoa';
+-- -- Seed data for ingredient substitutes
+-- -- Common substitutions for ingredients
+--
+-- -- Butter → Margarine
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; may alter flavor slightly'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Butter'
+--   AND i2.name = 'Margarine';
+--
+-- -- Butter → Coconut Oil
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; adds subtle coconut flavor'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Butter'
+--   AND i2.name = 'Coconut Oil';
+--
+-- -- Milk → Almond Milk
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; dairy-free alternative'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Milk'
+--   AND i2.name = 'Almond Milk';
+--
+-- -- Milk → Oat Milk
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; creamy dairy-free alternative'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Milk'
+--   AND i2.name = 'Oat Milk';
+--
+-- -- Milk → Coconut Milk
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; adds coconut flavor'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Milk'
+--   AND i2.name = 'Coconut Milk';
+--
+-- -- Eggs → Flax Eggs
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, '1 egg = 1 tbsp ground flaxseed + 3 tbsp water; vegan alternative'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Eggs'
+--   AND i2.name = 'Flax Eggs';
+--
+-- -- Eggs → Applesauce
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, '1 egg = 1/4 cup applesauce; works well in baking'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Eggs'
+--   AND i2.name = 'Applesauce';
+--
+-- -- Sugar → Honey
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use 3/4 cup honey per 1 cup sugar; reduce liquid by 1/4 cup'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Sugar'
+--   AND i2.name = 'Honey';
+--
+-- -- Sugar → Maple Syrup
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use 3/4 cup maple syrup per 1 cup sugar; reduce liquid by 3 tbsp'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Sugar'
+--   AND i2.name = 'Maple Syrup';
+--
+-- -- All-Purpose Flour → Whole Wheat Flour
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; results in denser texture'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'All-Purpose Flour'
+--   AND i2.name = 'Whole Wheat Flour';
+--
+-- -- All-Purpose Flour → Almond Flour
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use 1:1 ratio but may need adjustments; gluten-free'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'All-Purpose Flour'
+--   AND i2.name = 'Almond Flour';
+--
+-- -- Sour Cream → Greek Yogurt
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; healthier alternative'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Sour Cream'
+--   AND i2.name = 'Greek Yogurt';
+--
+-- -- Heavy Cream → Coconut Cream
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; dairy-free alternative'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Heavy Cream'
+--   AND i2.name = 'Coconut Cream';
+--
+-- -- Olive Oil → Vegetable Oil
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; more neutral flavor'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Olive Oil'
+--   AND i2.name = 'Vegetable Oil';
+--
+-- -- Olive Oil → Avocado Oil
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; higher smoke point'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Olive Oil'
+--   AND i2.name = 'Avocado Oil';
+--
+-- -- Lemon Juice → Lime Juice
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; similar acidity'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Lemon Juice'
+--   AND i2.name = 'Lime Juice';
+--
+-- -- Lemon Juice → Vinegar
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; similar acidity'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Lemon Juice'
+--   AND i2.name = 'Vinegar';
+--
+-- -- Ground Beef → Ground Turkey
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; leaner alternative'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Ground Beef'
+--   AND i2.name = 'Ground Turkey';
+--
+-- -- Chicken Breast → Chicken Thighs
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; more flavorful and moist'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'Chicken Breast'
+--   AND i2.name = 'Chicken Thighs';
+--
+-- -- White Rice → Brown Rice
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; requires longer cooking time'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'White Rice'
+--   AND i2.name = 'Brown Rice';
+--
+-- -- White Rice → Quinoa
+-- INSERT INTO ingredient_substitutes (ingredient_id, substitute_id, notes)
+-- SELECT i1.id, i2.id, 'Use equal amounts; higher protein content'
+-- FROM ingredients i1,
+--      ingredients i2
+-- WHERE i1.name = 'White Rice'
+--   AND i2.name = 'Quinoa';

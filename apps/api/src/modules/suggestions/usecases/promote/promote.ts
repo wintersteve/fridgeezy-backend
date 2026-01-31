@@ -19,7 +19,7 @@ import {
     formatTagsForPrompt,
 } from "../../../recipes/services";
 import { persistRecipe } from "../../../recipes/services/persist-recipe";
-import { fetchEnrichedSuggestion } from "../../services";
+import { fetchEnrichedSuggestion, matchIngredients } from "../../services";
 
 const buildSystemPrompt = (
     units: string,
@@ -64,6 +64,7 @@ Line 2 - Nutrition information (per serving):
 
 Lines 3-N - One line per ingredient (use approved unit abbreviations only):
 {"type":"ingredient","name":"ingredient_name","category":"meat","parent":"lamb","quantity":100,"unit":"g"}
+{"type":"ingredient","name":"ingredient_name","category":"vegetables","parent":null,"quantity":100,"unit":"g","comment":"finely chopped"}
 
 Lines N+1-M - One line per instruction step (include ingredients array with names of ingredients used in this step):
 {"type":"instruction","text":"Step description without number prefix","ingredients":["ingredient1","ingredient2"]}
@@ -180,6 +181,48 @@ export const promoteSuggestion = createStreamHandler({
 
             // After stream completes, persist the recipe and yield final message with ID
             if (lastResult?.type === "complete" && lastResult.recipe) {
+                // Ensure all LLM ingredients exist in database before persisting
+                // Suggestion ingredients already exist, but LLM might add new ones
+                const toCanonicalId = (name: string): string =>
+                    name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+                console.log(`[Promote] Suggestion has ${suggestion.ingredients.length} ingredients:`,
+                    suggestion.ingredients.map(i => i.name));
+
+                // Create set of suggestion ingredient canonical IDs
+                const suggestionIngredientIds = new Set(
+                    suggestion.ingredients.map(ing => toCanonicalId(ing.name))
+                );
+                console.log(`[Promote] Suggestion canonical IDs:`, Array.from(suggestionIngredientIds));
+
+                // Find ingredients from LLM that aren't in the suggestion
+                console.log(`[Promote] LLM generated ${lastResult.recipe.ingredients.length} ingredients:`,
+                    lastResult.recipe.ingredients.map((i: any) => `${i.name} (${toCanonicalId(i.name)})`));
+
+                const newIngredients = lastResult.recipe.ingredients
+                    .map((ing: any) => ing.name)
+                    .filter((name: string) => !suggestionIngredientIds.has(toCanonicalId(name)));
+
+                // Match/create any new ingredients not in the suggestion
+                if (newIngredients.length > 0) {
+                    console.log(`[Promote] Matching ${newIngredients.length} new ingredients not in suggestion:`, newIngredients);
+                    const matchResult = await matchIngredients(newIngredients);
+
+                    if (!matchResult.success) {
+                        console.error("[Promote] Failed to match ingredients:", matchResult.error.message);
+                        yield {
+                            type: "error",
+                            error: `Failed to match ingredients: ${matchResult.error.message}`,
+                        };
+                        return;
+                    }
+
+                    console.log(`[Promote] Successfully matched ${matchResult.value.length} ingredients`);
+                }
+
+                // Now all ingredients should exist - persist the recipe
+                console.log(`[Promote] Persisting recipe with ${lastResult.recipe.ingredients.length} ingredients:`,
+                    lastResult.recipe.ingredients.map((i: any) => i.name));
                 const persistResult = await persistRecipe(lastResult.recipe);
 
                 if (persistResult.success) {

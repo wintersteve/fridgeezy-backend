@@ -17,7 +17,7 @@ export const HeaderSchema = z.object({
 export const IngredientSchema = z.object({
     type: z.literal("ingredient"),
     name: z.string(),
-    category: z.string(),
+    category: z.string(), // Required for streaming display - but ignored during persistence
     parent: z.string().nullable(),
     quantity: z.number(),
     unit: z.string(),

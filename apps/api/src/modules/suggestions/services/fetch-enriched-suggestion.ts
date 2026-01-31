@@ -58,12 +58,14 @@ export async function fetchEnrichedSuggestion(
                 .map((rel: any) => ({
                     id: rel.ingredients.id,
                     name: rel.ingredients.name,
-                })),
+                }))
+                .filter((ing: any) => ing.id && ing.name), // Filter out any null ingredients
             tags: data.recipe_suggestion_tags
                 .map((rel: any) => ({
                     id: rel.tags.id,
                     name: rel.tags.name,
-                })),
+                }))
+                .filter((tag: any) => tag.id && tag.name), // Filter out any null tags
         };
 
         return success(enriched);

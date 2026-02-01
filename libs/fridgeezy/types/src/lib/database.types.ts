@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -1116,8 +1116,10 @@ export type Database = {
         Row: {
           abbreviation: string
           base_unit_id: string | null
+          canonical_id: string
           conversion_factor: number | null
           created_at: string
+          embedding: string | null
           id: string
           name: string
           system: Database["public"]["Enums"]["unit_system"]
@@ -1126,8 +1128,10 @@ export type Database = {
         Insert: {
           abbreviation: string
           base_unit_id?: string | null
+          canonical_id: string
           conversion_factor?: number | null
           created_at?: string
+          embedding?: string | null
           id?: string
           name: string
           system: Database["public"]["Enums"]["unit_system"]
@@ -1136,8 +1140,10 @@ export type Database = {
         Update: {
           abbreviation?: string
           base_unit_id?: string | null
+          canonical_id?: string
           conversion_factor?: number | null
           created_at?: string
+          embedding?: string | null
           id?: string
           name?: string
           system?: Database["public"]["Enums"]["unit_system"]
@@ -1407,6 +1413,16 @@ export type Database = {
           name: string
           similarity: number
           type: Database["public"]["Enums"]["tag_type"]
+        }[]
+      }
+      search_units: {
+        Args: { match_count?: number; query_embedding: string }
+        Returns: {
+          abbreviation: string
+          canonical_id: string
+          id: string
+          name: string
+          similarity: number
         }[]
       }
       text_to_bytea: { Args: { data: string }; Returns: string }

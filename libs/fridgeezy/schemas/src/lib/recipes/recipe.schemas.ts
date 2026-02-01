@@ -22,6 +22,7 @@ export const IngredientSchema = z.object({
     quantity: z.number(),
     unit: z.string(),
     comment: z.string().optional(),
+    ingredientId: z.uuid().optional(), // Added at runtime when generating from suggestion
 });
 
 // Schema for instruction line
@@ -32,6 +33,10 @@ export const InstructionSchema = z.object({
         .array(z.string())
         .optional()
         .describe("Array of ingredient names used in this step"),
+    ingredientIds: z
+        .array(z.uuid())
+        .optional()
+        .describe("Array of ingredient UUIDs (added at runtime when generating from suggestion)"),
 });
 
 // Schema for tips line

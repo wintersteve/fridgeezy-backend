@@ -1,7 +1,4 @@
-import {
-    GenerateRecipeRequestDto,
-    GenerateRecipeResponseDto,
-} from "@fridgeezy/schemas";
+import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { Stream } from "openai/core/streaming.mjs";
 import { ChatCompletionChunk } from "openai/resources/index.mjs";
@@ -9,10 +6,25 @@ import { z } from "zod/v4";
 
 import { generateAndUploadRecipeImage } from "./create-recipe-image";
 
+/**
+ * Initial state passed to the recipe stream, containing data from the suggestion.
+ */
+export interface RecipeStreamInitialState {
+    name: string;
+    difficulty: "easy" | "medium" | "hard";
+    servings: number;
+    tags: string[];
+}
+
 export interface RecipeStreamConfig {
     schemas: [z.ZodType, z.ZodType, z.ZodType, z.ZodType, z.ZodType]; // Header, Nutrition, Ingredient, Instruction, Tip
-    initialState: GenerateRecipeRequestDto;
+    initialState: RecipeStreamInitialState;
     skipImageGeneration?: boolean; // Skip image generation if reusing existing image
+    /**
+     * Map of lowercase ingredient names to their database UUIDs.
+     * Used to attach ingredient IDs during streaming when generating from a suggestion.
+     */
+    ingredientIdMap?: Map<string, string>;
 }
 
 export async function* createRecipeStream(
@@ -71,20 +83,54 @@ export async function* createRecipeStream(
         }
         // Schema 2: Ingredient
         else if (schemaIndex === 2) {
-            recipe.ingredients.push({
+            const ingredient: any = {
                 name: parsed.name,
                 category: parsed.category,
                 parent: parsed.parent,
                 quantity: parsed.quantity,
                 unit: parsed.unit,
-            });
+            };
+
+            // Attach ingredient ID from map if available
+            if (config.ingredientIdMap) {
+                const ingredientId = config.ingredientIdMap.get(
+                    parsed.name.toLowerCase()
+                );
+                if (ingredientId) {
+                    ingredient.ingredientId = ingredientId;
+                } else {
+                    console.warn(
+                        `[RecipeStream] LLM generated ingredient "${parsed.name}" not in suggestion ingredient map`
+                    );
+                }
+            }
+
+            recipe.ingredients.push(ingredient);
         }
         // Schema 3: Instruction
         else if (schemaIndex === 3) {
-            recipe.instructions.push({
+            const instruction: any = {
                 text: parsed.text,
                 ingredients: parsed.ingredients,
-            });
+            };
+
+            // Map ingredient names to IDs if map available
+            if (config.ingredientIdMap && parsed.ingredients) {
+                const ingredientIds: string[] = [];
+                for (const ingredientName of parsed.ingredients) {
+                    const ingredientId = config.ingredientIdMap.get(
+                        ingredientName.toLowerCase()
+                    );
+                    if (ingredientId) {
+                        ingredientIds.push(ingredientId);
+                    }
+                }
+                if (ingredientIds.length > 0) {
+                    instruction.ingredientIds = ingredientIds;
+                }
+            }
+
+            recipe.instructions.push(instruction);
         }
         // Schema 4: Tip
         else if (schemaIndex === 4) {

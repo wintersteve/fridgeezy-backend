@@ -28,7 +28,7 @@ export class IngredientsRepository implements IIngredientsRepository {
             const resultMap = new Map<string, Ingredient>();
             if (data) {
                 data.forEach((ingredient) => {
-                    resultMap.set(ingredient.name, ingredient as Ingredient);
+                    resultMap.set(ingredient.canonical_id, ingredient as Ingredient);
                 });
             }
 

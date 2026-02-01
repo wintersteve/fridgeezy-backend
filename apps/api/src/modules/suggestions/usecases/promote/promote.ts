@@ -1,6 +1,5 @@
 import { openai } from "@fridgeezy/openai";
 import {
-    GenerateRecipeRequestDto,
     PromoteSuggestionRequestSchema,
     HeaderSchema,
     NutritionSchema,
@@ -14,17 +13,31 @@ import { Request } from "express";
 
 import {
     createRecipeStream,
+    RecipeStreamInitialState,
     fetchRecipeMetadata,
     formatUnitsForPrompt,
     formatTagsForPrompt,
 } from "../../../recipes/services";
-import { persistRecipe } from "../../../recipes/services/persist-recipe";
-import { fetchEnrichedSuggestion, matchIngredients } from "../../services";
+import { persistRecipeWithIngredientIds } from "../../../recipes/services/persist-recipe";
+import { fetchEnrichedSuggestion } from "../../services";
 
+/**
+ * Build system prompt with explicit ingredient constraints.
+ * The LLM MUST use ONLY the provided ingredients.
+ */
 const buildSystemPrompt = (
     units: string,
-    tags: string
+    tags: string,
+    ingredientNames: string[]
 ) => `Generate exactly an authentic, real-world recipe based on the provided ingredients
+
+## CRITICAL: Ingredient Constraints
+You MUST use ONLY these ingredients (no additions, no substitutions):
+${ingredientNames.map((name) => `- ${name}`).join("\n")}
+
+When outputting ingredients, use the EXACT names from the list above.
+Every instruction step should reference only ingredients from this list.
+You MUST provide quantity and unit for EACH ingredient above.
 
 ## Rules
 - For each instruction step, include an "ingredients" array listing the ingredient names used in that specific step
@@ -63,8 +76,9 @@ Line 2 - Nutrition information (per serving):
 {"type":"nutrition","kcal":450,"carbs":35,"protein":25,"fat":15}
 
 Lines 3-N - One line per ingredient (use approved unit abbreviations only):
-{"type":"ingredient","name":"ingredient_name","category":"meat","parent":"lamb","quantity":100,"unit":"g"}
-{"type":"ingredient","name":"ingredient_name","category":"vegetables","parent":null,"quantity":100,"unit":"g","comment":"finely chopped"}
+{"type":"ingredient","name":"ingredient_name","category":"meat","parent":"lamb","quantity":100,"unit":"g","comment":"peeled and diced"}
+
+Note: The "comment" field is optional but should be included when the ingredient requires preparation (e.g., "peeled", "deveined", "crushed", "finely chopped", "at room temperature"). Omit if no special preparation is needed.
 
 Lines N+1-M - One line per instruction step (include ingredients array with names of ingredients used in this step):
 {"type":"instruction","text":"Step description without number prefix","ingredients":["ingredient1","ingredient2"]}
@@ -74,11 +88,17 @@ Optional tip lines:
 
 No markdown, no code blocks, just JSONL.`;
 
+/**
+ * Build user prompt using suggestion data.
+ */
 const buildUserPrompt = (
-    request: GenerateRecipeRequestDto
-) => `Generate a detailed recipe for: ${request.name}
-Required ingredients to use: ${request.ingredients.join(", ")}
-Servings: ${request.servings}`;
+    name: string,
+    difficulty: string,
+    ingredientNames: string[],
+    servings: number
+) => `Generate a detailed ${difficulty} level recipe for: ${name}
+Use ONLY these ingredients: ${ingredientNames.join(", ")}
+Servings: ${servings}`;
 
 export const promoteSuggestion = createStreamHandler({
     requestSchema: PromoteSuggestionRequestSchema,
@@ -99,13 +119,12 @@ export const promoteSuggestion = createStreamHandler({
             throw new Error("Suggestion ID is required");
         }
 
-        // Fetch the enriched suggestion by ID
+        // 1. Fetch enriched suggestion with ingredients and tags
         const suggestionResult = await fetchEnrichedSuggestion(id);
 
         if (!suggestionResult.success) {
             const error = suggestionResult.error;
 
-            // Handle NotFoundError with 404
             if (error.name === "NotFoundError") {
                 return {
                     type: "raw" as const,
@@ -114,7 +133,6 @@ export const promoteSuggestion = createStreamHandler({
                 };
             }
 
-            // Handle other persistence errors
             return {
                 type: "raw" as const,
                 statusCode: 500,
@@ -124,37 +142,51 @@ export const promoteSuggestion = createStreamHandler({
 
         const suggestion = suggestionResult.value;
 
-        // Transform enriched data: extract names from {id, name} objects
-        const ingredients = suggestion.ingredients.map((i) => i.name);
-        const tags = suggestion.tags.map((t) => t.name);
+        // 2. Create ingredient ID map (lowercase name -> UUID)
+        const ingredientIdMap = new Map<string, string>();
+        for (const ing of suggestion.ingredients) {
+            ingredientIdMap.set(ing.name.toLowerCase(), ing.id);
+        }
 
-        // Build the recipe request with transformed data
-        const recipeRequest: GenerateRecipeRequestDto = {
-            name: suggestion.name,
-            difficulty: suggestion.difficulty,
-            ingredients: ingredients,
-            tags: tags,
-            servings: body.servings,
-            id: id, // Include the suggestion ID so it gets deleted after recipe creation
-        };
+        // 3. Extract ingredient names for prompt
+        const ingredientNames = suggestion.ingredients.map((i) => i.name);
+        const tagNames = suggestion.tags.map((t) => t.name);
 
-        // Fetch metadata from Supabase
+        // 4. Fetch metadata from Supabase
         const metadata = await fetchRecipeMetadata();
         const unitsPrompt = formatUnitsForPrompt(metadata.units);
         const tagsPrompt = formatTagsForPrompt(metadata.tags);
 
+        // 5. Build initial state for stream
+        const initialState: RecipeStreamInitialState = {
+            name: suggestion.name,
+            difficulty: suggestion.difficulty,
+            servings: body.servings,
+            tags: tagNames,
+        };
+
+        // 6. Call OpenAI
         const stream = await openai.chat.completions.create({
             model: "gpt-4.1",
             messages: [
                 {
                     role: "system",
-                    content: buildSystemPrompt(unitsPrompt, tagsPrompt),
+                    content: buildSystemPrompt(unitsPrompt, tagsPrompt, ingredientNames),
                 },
-                { role: "user", content: buildUserPrompt(recipeRequest) },
+                {
+                    role: "user",
+                    content: buildUserPrompt(
+                        suggestion.name,
+                        suggestion.difficulty,
+                        ingredientNames,
+                        body.servings
+                    ),
+                },
             ],
             stream: true,
         });
 
+        // 7. Create recipe stream with ingredient ID map
         const recipeStream = createRecipeStream(stream, {
             schemas: [
                 HeaderSchema,
@@ -163,10 +195,11 @@ export const promoteSuggestion = createStreamHandler({
                 InstructionSchema,
                 TipSchema,
             ],
-            initialState: recipeRequest,
+            initialState,
+            ingredientIdMap,
         });
 
-        // Wrap the stream to persist the recipe and include the ID in the final message
+        // 8. Wrap stream to persist recipe and delete suggestion
         async function* wrappedStream(): AsyncGenerator<any> {
             let lastResult: any;
 
@@ -181,49 +214,8 @@ export const promoteSuggestion = createStreamHandler({
 
             // After stream completes, persist the recipe and yield final message with ID
             if (lastResult?.type === "complete" && lastResult.recipe) {
-                // Ensure all LLM ingredients exist in database before persisting
-                // Suggestion ingredients already exist, but LLM might add new ones
-                const toCanonicalId = (name: string): string =>
-                    name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-
-                console.log(`[Promote] Suggestion has ${suggestion.ingredients.length} ingredients:`,
-                    suggestion.ingredients.map(i => i.name));
-
-                // Create set of suggestion ingredient canonical IDs
-                const suggestionIngredientIds = new Set(
-                    suggestion.ingredients.map(ing => toCanonicalId(ing.name))
-                );
-                console.log(`[Promote] Suggestion canonical IDs:`, Array.from(suggestionIngredientIds));
-
-                // Find ingredients from LLM that aren't in the suggestion
-                console.log(`[Promote] LLM generated ${lastResult.recipe.ingredients.length} ingredients:`,
-                    lastResult.recipe.ingredients.map((i: any) => `${i.name} (${toCanonicalId(i.name)})`));
-
-                const newIngredients = lastResult.recipe.ingredients
-                    .map((ing: any) => ing.name)
-                    .filter((name: string) => !suggestionIngredientIds.has(toCanonicalId(name)));
-
-                // Match/create any new ingredients not in the suggestion
-                if (newIngredients.length > 0) {
-                    console.log(`[Promote] Matching ${newIngredients.length} new ingredients not in suggestion:`, newIngredients);
-                    const matchResult = await matchIngredients(newIngredients);
-
-                    if (!matchResult.success) {
-                        console.error("[Promote] Failed to match ingredients:", matchResult.error.message);
-                        yield {
-                            type: "error",
-                            error: `Failed to match ingredients: ${matchResult.error.message}`,
-                        };
-                        return;
-                    }
-
-                    console.log(`[Promote] Successfully matched ${matchResult.value.length} ingredients`);
-                }
-
-                // Now all ingredients should exist - persist the recipe
-                console.log(`[Promote] Persisting recipe with ${lastResult.recipe.ingredients.length} ingredients:`,
-                    lastResult.recipe.ingredients.map((i: any) => i.name));
-                const persistResult = await persistRecipe(lastResult.recipe);
+                // Persist using ingredient IDs directly (no canonical_id lookup needed)
+                const persistResult = await persistRecipeWithIngredientIds(lastResult.recipe);
 
                 if (persistResult.success) {
                     console.log(

@@ -78,26 +78,26 @@ const CATEGORIES = [
 // };
 
 const CATEGORY_TARGETS: Record<string, number> = {
-    meats: 2,
-    seafood: 2,
-    eggs: 2,
-    dairy: 2,
-    vegetables: 2,
-    fruits: 2,
-    grains: 2,
-    legumes: 2,
-    nuts_seeds: 2,
-    herbs_spices: 2,
-    mushrooms: 2,
-    noodles: 2,
-    breads: 2,
-    fats_oils: 2,
-    sweeteners: 2,
-    stocks: 2,
-    sauces: 2,
-    vinegars: 2,
-    beverages: 2,
-    baking: 2,
+    meats: 4,
+    seafood: 4,
+    eggs: 4,
+    dairy: 4,
+    vegetables: 4,
+    fruits: 4,
+    grains: 4,
+    legumes: 4,
+    nuts_seeds: 4,
+    herbs_spices: 4,
+    mushrooms: 4,
+    noodles: 4,
+    breads: 4,
+    fats_oils: 4,
+    sweeteners: 4,
+    stocks: 4,
+    sauces: 4,
+    vinegars: 4,
+    beverages: 4,
+    baking: 4,
 };
 
 // Helper to delay between API calls
@@ -120,20 +120,17 @@ async function parallelLimit<T, R>(
     fn: (item: T) => Promise<R>
 ): Promise<R[]> {
     const results: R[] = [];
-    const executing: Promise<void>[] = [];
+    const executing = new Set<Promise<void>>();
 
     for (const item of items) {
-        const p = fn(item).then((result) => {
+        const p: Promise<void> = fn(item).then((result) => {
             results.push(result);
+            executing.delete(p);
         });
-        executing.push(p as unknown as Promise<void>);
+        executing.add(p);
 
-        if (executing.length >= limit) {
+        if (executing.size >= limit) {
             await Promise.race(executing);
-            executing.splice(
-                executing.findIndex((e) => e === p),
-                1
-            );
         }
     }
 
@@ -194,9 +191,15 @@ function parseIngredientsResponse(parsed: unknown): Ingredient[] {
 // Generate ingredients for a category using GPT-4o
 async function generateIngredientsForCategory(
     category: string,
-    count: number
+    count: number,
+    existingNames: string[] = []
 ): Promise<Ingredient[]> {
     console.log(`\nGenerating ${count} ingredients for category: ${category}`);
+
+    const exclusionClause =
+        existingNames.length > 0
+            ? `\n\nIMPORTANT: The following ingredients already exist in the database. DO NOT include these:\n${existingNames.join(", ")}`
+            : "";
 
     const prompt = `Generate exactly ${count} ingredients for the "${category}" category for a recipe app database.
 
@@ -218,7 +221,7 @@ For each ingredient, provide:
 8. expires_by_default: true for perishables (meat, dairy, produce), false for shelf-stable items
 9. default_shelf_life_days: number of days until expiration (only if expires_by_default is true, otherwise null)
 
-IMPORTANT: Return as a JSON object with an "ingredients" array containing ${count} ingredient objects.`;
+IMPORTANT: Return as a JSON object with an "ingredients" array containing ${count} ingredient objects.${exclusionClause}`;
 
     try {
         const response = await openai.chat.completions.create({
@@ -273,6 +276,75 @@ async function fetchCategoryIds(): Promise<Map<string, string>> {
 
     console.log(`  Found ${categoryMap.size} categories`);
     return categoryMap;
+}
+
+// Fetch ingredient IDs by canonical_ids from the database
+async function fetchIngredientIdsByCanonicalIds(
+    canonicalIds: string[]
+): Promise<Map<string, string>> {
+    if (canonicalIds.length === 0) return new Map();
+
+    const { data, error } = await supabaseAdmin
+        .from("ingredients")
+        .select("id, canonical_id")
+        .in("canonical_id", canonicalIds);
+
+    if (error) {
+        console.error("Failed to fetch ingredient IDs:", error.message);
+        return new Map();
+    }
+
+    const map = new Map<string, string>();
+    for (const row of data || []) {
+        map.set(row.canonical_id, row.id);
+    }
+    return map;
+}
+
+// Fetch existing ingredients grouped by category
+async function fetchExistingIngredients(
+    categoryIds: Map<string, string>
+): Promise<Map<string, Set<string>>> {
+    console.log("\nFetching existing ingredients from database...");
+
+    const { data, error } = await supabaseAdmin
+        .from("ingredients")
+        .select("canonical_id, category_id");
+
+    if (error) {
+        throw new Error(
+            `Failed to fetch existing ingredients: ${error.message}`
+        );
+    }
+
+    // Create reverse mapping: category_id -> canonical_id (category name)
+    const categoryIdToName = new Map<string, string>();
+    categoryIds.forEach((id, name) => {
+        categoryIdToName.set(id, name);
+    });
+
+    // Map category name -> Set of ingredient canonical_ids
+    const existingByCategory = new Map<string, Set<string>>();
+    for (const ing of data || []) {
+        if (!ing.category_id) continue;
+        const categoryName = categoryIdToName.get(ing.category_id);
+        if (!categoryName) continue;
+
+        if (!existingByCategory.has(categoryName)) {
+            existingByCategory.set(categoryName, new Set());
+        }
+        existingByCategory.get(categoryName)!.add(ing.canonical_id);
+    }
+
+    const totalExisting = Array.from(existingByCategory.values()).reduce(
+        (sum, set) => sum + set.size,
+        0
+    );
+    console.log(
+        `  Found ${totalExisting} existing ingredients across ${existingByCategory.size} categories`
+    );
+
+    return existingByCategory;
 }
 
 // Normalize category name to snake_case for matching
@@ -389,11 +461,82 @@ async function persistIngredients(
             `  Setting up ${parentRelations.length} parent relationships...`
         );
 
+        // Collect parent names that need database lookup
+        const missingParentNames = parentRelations
+            .map((ing) => ing.parent!)
+            .filter((parent) => !ingredientIds.has(parent));
+
+        // Fetch missing parents from database
+        const dbParentIds =
+            await fetchIngredientIdsByCanonicalIds(missingParentNames);
+
+        if (dbParentIds.size > 0) {
+            console.log(
+                `  Found ${dbParentIds.size} parent(s) from previous runs in database`
+            );
+        }
+
+        // Find parents that don't exist anywhere
+        const nonExistentParents = missingParentNames.filter(
+            (parent) => !dbParentIds.has(parent)
+        );
+
+        // Create stub parents
+        if (nonExistentParents.length > 0) {
+            console.log(
+                `  Creating ${nonExistentParents.length} stub parent ingredient(s)...`
+            );
+
+            // Group by category (infer from first child that references each parent)
+            const parentToCategory = new Map<string, string>();
+            for (const ing of parentRelations) {
+                if (
+                    ing.parent &&
+                    nonExistentParents.includes(ing.parent) &&
+                    !parentToCategory.has(ing.parent)
+                ) {
+                    parentToCategory.set(ing.parent, ing.category);
+                }
+            }
+
+            const stubRecords = nonExistentParents.map((parent) => ({
+                name: toTitleCase(parent),
+                canonical_id: parent,
+                category_id: getCategoryId(
+                    parentToCategory.get(parent) || "",
+                    categoryIds
+                ),
+                description: `Base ingredient (auto-generated stub)`,
+                shelf_life: null,
+                storage_tips: null,
+                nutritional_info: null,
+                expires_by_default: true,
+                default_shelf_life_days: null,
+            }));
+
+            const { data, error } = await supabaseAdmin
+                .from("ingredients")
+                .upsert(stubRecords, { onConflict: "canonical_id" })
+                .select("id, canonical_id");
+
+            if (error) {
+                console.error(
+                    "  Failed to create stub parents:",
+                    error.message
+                );
+            } else if (data) {
+                for (const row of data) {
+                    dbParentIds.set(row.canonical_id, row.id);
+                }
+                console.log(`  Created ${data.length} stub parent(s)`);
+            }
+        }
+
         for (const ing of parentRelations) {
             const childId = ingredientIds.get(ing.name);
-            const parentId = ing.parent
-                ? ingredientIds.get(ing.parent)
-                : undefined;
+            // Prefer current batch, fallback to database
+            const parentId =
+                ingredientIds.get(ing.parent!) || dbParentIds.get(ing.parent!);
 
             if (childId && parentId) {
                 const { error } = await supabaseAdmin
@@ -407,6 +550,10 @@ async function persistIngredients(
                         error.message
                     );
                 }
+            } else if (!parentId) {
+                console.warn(
+                    `  Parent "${ing.parent}" not found for ${ing.name}`
+                );
             }
         }
     }
@@ -435,24 +582,63 @@ async function main() {
 
     const categoryIds = await fetchCategoryIds();
 
-    // Step 2: Generate ingredients for each category (parallel with limit)
+    // Step 2: Fetch existing ingredients
     console.log("\n" + "=".repeat(40));
-    console.log("STEP 2: GENERATING INGREDIENTS");
+    console.log("STEP 2: FETCHING EXISTING INGREDIENTS");
     console.log("=".repeat(40));
 
-    const categoryTasks = CATEGORIES.map((category) => ({
-        category,
-        count: CATEGORY_TARGETS[category] || 30,
-    }));
+    const existingByCategory = await fetchExistingIngredients(categoryIds);
+
+    // Step 3: Generate ingredients for each category (parallel with limit)
+    console.log("\n" + "=".repeat(40));
+    console.log("STEP 3: GENERATING NEW INGREDIENTS");
+    console.log("=".repeat(40));
+
+    // Calculate how many new ingredients are needed per category
+    const categoryTasks: {
+        category: string;
+        count: number;
+        existingNames: string[];
+    }[] = [];
+
+    for (const category of CATEGORIES) {
+        const target = CATEGORY_TARGETS[category] || 30;
+        const existingSet = existingByCategory.get(category) || new Set();
+        const existingCount = existingSet.size;
+        const needed = target - existingCount;
+
+        if (needed <= 0) {
+            console.log(
+                `\nSkipping ${category}: already has ${existingCount}/${target} ingredients`
+            );
+            continue;
+        }
+
+        console.log(
+            `\n${category}: need ${needed} more (have ${existingCount}/${target})`
+        );
+        categoryTasks.push({
+            category,
+            count: needed,
+            existingNames: Array.from(existingSet),
+        });
+    }
+
+    if (categoryTasks.length === 0) {
+        console.log("\nAll categories already have enough ingredients!");
+        console.log("No generation needed.");
+        return;
+    }
 
     // Run 3 categories in parallel at a time with longer delay
     const ingredientBatches = await parallelLimit(
         categoryTasks,
         3,
-        async ({ category, count }) => {
+        async ({ category, count, existingNames }) => {
             const ingredients = await generateIngredientsForCategory(
                 category,
-                count
+                count,
+                existingNames
             );
             await delay(1000); // Delay to avoid rate limits
             return ingredients;
@@ -460,11 +646,11 @@ async function main() {
     );
 
     const allIngredients = ingredientBatches.flat();
-    console.log(`\nTotal ingredients generated: ${allIngredients.length}`);
+    console.log(`\nTotal new ingredients generated: ${allIngredients.length}`);
 
-    // Step 3: Persist ingredients
+    // Step 4: Persist ingredients
     console.log("\n" + "=".repeat(40));
-    console.log("STEP 3: PERSISTING INGREDIENTS");
+    console.log("STEP 4: PERSISTING INGREDIENTS");
     console.log("=".repeat(40));
 
     const insertedCount = await persistIngredients(allIngredients, categoryIds);
@@ -474,8 +660,8 @@ async function main() {
     console.log("\n" + "=".repeat(60));
     console.log("GENERATION COMPLETE");
     console.log("=".repeat(60));
-    console.log(`Total ingredients generated: ${allIngredients.length}`);
-    console.log(`Total ingredients persisted: ${insertedCount}`);
+    console.log(`Total new ingredients generated: ${allIngredients.length}`);
+    console.log(`Total new ingredients persisted: ${insertedCount}`);
     console.log(`Time elapsed: ${elapsed} minutes`);
     console.log("");
     console.log("Next steps:");

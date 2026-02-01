@@ -71,4 +71,73 @@ export class RecipesRepository implements IRecipesRepository {
             );
         }
     }
+
+    /**
+     * Persist a recipe using ingredient IDs directly (no canonical_id lookup).
+     * Used when generating from a suggestion where ingredient IDs are already known.
+     *
+     * Calls the persist_recipe_with_ingredient_ids RPC function which:
+     * - Uses ingredient_id directly instead of looking up by name
+     * - Uses ingredient_ids (UUIDs) for instructions instead of name-to-id mapping
+     * - Tags still use create-if-not-exists pattern
+     */
+    async persistWithIngredientIds(
+        recipe: GenerateRecipeResponseDto,
+        imageUrl: string
+    ): Promise<Result<string, PersistenceError>> {
+        try {
+            // Type assertion needed until database types are regenerated after migration
+            const { data, error } = await (supabaseAdmin.rpc as any)(
+                "persist_recipe_with_ingredient_ids",
+                {
+                    p_name: recipe.name,
+                    p_description: recipe.description || "",
+                    p_difficulty: recipe.difficulty,
+                    p_servings: recipe.servings,
+                    p_prep_time: `${recipe.prepTime} min`,
+                    p_cook_time: `${recipe.cookTime} min`,
+                    p_kcal: recipe.kcal,
+                    p_carbs: recipe.carbs,
+                    p_protein: recipe.protein,
+                    p_fat: recipe.fat,
+                    p_tips: recipe.tips?.map((tip) => tip.text) || [],
+                    p_image: imageUrl,
+                    p_ingredients: recipe.ingredients.map((ing) => ({
+                        ingredient_id: (ing as any).ingredientId,
+                        quantity: ing.quantity,
+                        unit: ing.unit,
+                        comment: (ing as any).comment || null,
+                    })),
+                    p_instructions: recipe.instructions.map((inst, idx) => ({
+                        step_number: idx + 1,
+                        text: inst.text,
+                        ingredient_ids: (inst as any).ingredientIds || [],
+                    })),
+                    p_tags: recipe.tags || [],
+                }
+            );
+
+            if (error) {
+                return failure(
+                    new PersistenceError(`Database error: ${error.message}`)
+                );
+            }
+
+            if (!data) {
+                return failure(
+                    new PersistenceError(
+                        "Failed to persist recipe: no ID returned"
+                    )
+                );
+            }
+
+            return success(data as string);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to persist recipe: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
 }

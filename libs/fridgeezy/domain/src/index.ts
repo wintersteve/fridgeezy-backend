@@ -12,3 +12,4 @@ export * from "./lib/modules/recipes";
 export * from "./lib/modules/shared";
 export * from "./lib/modules/suggestions";
 export * from "./lib/modules/tags";
+export * from "./lib/modules/units";

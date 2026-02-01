@@ -150,6 +150,64 @@ Return as JSON with a "pairings" array.`;
     return allPairings;
 }
 
+// Create missing ingredients in the database
+async function createMissingIngredients(
+    pairings: Pairing[],
+    ingredientIds: Map<string, string>
+): Promise<Map<string, string>> {
+    // Collect all unique ingredient names from pairings
+    const allNames = new Set<string>();
+    for (const p of pairings) {
+        allNames.add(p.ingredient1);
+        allNames.add(p.ingredient2);
+    }
+
+    // Find missing ingredients
+    const missingNames = Array.from(allNames).filter(
+        (name) => !ingredientIds.has(name)
+    );
+
+    if (missingNames.length === 0) {
+        console.log("  No missing ingredients to create");
+        return ingredientIds;
+    }
+
+    console.log(`  Creating ${missingNames.length} missing ingredients...`);
+
+    // Create new ingredients
+    const newIngredients = missingNames.map((name) => ({
+        canonical_id: name,
+        name: name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    }));
+
+    const batchSize = 50;
+    let createdCount = 0;
+
+    for (let i = 0; i < newIngredients.length; i += batchSize) {
+        const batch = newIngredients.slice(i, i + batchSize);
+
+        const { data, error } = await supabaseAdmin
+            .from("ingredients")
+            .upsert(batch, {
+                onConflict: "canonical_id",
+                ignoreDuplicates: false,
+            })
+            .select("id, canonical_id");
+
+        if (error) {
+            console.error(`  Error creating ingredients:`, error.message);
+        } else if (data) {
+            for (const ing of data) {
+                ingredientIds.set(ing.canonical_id, ing.id);
+                createdCount++;
+            }
+        }
+    }
+
+    console.log(`  Created ${createdCount} new ingredients`);
+    return ingredientIds;
+}
+
 // Persist pairings to database
 async function persistPairings(
     pairings: Pairing[],
@@ -157,12 +215,21 @@ async function persistPairings(
 ): Promise<void> {
     console.log("\nPersisting pairings to database...");
 
+    // First, create any missing ingredients
+    const updatedIngredientIds = await createMissingIngredients(
+        pairings,
+        ingredientIds
+    );
+
     // Filter and deduplicate pairings
     const seen = new Set<string>();
     const validPairings = pairings.filter((p) => {
-        const id1 = ingredientIds.get(p.ingredient1);
-        const id2 = ingredientIds.get(p.ingredient2);
-        if (!id1 || !id2) return false;
+        const id1 = updatedIngredientIds.get(p.ingredient1);
+        const id2 = updatedIngredientIds.get(p.ingredient2);
+        if (!id1 || !id2) {
+            console.log(`  Skipping: ${p.ingredient1} + ${p.ingredient2} (missing IDs)`);
+            return false;
+        }
 
         const key1 = `${id1}|${id2}`;
         const key2 = `${id2}|${id1}`;
@@ -180,8 +247,8 @@ async function persistPairings(
         notes: string;
     }[] = [];
     for (const p of validPairings) {
-        const id1 = ingredientIds.get(p.ingredient1);
-        const id2 = ingredientIds.get(p.ingredient2);
+        const id1 = updatedIngredientIds.get(p.ingredient1);
+        const id2 = updatedIngredientIds.get(p.ingredient2);
         if (!id1 || !id2) continue;
 
         records.push({

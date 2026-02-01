@@ -8,23 +8,12 @@ import {
 
 /**
  * Request schema for generating a recipe from a suggestion.
- * Defines the contract for external systems calling the generate recipe use-case.
+ * Only requires the suggestion ID - all other data (name, difficulty, ingredients, tags)
+ * is fetched server-side from the suggestion.
  */
 export const GenerateRecipeRequestSchema = z.object({
-    difficulty: z.enum(["easy", "medium", "hard"]),
-    name: z.string().min(1).describe("Recipe name from the suggestion"),
-    ingredients: z
-        .array(z.string().min(1))
-        .min(1)
-        .describe("Ingredients from the suggestion"),
+    suggestionId: z.uuid().describe("The suggestion ID to generate a recipe from"),
     servings: z.number().int().positive().default(4),
-    tags: z.array(z.string()),
-    id: z
-        .uuid()
-        .optional()
-        .describe(
-            "Optional suggestion ID - if provided, the suggestion will be deleted after the recipe is persisted"
-        ),
 });
 
 export type GenerateRecipeRequestDto = z.infer<

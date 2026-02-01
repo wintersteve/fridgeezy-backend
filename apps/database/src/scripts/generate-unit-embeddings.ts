@@ -5,50 +5,50 @@ import { config } from "dotenv";
 config();
 
 /**
- * Generate and store embeddings for all categories
- * Uses category name as the text for embedding generation
+ * Generate and store embeddings for all units.
+ * Uses unit name and abbreviation as the text for embedding generation.
  */
-export async function generateCategoryEmbeddings() {
-    console.log("Starting category embedding generation...\n");
+export async function generateUnitEmbeddings() {
+    console.log("Starting unit embedding generation...\n");
 
     try {
-        // 1. Fetch all categories that don't have embeddings
-        console.log("Fetching categories from database...");
+        // 1. Fetch all units that don't have embeddings
+        console.log("Fetching units from database...");
 
-        const { data: categories, error: fetchError } = await supabaseAdmin
-            .from("categories")
-            .select("id, name, canonical_id, description")
+        const { data: units, error: fetchError } = await supabaseAdmin
+            .from("units")
+            .select("id, name, abbreviation, type")
             .is("embedding", null)
             .order("name");
 
         if (fetchError) {
-            throw new Error(
-                `Failed to fetch categories: ${fetchError.message}`
-            );
+            throw new Error(`Failed to fetch units: ${fetchError.message}`);
         }
 
-        if (!categories || categories.length === 0) {
-            console.log(
-                "No categories found without embeddings. Nothing to do!"
-            );
+        if (!units || units.length === 0) {
+            console.log("No units found without embeddings. Nothing to do!");
             return;
         }
 
-        console.log(`Found ${categories.length} categories to process:\n`);
+        console.log(`Found ${units.length} units to process:\n`);
 
-        // List all categories
-        for (const category of categories) {
-            console.log(`  - ${category.name}`);
+        // List all units
+        for (const unit of units) {
+            console.log(`  - ${unit.name} (${unit.abbreviation})`);
         }
 
         console.log("");
 
         // 2. Generate embeddings in batch
+        // Use descriptive text for better semantic matching
         console.log("Generating embeddings via OpenAI API...");
 
-        const categoryNames = categories.map((category) => category.name);
+        const unitTexts = units.map(
+            (unit) =>
+                `${unit.name} ${unit.abbreviation} measurement unit for ${unit.type}`
+        );
 
-        const result = await generateBatchEmbeddings(categoryNames, {
+        const result = await generateBatchEmbeddings(unitTexts, {
             model: "text-embedding-3-small",
             dimensions: 1536,
         });
@@ -59,27 +59,27 @@ export async function generateCategoryEmbeddings() {
         console.log(`Model: ${result.model}`);
         console.log(`Tokens used: ${result.usage.total_tokens}\n`);
 
-        // 3. Update categories in database
+        // 3. Update units in database
         console.log("Storing embeddings in database...");
         let successCount = 0;
         let errorCount = 0;
 
-        for (let i = 0; i < categories.length; i++) {
-            const category = categories[i];
+        for (let i = 0; i < units.length; i++) {
+            const unit = units[i];
             const embedding = result.embeddings[i];
 
             const { error: updateError } = await supabaseAdmin
-                .from("categories")
+                .from("units")
                 .update({ embedding: JSON.stringify(embedding) })
-                .eq("id", category.id);
+                .eq("id", unit.id);
 
             if (updateError) {
                 console.error(
-                    `  ✗ Failed to update ${category.name}: ${updateError.message}`
+                    `  ✗ Failed to update ${unit.name}: ${updateError.message}`
                 );
                 errorCount++;
             } else {
-                console.log(`  ✓ Updated ${category.name}`);
+                console.log(`  ✓ Updated ${unit.name}`);
                 successCount++;
             }
         }
@@ -88,7 +88,7 @@ export async function generateCategoryEmbeddings() {
         console.log("\n" + "=".repeat(50));
         console.log("SUMMARY");
         console.log("=".repeat(50));
-        console.log(`Total categories processed: ${categories.length}`);
+        console.log(`Total units processed: ${units.length}`);
         console.log(`Successful updates: ${successCount}`);
         console.log(`Failed updates: ${errorCount}`);
         console.log(`API tokens used: ${result.usage.total_tokens}`);
@@ -109,7 +109,7 @@ export async function generateCategoryEmbeddings() {
     }
 }
 
-generateCategoryEmbeddings()
+generateUnitEmbeddings()
     .then(() => {
         console.log("\nScript completed successfully!");
         process.exit(0);

@@ -1,6 +1,19 @@
 import { generateImage } from "@fridgeezy/genai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
 
+/**
+ * Normalizes a recipe name to create a safe filename for storage.
+ * Removes diacritics and special characters, replacing them with ASCII equivalents.
+ */
+const normalizeFileName = (name: string): string => {
+    return name
+        .normalize("NFD") // Decompose combined characters into base + diacritics
+        .replace(/[\u0300-\u036f]/g, "") // Remove diacritical marks
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_") // Replace non-alphanumeric chars with underscore
+        .replace(/^_+|_+$/g, ""); // Trim leading/trailing underscores
+};
+
 const buildPrompt = (
     name: string
 ) => `An illustrated, bird's-eye (top-down) view of a ${name}, presented simply and elegantly.
@@ -41,7 +54,7 @@ export async function generateAndUploadRecipeImage(
 
         // Determine file extension based on mime type
         const extension = mimeType === "image/jpeg" ? "jpg" : "png";
-        const fileName = `${name.toLowerCase().replace(/\s+/g, "_")}.${extension}`;
+        const fileName = `${normalizeFileName(name)}.${extension}`;
         const filePath = `${fileName}`;
 
         // Upload to Supabase storage

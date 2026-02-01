@@ -1,6 +1,5 @@
 import { openai } from "@fridgeezy/openai";
 import {
-    GenerateRecipeRequestDto,
     GenerateRecipeRequestSchema,
     HeaderSchema,
     IngredientSchema,
@@ -11,18 +10,33 @@ import {
 import { createStreamHandler } from "@fridgeezy/streaming-server";
 import { SuggestionsRepository } from "@fridgeezy/supabase";
 
+import { fetchEnrichedSuggestion } from "../../../suggestions/services";
 import {
     createRecipeStream,
+    RecipeStreamInitialState,
     fetchRecipeMetadata,
     formatUnitsForPrompt,
     formatTagsForPrompt,
 } from "../../services";
-import { persistRecipe } from "../../services/persist-recipe";
+import { persistRecipeWithIngredientIds } from "../../services/persist-recipe";
 
+/**
+ * Build system prompt with explicit ingredient constraints.
+ * The LLM MUST use ONLY the provided ingredients.
+ */
 const buildSystemPrompt = (
     units: string,
-    tags: string
+    tags: string,
+    ingredientNames: string[]
 ) => `Generate exactly an authentic, real-world recipe based on the provided ingredients
+
+## CRITICAL: Ingredient Constraints
+You MUST use ONLY these ingredients (no additions, no substitutions):
+${ingredientNames.map((name) => `- ${name}`).join("\n")}
+
+When outputting ingredients, use the EXACT names from the list above.
+Every instruction step should reference only ingredients from this list.
+You MUST provide quantity and unit for EACH ingredient above.
 
 ## Rules
 - For each instruction step, include an "ingredients" array listing the ingredient names used in that specific step
@@ -73,11 +87,17 @@ Optional tip lines:
 
 No markdown, no code blocks, just JSONL.`;
 
+/**
+ * Build user prompt using suggestion data.
+ */
 const buildUserPrompt = (
-    request: GenerateRecipeRequestDto
-) => `Generate a detailed recipe for: ${request.name}
-Required ingredients to use: ${request.ingredients.join(", ")}
-Servings: ${request.servings}`;
+    name: string,
+    difficulty: string,
+    ingredientNames: string[],
+    servings: number
+) => `Generate a detailed ${difficulty} level recipe for: ${name}
+Use ONLY these ingredients: ${ingredientNames.join(", ")}
+Servings: ${servings}`;
 
 export const generateRecipe = createStreamHandler({
     requestSchema: GenerateRecipeRequestSchema,
@@ -90,23 +110,74 @@ export const generateRecipe = createStreamHandler({
     ],
 
     handler: async ({ body }) => {
-        // Fetch metadata from Supabase
+        // 1. Fetch enriched suggestion with ingredients and tags
+        const suggestionResult = await fetchEnrichedSuggestion(body.suggestionId);
+
+        if (!suggestionResult.success) {
+            const error = suggestionResult.error;
+
+            if (error.name === "NotFoundError") {
+                return {
+                    type: "raw" as const,
+                    statusCode: 404,
+                    data: { error: `Suggestion with ID ${body.suggestionId} not found` },
+                };
+            }
+
+            return {
+                type: "raw" as const,
+                statusCode: 500,
+                data: { error: error.message },
+            };
+        }
+
+        const suggestion = suggestionResult.value;
+
+        // 2. Create ingredient ID map (lowercase name -> UUID)
+        const ingredientIdMap = new Map<string, string>();
+        for (const ing of suggestion.ingredients) {
+            ingredientIdMap.set(ing.name.toLowerCase(), ing.id);
+        }
+
+        // 3. Extract ingredient names for prompt
+        const ingredientNames = suggestion.ingredients.map((i) => i.name);
+        const tagNames = suggestion.tags.map((t) => t.name);
+
+        // 4. Fetch metadata from Supabase
         const metadata = await fetchRecipeMetadata();
         const unitsPrompt = formatUnitsForPrompt(metadata.units);
         const tagsPrompt = formatTagsForPrompt(metadata.tags);
 
+        // 5. Build initial state for stream
+        const initialState: RecipeStreamInitialState = {
+            name: suggestion.name,
+            difficulty: suggestion.difficulty,
+            servings: body.servings,
+            tags: tagNames,
+        };
+
+        // 6. Call OpenAI
         const stream = await openai.chat.completions.create({
             model: "gpt-4.1",
             messages: [
                 {
                     role: "system",
-                    content: buildSystemPrompt(unitsPrompt, tagsPrompt),
+                    content: buildSystemPrompt(unitsPrompt, tagsPrompt, ingredientNames),
                 },
-                { role: "user", content: buildUserPrompt(body) },
+                {
+                    role: "user",
+                    content: buildUserPrompt(
+                        suggestion.name,
+                        suggestion.difficulty,
+                        ingredientNames,
+                        body.servings
+                    ),
+                },
             ],
             stream: true,
         });
 
+        // 7. Create recipe stream with ingredient ID map
         const recipeStream = createRecipeStream(stream, {
             schemas: [
                 HeaderSchema,
@@ -115,10 +186,11 @@ export const generateRecipe = createStreamHandler({
                 InstructionSchema,
                 TipSchema,
             ],
-            initialState: body,
+            initialState,
+            ingredientIdMap,
         });
 
-        // Wrap the stream to persist the recipe and include the ID in the final message
+        // 8. Wrap stream to persist recipe and delete suggestion
         async function* wrappedStream() {
             let lastResult;
 
@@ -133,31 +205,27 @@ export const generateRecipe = createStreamHandler({
 
             // After stream completes, persist the recipe and yield final message with ID
             if (lastResult?.type === "complete" && lastResult.recipe) {
-                const persistResult = await persistRecipe(lastResult.recipe);
+                // Persist using ingredient IDs directly (no canonical_id lookup needed)
+                const persistResult = await persistRecipeWithIngredientIds(lastResult.recipe);
 
                 if (persistResult.success) {
                     console.log(
                         `Recipe persisted successfully with ID: ${persistResult.value}`
                     );
 
-                    // Delete the suggestion if a suggestionId was provided
-                    if (body.id) {
-                        const suggestionsRepo = new SuggestionsRepository();
+                    // Delete the suggestion after successful recipe creation
+                    const suggestionsRepo = new SuggestionsRepository();
+                    const deleteResult = await suggestionsRepo.delete(body.suggestionId);
 
-                        const deleteResult = await suggestionsRepo.delete(
-                            body.id
+                    if (deleteResult.success) {
+                        console.log(
+                            `Suggestion ${body.suggestionId} removed after promotion to recipe`
                         );
-
-                        if (deleteResult.success) {
-                            console.log(
-                                `Suggestion ${body.id} removed after promotion to recipe`
-                            );
-                        } else {
-                            console.error(
-                                "Failed to delete suggestion:",
-                                deleteResult.error.message
-                            );
-                        }
+                    } else {
+                        console.error(
+                            "Failed to delete suggestion:",
+                            deleteResult.error.message
+                        );
                     }
 
                     // Yield final completion with recipe ID

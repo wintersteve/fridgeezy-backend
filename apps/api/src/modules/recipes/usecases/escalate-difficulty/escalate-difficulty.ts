@@ -213,7 +213,6 @@ export const escalateDifficulty = createStreamHandler({
                     difficulty: body.difficulty, // TARGET difficulty
                     servings: existingRecipe.servings,
                     tags: existingRecipe.tags, // MUST remain constant
-                    ingredients: existingRecipe.ingredients.map((ing) => ing.name), // Ingredient names for context
                 },
                 skipImageGeneration: true, // Reuse existing image instead of generating new one
             }),

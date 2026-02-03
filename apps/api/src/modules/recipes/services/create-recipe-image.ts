@@ -16,9 +16,9 @@ const normalizeFileName = (name: string): string => {
 
 const buildPrompt = (
     name: string
-) => `An illustrated, bird's-eye (top-down) view of a ${name}, presented simply and elegantly.
+) => `An illustrated, bird's-eye (top-down) view of ${name}, presented simply and elegantly in its most natural serving vessel — whether that's a plate, bowl, jar, glass, or any other appropriate container for this type of food.
 
-The dish is centered on a clean, neutral plate with subtle handmade ceramic texture. No utensils, no background props, no clutter — the entire focus is on the food itself.
+The food is centered in its proper serving context with subtle handmade ceramic or artisanal texture. No utensils, no background props, no clutter — the entire focus is on the food itself.
 
 Illustration style: refined, modern editorial food illustration with soft hand-drawn details; minimalistic but warm; not photorealistic.
 

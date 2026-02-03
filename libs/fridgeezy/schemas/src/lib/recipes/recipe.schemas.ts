@@ -46,10 +46,11 @@ export const TipSchema = z.object({
 });
 
 // Schema for nutrition information (per serving)
+// Using z.coerce.number() to handle LLM outputs that may be strings (e.g., "450" instead of 450)
 export const NutritionSchema = z.object({
     type: z.literal("nutrition"),
-    kcal: z.number(),
-    carbs: z.number(),
-    protein: z.number(),
-    fat: z.number(),
+    kcal: z.coerce.number(),
+    carbs: z.coerce.number(),
+    protein: z.coerce.number(),
+    fat: z.coerce.number(),
 });

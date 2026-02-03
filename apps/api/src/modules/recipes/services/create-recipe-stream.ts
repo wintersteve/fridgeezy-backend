@@ -146,6 +146,18 @@ export async function* createRecipeStream(
         recipe.tips = null;
     }
 
+    // Log warning if nutrition values are all zeros (indicates parsing failure)
+    if (
+        recipe.kcal === 0 &&
+        recipe.carbs === 0 &&
+        recipe.protein === 0 &&
+        recipe.fat === 0
+    ) {
+        console.warn(
+            `[RecipeStream] Nutrition values are all zeros for recipe "${recipe.name}" - LLM may have failed to generate nutrition data`
+        );
+    }
+
     // Send completion event with recipe data
     // The onComplete hook receives the last yielded item
     yield { type: "complete", saved: true, recipe };

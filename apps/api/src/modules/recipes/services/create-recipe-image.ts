@@ -38,6 +38,23 @@ export async function generateAndUploadRecipeImage(
     name: string
 ): Promise<string> {
     try {
+        const normalizedName = normalizeFileName(name);
+
+        // Check if image already exists (try both extensions)
+        for (const ext of ["png", "jpg"]) {
+            const existingPath = `${normalizedName}.${ext}`;
+            const { data: existingFile } = await supabaseAdmin.storage
+                .from("recipes")
+                .list("", { search: existingPath });
+
+            if (existingFile?.some((file) => file.name === existingPath)) {
+                const { data } = supabaseAdmin.storage
+                    .from("recipes")
+                    .getPublicUrl(existingPath);
+                return data.publicUrl;
+            }
+        }
+
         const { base64Data, mimeType } = await generateImage({
             prompt: buildPrompt(name),
             numberOfImages: 1,
@@ -54,7 +71,7 @@ export async function generateAndUploadRecipeImage(
 
         // Determine file extension based on mime type
         const extension = mimeType === "image/jpeg" ? "jpg" : "png";
-        const fileName = `${normalizeFileName(name)}.${extension}`;
+        const fileName = `${normalizedName}.${extension}`;
         const filePath = `${fileName}`;
 
         // Upload to Supabase storage

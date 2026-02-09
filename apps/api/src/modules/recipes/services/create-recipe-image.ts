@@ -35,7 +35,8 @@ Mood: authentic, comforting, artisanal, and timeless — evokes home cooking and
 IMPORTANT: Generate only the illustration. Do not include any text, labels, codes, or annotations in the image.`;
 
 export async function generateAndUploadRecipeImage(
-    name: string
+    name: string,
+    nameEn?: string | null
 ): Promise<string> {
     try {
         const normalizedName = normalizeFileName(name);

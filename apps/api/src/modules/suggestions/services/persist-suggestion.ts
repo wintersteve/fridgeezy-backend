@@ -8,6 +8,8 @@ import { matchTags, TagInput, TagMatch } from "./match-tags";
 export interface PersistSuggestionContext {
     /** The cuisine from the original request - will be marked as type: "cuisine" for auto-creation */
     cuisineTag?: string;
+    /** The English name of the recipe for image generation and file naming */
+    nameEn?: string;
 }
 
 export interface PersistedIngredient {
@@ -90,7 +92,8 @@ export async function persistSuggestion(
                 difficulty: suggestion.difficulty,
             },
             ingredientMatches.map((m) => m.ingredientId),
-            tagMatches.map((m) => m.tagId)
+            tagMatches.map((m) => m.tagId),
+            context?.nameEn
         );
 
         if (!persistResult.success) {

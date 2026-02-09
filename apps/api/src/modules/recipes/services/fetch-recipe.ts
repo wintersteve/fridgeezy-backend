@@ -10,6 +10,7 @@ export async function fetchRecipe(
             `
             id,
             name,
+            name_en,
             description,
             difficulty,
             servings,
@@ -50,6 +51,7 @@ export async function fetchRecipe(
     return {
         id: recipe.id,
         name: recipe.name,
+        nameEn: recipe.name_en ?? null,
         description: recipe.description || "",
         difficulty: recipe.difficulty!,
         servings: recipe.servings,

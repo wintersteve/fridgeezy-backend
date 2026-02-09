@@ -21,6 +21,7 @@ import { searchRecipes } from "./search-recipes";
  */
 const ComposeRecipeSuggestionSchema = z.object({
     name: z.string(),
+    name_en: z.string(),
     description: z.string().max(100),
     difficulty: z.enum(["easy", "medium", "hard"]),
     course: z.string(),
@@ -60,6 +61,7 @@ Output one JSON object per line (JSONL format). No markdown, no code blocks, no 
 
 Each recipe object must include:
 - name
+- name_en (the English name of the dish, e.g. "Butter Chicken" for "Murgh Makhani")
 - description (max 100 characters)
 - difficulty (easy, medium, or hard)
 - course (the course type)
@@ -222,6 +224,7 @@ export async function* generateComposeRecipes(
                     source: "existing",
                     id: recipeSummary.id,
                     name: recipeSummary.name,
+                    nameEn: recipeSummary.nameEn,
                     description: recipeSummary.description,
                     difficulty: recipeSummary.difficulty,
                     ingredients: recipeSummary.ingredients,
@@ -241,6 +244,7 @@ export async function* generateComposeRecipes(
                 source: "suggestion",
                 id: existingSuggestion.id,
                 name: existingSuggestion.name,
+                nameEn: existingSuggestion.nameEn,
                 description: existingSuggestion.description,
                 difficulty: existingSuggestion.difficulty,
                 ingredients: existingSuggestion.ingredients,
@@ -261,12 +265,13 @@ export async function* generateComposeRecipes(
         const persistResult = await persistSuggestion(
             {
                 name: suggestion.name,
+                name_en: suggestion.name_en,
                 description: suggestion.description,
                 difficulty: suggestion.difficulty,
                 ingredients: suggestion.ingredients,
                 tags: suggestion.tags,
             },
-            { cuisineTag: suggestionCuisine }
+            { cuisineTag: suggestionCuisine, nameEn: suggestion.name_en }
         );
 
         if (!persistResult.success) {
@@ -282,6 +287,7 @@ export async function* generateComposeRecipes(
             source: "suggestion",
             id: persistResult.value.suggestionId,
             name: suggestion.name,
+            nameEn: suggestion.name_en,
             description: suggestion.description,
             difficulty: suggestion.difficulty,
             ingredients: persistResult.value.ingredients,

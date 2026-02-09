@@ -11,6 +11,7 @@ import { generateAndUploadRecipeImage } from "./create-recipe-image";
  */
 export interface RecipeStreamInitialState {
     name: string;
+    nameEn?: string | null;
     difficulty: "easy" | "medium" | "hard";
     servings: number;
     tags: string[];
@@ -34,6 +35,7 @@ export async function* createRecipeStream(
     const recipe: GenerateRecipeResponseDto = {
         id: "",
         name: config.initialState.name,
+        nameEn: config.initialState.nameEn ?? null,
         difficulty: config.initialState.difficulty,
         servings: config.initialState.servings,
         tags: config.initialState.tags,
@@ -67,7 +69,7 @@ export async function* createRecipeStream(
             // Generate and upload recipe image in parallel (don't await)
             // Skip if we're reusing an existing image (e.g., escalate-difficulty use case)
             if (!config.skipImageGeneration) {
-                generateAndUploadRecipeImage(config.initialState.name).catch(
+                generateAndUploadRecipeImage(config.initialState.name, config.initialState.nameEn).catch(
                     (error) => {
                         console.error("Image generation failed:", error);
                     }

@@ -271,7 +271,8 @@ export class SuggestionsRepository implements ISuggestionsRepository {
     async persistWithRelations(
         suggestion: Omit<RecipeSuggestionInsertPayload, "canonical_id">,
         ingredientIds: string[],
-        tagIds: string[]
+        tagIds: string[],
+        nameEn?: string
     ): Promise<Result<string, PersistenceError>> {
         try {
             const { data, error } = await supabase.rpc("persist_suggestion", {
@@ -280,6 +281,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
                 p_difficulty: suggestion.difficulty!,
                 p_ingredient_ids: ingredientIds,
                 p_tag_ids: tagIds,
+                p_name_en: nameEn ?? null,
             });
 
             if (error) {

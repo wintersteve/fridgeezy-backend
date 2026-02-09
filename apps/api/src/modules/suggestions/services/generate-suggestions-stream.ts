@@ -43,6 +43,7 @@ Output EXACTLY 5 recipes, one JSON object per line (JSONL format). No markdown, 
 
 Each recipe object must include:
 - name
+- name_en (the English name of the dish, e.g. "Butter Chicken" for "Murgh Makhani")
 - description (max 50 characters)
 - difficulty (easy, medium, or hard)
 - ingredients (array of strings)
@@ -128,6 +129,7 @@ export async function* generateSuggestionsStream(
         // No similar suggestion found or fetch failed, persist new suggestion
         const persistResult = await persistSuggestion(suggestion, {
             cuisineTag: request.cuisine,
+            nameEn: suggestion.name_en,
         });
 
         if (!persistResult.success) {
@@ -143,6 +145,7 @@ export async function* generateSuggestionsStream(
         yield {
             id: persistResult.value.suggestionId,
             name: suggestion.name,
+            nameEn: suggestion.name_en,
             description: suggestion.description,
             difficulty: suggestion.difficulty,
             ingredients: persistResult.value.ingredients,

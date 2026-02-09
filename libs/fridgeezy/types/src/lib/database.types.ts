@@ -877,6 +877,7 @@ export type Database = {
           embedding: string | null
           id: string
           name: string
+          name_en: string | null
         }
         Insert: {
           canonical_id: string
@@ -886,6 +887,7 @@ export type Database = {
           embedding?: string | null
           id?: string
           name: string
+          name_en?: string | null
         }
         Update: {
           canonical_id?: string
@@ -895,6 +897,7 @@ export type Database = {
           embedding?: string | null
           id?: string
           name?: string
+          name_en?: string | null
         }
         Relationships: []
       }
@@ -947,6 +950,7 @@ export type Database = {
           image: string | null
           kcal: number | null
           name: string
+          name_en: string | null
           prep_time: string | null
           protein: number | null
           servings: number
@@ -965,6 +969,7 @@ export type Database = {
           image?: string | null
           kcal?: number | null
           name: string
+          name_en?: string | null
           prep_time?: string | null
           protein?: number | null
           servings?: number
@@ -983,6 +988,7 @@ export type Database = {
           image?: string | null
           kcal?: number | null
           name?: string
+          name_en?: string | null
           prep_time?: string | null
           protein?: number | null
           servings?: number
@@ -1322,36 +1328,112 @@ export type Database = {
         Args: { input_text: string }
         Returns: string
       }
-      persist_recipe: {
-        Args: {
-          p_carbs: number
-          p_cook_time: string
-          p_description: string
-          p_difficulty: Database["public"]["Enums"]["difficulty_type"]
-          p_fat: number
-          p_image: string
-          p_ingredients: Json
-          p_instructions: Json
-          p_kcal: number
-          p_name: string
-          p_prep_time: string
-          p_protein: number
-          p_servings: number
-          p_tags: string[]
-          p_tips: string[]
-        }
-        Returns: string
-      }
-      persist_suggestion: {
-        Args: {
-          p_description: string
-          p_difficulty: Database["public"]["Enums"]["difficulty_type"]
-          p_ingredient_ids: string[]
-          p_name: string
-          p_tag_ids: string[]
-        }
-        Returns: string
-      }
+      persist_recipe:
+        | {
+            Args: {
+              p_carbs: number
+              p_cook_time: string
+              p_description: string
+              p_difficulty: Database["public"]["Enums"]["difficulty_type"]
+              p_fat: number
+              p_image: string
+              p_ingredients: Json
+              p_instructions: Json
+              p_kcal: number
+              p_name: string
+              p_prep_time: string
+              p_protein: number
+              p_servings: number
+              p_tags: string[]
+              p_tips: string[]
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_carbs: number
+              p_cook_time: string
+              p_description: string
+              p_difficulty: Database["public"]["Enums"]["difficulty_type"]
+              p_fat: number
+              p_image: string
+              p_ingredients: Json
+              p_instructions: Json
+              p_kcal: number
+              p_name: string
+              p_name_en?: string
+              p_prep_time: string
+              p_protein: number
+              p_servings: number
+              p_tags: string[]
+              p_tips: string[]
+            }
+            Returns: string
+          }
+      persist_recipe_with_ingredient_ids:
+        | {
+            Args: {
+              p_carbs: number
+              p_cook_time: string
+              p_description: string
+              p_difficulty: Database["public"]["Enums"]["difficulty_type"]
+              p_fat: number
+              p_image: string
+              p_ingredients: Json
+              p_instructions: Json
+              p_kcal: number
+              p_name: string
+              p_prep_time: string
+              p_protein: number
+              p_servings: number
+              p_tags: string[]
+              p_tips: string[]
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_carbs: number
+              p_cook_time: string
+              p_description: string
+              p_difficulty: Database["public"]["Enums"]["difficulty_type"]
+              p_fat: number
+              p_image: string
+              p_ingredients: Json
+              p_instructions: Json
+              p_kcal: number
+              p_name: string
+              p_name_en?: string
+              p_prep_time: string
+              p_protein: number
+              p_servings: number
+              p_tags: string[]
+              p_tips: string[]
+            }
+            Returns: string
+          }
+      persist_suggestion:
+        | {
+            Args: {
+              p_description: string
+              p_difficulty: Database["public"]["Enums"]["difficulty_type"]
+              p_ingredient_ids: string[]
+              p_name: string
+              p_tag_ids: string[]
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_description: string
+              p_difficulty: Database["public"]["Enums"]["difficulty_type"]
+              p_ingredient_ids: string[]
+              p_name: string
+              p_name_en?: string
+              p_tag_ids: string[]
+            }
+            Returns: string
+          }
       search_categories: {
         Args: { match_count?: number; query_embedding: string }
         Returns: {

@@ -28,6 +28,7 @@ export type GenerateRecipeRequestDto = z.infer<
 export const GenerateRecipeResponseDtoSchema = z.object({
     id: z.uuid(),
     name: z.string(),
+    nameEn: z.string().nullable().optional(),
     description: z.string(),
     difficulty: z.enum(["easy", "medium", "hard"]),
     servings: z.number(),

@@ -210,6 +210,7 @@ export const escalateDifficulty = createStreamHandler({
                 ],
                 initialState: {
                     name: existingRecipe.name, // MUST remain constant
+                    nameEn: existingRecipe.nameEn,
                     difficulty: body.difficulty, // TARGET difficulty
                     servings: existingRecipe.servings,
                     tags: existingRecipe.tags, // MUST remain constant

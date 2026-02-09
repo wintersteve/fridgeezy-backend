@@ -151,6 +151,7 @@ export const generateRecipe = createStreamHandler({
         // 5. Build initial state for stream
         const initialState: RecipeStreamInitialState = {
             name: suggestion.name,
+            nameEn: suggestion.nameEn,
             difficulty: suggestion.difficulty,
             servings: body.servings,
             tags: tagNames,

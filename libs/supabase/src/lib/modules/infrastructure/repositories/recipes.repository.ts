@@ -46,6 +46,7 @@ export class RecipesRepository implements IRecipesRepository {
                     ingredients: inst.ingredients || [],
                 })),
                 p_tags: recipe.tags || [],
+                p_name_en: recipe.nameEn ?? null,
             });
 
             if (error) {
@@ -114,6 +115,7 @@ export class RecipesRepository implements IRecipesRepository {
                         ingredient_ids: (inst as any).ingredientIds || [],
                     })),
                     p_tags: recipe.tags || [],
+                    p_name_en: recipe.nameEn ?? null,
                 }
             );
 

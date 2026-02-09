@@ -20,6 +20,7 @@ export const GenerateSuggestionRequestSchema = z.object({
  */
 export const GenerateSuggestionResponseSchema = z.object({
     name: z.string(),
+    name_en: z.string(),
     description: z.string().max(50),
     difficulty: z.enum(["easy", "medium", "hard"]),
     ingredients: z.array(z.string()),
@@ -49,6 +50,7 @@ export const SuggestionTagSchema = z.object({
 export const EnrichedSuggestionResponseSchema = z.object({
     id: z.uuid(),
     name: z.string(),
+    nameEn: z.string().nullable().optional(),
     description: z.string().max(50),
     difficulty: z.enum(["easy", "medium", "hard"]),
     ingredients: z.array(SuggestionIngredientSchema),

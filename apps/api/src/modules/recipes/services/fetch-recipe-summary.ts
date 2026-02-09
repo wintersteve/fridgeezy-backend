@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@fridgeezy/supabase";
 export interface RecipeSummary {
     id: string;
     name: string;
+    nameEn?: string | null;
     description: string;
     difficulty: "easy" | "medium" | "hard";
     ingredients: Array<{ id: string; name: string }>;
@@ -25,6 +26,7 @@ export async function fetchRecipeSummary(
             `
             id,
             name,
+            name_en,
             description,
             difficulty,
             recipe_ingredients (
@@ -51,6 +53,7 @@ export async function fetchRecipeSummary(
     return {
         id: recipe.id,
         name: recipe.name,
+        nameEn: recipe.name_en ?? null,
         description: recipe.description || "",
         difficulty: recipe.difficulty as "easy" | "medium" | "hard",
         ingredients: recipe.recipe_ingredients.map((ri) => ({

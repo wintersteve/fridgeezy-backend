@@ -35,7 +35,7 @@ export async function persistRecipe(
         } else {
             // Wait for image generation to complete
             try {
-                imageUrl = await generateAndUploadRecipeImage(recipe.name);
+                imageUrl = await generateAndUploadRecipeImage(recipe.name, recipe.nameEn);
 
                 // If image generation returns empty string, use default
                 if (!imageUrl) {
@@ -108,7 +108,7 @@ export async function persistRecipeWithIngredientIds(
         // Generate image
         let imageUrl: string;
         try {
-            imageUrl = await generateAndUploadRecipeImage(recipe.name);
+            imageUrl = await generateAndUploadRecipeImage(recipe.name, recipe.nameEn);
             if (!imageUrl) {
                 console.warn(
                     `Image generation returned empty URL for recipe: ${recipe.name}, using default`

@@ -18,6 +18,7 @@ export async function fetchEnrichedSuggestion(
             .select(`
                 id,
                 name,
+                name_en,
                 description,
                 difficulty,
                 recipe_suggestion_ingredients(
@@ -52,6 +53,7 @@ export async function fetchEnrichedSuggestion(
         const enriched: EnrichedSuggestionResponseDto = {
             id: data.id,
             name: data.name,
+            nameEn: data.name_en ?? null,
             description: data.description || "",
             difficulty: data.difficulty as "easy" | "medium" | "hard",
             ingredients: data.recipe_suggestion_ingredients

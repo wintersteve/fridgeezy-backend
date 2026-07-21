@@ -22,7 +22,7 @@ import { searchRecipes } from "./search-recipes";
 const ComposeRecipeSuggestionSchema = z.object({
     name: z.string(),
     name_en: z.string(),
-    description: z.string().max(100),
+    description: z.string().transform((s) => s.slice(0, 100)),
     difficulty: z.enum(["easy", "medium", "hard"]),
     course: z.string(),
     ingredients: z.array(z.string().min(1)),

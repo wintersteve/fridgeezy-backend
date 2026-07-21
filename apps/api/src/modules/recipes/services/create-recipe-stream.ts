@@ -69,7 +69,7 @@ export async function* createRecipeStream(
             // Generate and upload recipe image in parallel (don't await)
             // Skip if we're reusing an existing image (e.g., escalate-difficulty use case)
             if (!config.skipImageGeneration) {
-                generateAndUploadRecipeImage(config.initialState.name, config.initialState.nameEn).catch(
+                generateAndUploadRecipeImage(config.initialState.name).catch(
                     (error) => {
                         console.error("Image generation failed:", error);
                     }

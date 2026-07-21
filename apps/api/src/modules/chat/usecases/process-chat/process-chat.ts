@@ -102,6 +102,10 @@ export async function processChat(req: Request, res: Response): Promise<void> {
 
         let iteration = 0;
 
+        // Buffer suggestion/metadata events so they emit after content
+        const bufferedSuggestions: Array<any> = [];
+        let bufferedMetadata: any = null;
+
         while (continueLoop && iteration < maxIterations) {
             iteration++;
 
@@ -140,6 +144,9 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                         event.finish_reason === "tool_calls" &&
                         currentToolCalls
                     ) {
+                        // Snapshot messages before mutating for the parallel content call
+                        const contentMessages = [...messages];
+
                         // Add assistant message with tool calls to history
                         messages.push({
                             role: "assistant",
@@ -147,7 +154,7 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                             tool_calls: currentToolCalls,
                         });
 
-                        // Execute tool calls
+                        // Notify client about tool calls
                         writeSseEvent(res, {
                             type: "tool_calls",
                             data: {
@@ -158,47 +165,66 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                             },
                         });
 
-                        const toolResults = await handleToolCalls(
+                        // Run tool execution in background while we stream content
+                        const toolResultsPromise = handleToolCalls(
                             currentToolCalls,
                             mcpTools
                         );
 
-                        // Stream tool results to client as structured suggestions
+                        // Stream content in parallel (no tools — pure conversational response)
+                        const contentStream = createChatCompletion(
+                            contentMessages,
+                            [],
+                            {
+                                stream: request.stream,
+                                model: request.model,
+                                temperature: request.temperature,
+                            }
+                        );
+
+                        for await (const contentEvent of contentStream) {
+                            if (contentEvent.type === "chunk") {
+                                writeSseEvent(res, {
+                                    type: "content",
+                                    data: { delta: contentEvent.delta },
+                                });
+                            }
+                        }
+
+                        // Await tool results (may already be resolved)
+                        const toolResults = await toolResultsPromise;
+
+                        // Buffer suggestions from tool results
                         for (let i = 0; i < toolResults.length; i++) {
                             const toolResult = toolResults[i];
                             const toolCall = currentToolCalls[i];
 
-                            if (toolResult.role === "tool" && toolResult.content) {
+                            if (
+                                toolResult.role === "tool" &&
+                                toolResult.content
+                            ) {
                                 try {
-                                    // Parse the tool result content
                                     const parsedResult = JSON.parse(
                                         toolResult.content
                                     );
 
-                                    // If this is a recipe suggestions tool, send as structured suggestions
                                     if (
                                         toolCall?.function.name ===
                                             "GET_RECIPE_SUGGESTIONS" &&
                                         parsedResult.suggestions
                                     ) {
-                                        // Send each suggestion as a structured event
                                         for (const suggestion of parsedResult.suggestions) {
-                                            writeSseEvent(res, {
-                                                type: "suggestion",
-                                                data: suggestion,
-                                            });
+                                            bufferedSuggestions.push(
+                                                suggestion
+                                            );
                                         }
 
-                                        // Optionally send metadata
                                         if (parsedResult.searchMetadata) {
-                                            writeSseEvent(res, {
-                                                type: "metadata",
-                                                data: parsedResult.searchMetadata,
-                                            });
+                                            bufferedMetadata =
+                                                parsedResult.searchMetadata;
                                         }
                                     }
                                 } catch {
-                                    // Parsing failed, skip
                                     console.warn(
                                         "[ProcessChat] Failed to parse tool result"
                                     );
@@ -206,11 +232,44 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                             }
                         }
 
-                        // Add tool results to messages
-                        messages.push(...toolResults);
-                    } else {
-                        // No more tool calls, we're done
+                        // Done — no further iterations needed
                         continueLoop = false;
+
+                        // Flush buffered suggestions/metadata after content
+                        for (const suggestion of bufferedSuggestions) {
+                            writeSseEvent(res, {
+                                type: "suggestion",
+                                data: suggestion,
+                            });
+                        }
+                        if (bufferedMetadata) {
+                            writeSseEvent(res, {
+                                type: "metadata",
+                                data: bufferedMetadata,
+                            });
+                        }
+
+                        writeSseEvent(res, {
+                            type: "done",
+                            data: { finish_reason: "stop" },
+                        });
+                    } else {
+                        // No tool calls — we're done
+                        continueLoop = false;
+
+                        // Flush buffered suggestions/metadata after content
+                        for (const suggestion of bufferedSuggestions) {
+                            writeSseEvent(res, {
+                                type: "suggestion",
+                                data: suggestion,
+                            });
+                        }
+                        if (bufferedMetadata) {
+                            writeSseEvent(res, {
+                                type: "metadata",
+                                data: bufferedMetadata,
+                            });
+                        }
 
                         writeSseEvent(res, {
                             type: "done",

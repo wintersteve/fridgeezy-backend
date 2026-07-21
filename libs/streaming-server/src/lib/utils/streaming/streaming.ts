@@ -69,42 +69,68 @@ export async function* processJsonlStream<T extends z.ZodType[]>(
             const trimmed = line.trim();
             if (!trimmed) continue;
 
+            // Skip markdown fence lines LLMs occasionally emit
+            if (trimmed.startsWith("```")) continue;
+
             try {
                 const parsed = JSON.parse(trimmed);
 
                 // Try to match against one of the schemas
+                let matched = false;
                 for (let i = 0; i < schemas.length; i++) {
                     try {
                         const validated = schemas[i].parse(parsed);
                         yield { parsed: validated, schemaIndex: i };
+                        matched = true;
                         break; // Found matching schema, stop trying
                     } catch {
                         // Try next schema
                         continue;
                     }
                 }
+                if (!matched) {
+                    console.warn(
+                        "[processJsonlStream] Parsed JSON matched no schema:",
+                        JSON.stringify(parsed).slice(0, 200)
+                    );
+                }
             } catch {
-                // Skip malformed JSON
+                console.warn(
+                    "[processJsonlStream] Failed to parse JSON line:",
+                    trimmed.slice(0, 200)
+                );
             }
         }
     }
 
     // Process remaining buffer content
-    if (buffer.trim()) {
+    const remaining = buffer.trim();
+    if (remaining && !remaining.startsWith("```")) {
         try {
-            const parsed = JSON.parse(buffer.trim());
+            const parsed = JSON.parse(remaining);
 
+            let matched = false;
             for (let i = 0; i < schemas.length; i++) {
                 try {
                     const validated = schemas[i].parse(parsed);
                     yield { parsed: validated, schemaIndex: i };
+                    matched = true;
                     break;
                 } catch {
                     continue;
                 }
             }
+            if (!matched) {
+                console.warn(
+                    "[processJsonlStream] Remaining buffer matched no schema:",
+                    JSON.stringify(parsed).slice(0, 200)
+                );
+            }
         } catch {
-            // Skip malformed content
+            console.warn(
+                "[processJsonlStream] Failed to parse remaining buffer:",
+                remaining.slice(0, 200)
+            );
         }
     }
 }

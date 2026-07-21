@@ -22,7 +22,8 @@ export async function generateImage(
 ): Promise<GeneratedImage> {
     const {
         prompt,
-        model = "gemini-2.5-flash-image", // Or "gemini-3-pro-image-preview"
+        model = "gemini-3-pro-image-preview",
+        aspectRatio,
     } = options;
 
     try {
@@ -30,8 +31,12 @@ export async function generateImage(
         const response = await genai.models.generateContent({
             model,
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            // For these models, specific config like aspectRatio is
-            // often passed in the prompt or specific generationConfig
+            config: {
+                responseModalities: ["IMAGE"],
+                imageConfig: {
+                    ...(aspectRatio && { aspectRatio }),
+                },
+            },
         });
 
         const candidate = response.candidates?.[0];

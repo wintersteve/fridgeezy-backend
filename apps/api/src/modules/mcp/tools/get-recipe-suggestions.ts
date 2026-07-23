@@ -1,6 +1,18 @@
 import { z } from "zod/v4";
 
-import { searchRecipeSuggestions } from "../../recipes/services/search-recipe-suggestions";
+import {
+    searchRecipeSuggestions,
+    type SearchRecipeSuggestionsOptions,
+} from "../../recipes/services/search-recipe-suggestions";
+
+/**
+ * Optional per-call context threaded through the chat tool-execution path so
+ * the tool can stream partial suggestions out as it generates them. Ignored by
+ * the plain MCP SDK invocation, which calls the handler with args only.
+ */
+export interface RecipeSuggestionToolContext {
+    onPartialSuggestion?: SearchRecipeSuggestionsOptions["onPartialSuggestion"];
+}
 
 /**
  * Input schema for GET_RECIPE_SUGGESTIONS tool
@@ -25,6 +37,18 @@ export const RecipeSuggestionInputSchema = z.object({
         .default(3)
         .optional()
         .describe("Maximum number of results to return"),
+    dietaryRestrictions: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "Dietary tags every generated suggestion must satisfy (e.g. 'vegan', 'gluten_free')"
+        ),
+    blacklist: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "Ingredients to never suggest (allergies/dislikes); recipes normally containing them are excluded"
+        ),
 });
 
 /**
@@ -70,9 +94,12 @@ export type RecipeSuggestionOutput = z.infer<
  * Returns MCP-compliant response with content array
  */
 export async function getRecipeSuggestionsHandler(
-    input: RecipeSuggestionInput
+    input: RecipeSuggestionInput,
+    context: RecipeSuggestionToolContext = {}
 ): Promise<{ content: Array<{ type: "text"; text: string }> }> {
-    const result = await searchRecipeSuggestions(input);
+    const result = await searchRecipeSuggestions(input, {
+        onPartialSuggestion: context.onPartialSuggestion,
+    });
 
     // MCP SDK requires content array format
     return {

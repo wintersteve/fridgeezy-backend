@@ -25,11 +25,13 @@ export function createMcpServer(): McpServer {
     //     "substitute_ingredients",
     // ];
 
-    // Register GET_RECIPE_SUGGESTIONS tool
+    // Register GET_RECIPE_SUGGESTIONS tool. Wrap the handler so the SDK's
+    // `extra` argument isn't mistaken for our optional streaming context — the
+    // MCP path never streams partials.
     server.registerTool(
         getRecipeSuggestionsTool.name,
         getRecipeSuggestionsTool.definition,
-        getRecipeSuggestionsTool.handler
+        (args) => getRecipeSuggestionsTool.handler(args)
     );
 
     // server.registerTool(

@@ -6,20 +6,23 @@ import {
     GenerateSuggestionResponseSchema,
 } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
-import { SuggestionsRepository } from "@fridgeezy/supabase";
 import { castArray } from "@fridgeezy/toolkit";
 import type OpenAI from "openai";
 
-import { fetchEnrichedSuggestion } from "./fetch-enriched-suggestion";
-import { persistSuggestion } from "./persist-suggestion";
+import { persistOrReuseSuggestion } from "./persist-or-reuse-suggestion";
 
-const SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly 5 authentic, real-world recipe suggestions based on the provided ingredients.
+const SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly 5 authentic, real-world recipe suggestions based on the user's request.
+
+The "Ingredients" line below may list literal ingredients, but it may ALSO be a dish name (e.g. "sandwich", "carbonara"), a meal or course concept (e.g. "breakfast", "quick dinner", "random recipe"), or a cuisine. Interpret it flexibly:
+- Literal ingredients -> real dishes that prominently feature them.
+- A dish name -> authentic variations of that dish (classic and regional versions).
+- A meal/course or cuisine concept -> a varied set of authentic dishes that fit it.
 
 ## Rules
 - AUTHENTICITY IS PARAMOUNT: Only suggest real, well-documented recipes that exist in culinary traditions.
 - Each recipe MUST be a genuine dish with its authentic name (e.g., Murgh Makhani, NOT "Indian Tomato Butter Chicken"). Do NOT add alternative names in parenthesis.
 - Include ALL essential ingredients that define the dish. Never omit core ingredients that make the recipe authentic.
-- If a combination is not authentic (e.g., rosemary in Thai cuisine), do NOT invent dishes. Generate an empty array instead! VERY IMPORTANT!
+- Only return an empty array when the request genuinely cannot be satisfied authentically — a truly incompatible INGREDIENT combination (e.g., rosemary in Thai cuisine) or nonsensical input. A real dish name, cuisine, or meal/course concept is ALWAYS satisfiable, so NEVER return an empty array for those.
 - Do NOT include recipes where a blacklisted item is normally present.
 
 ## Difficulty Levels
@@ -81,75 +84,13 @@ export async function* generateSuggestionsStream(
         stream: true,
     });
 
-    const suggestionsRepo = new SuggestionsRepository();
-
     // Process JSONL stream with validation
     for await (const { parsed } of processJsonlStream(stream, [
         GenerateSuggestionResponseSchema,
     ])) {
-        console.log(parsed);
         const suggestion = parsed as GenerateSuggestionResponseDto;
 
-        // Check if a similar suggestion already exists (similarity threshold: 0.95)
-        const searchResult = await suggestionsRepo.searchSimilar(
-            suggestion.name,
-            0.95,
-            1
-        );
-
-        if (!searchResult.success) {
-            console.error(
-                `[Suggestions] Failed to search similar suggestions for "${suggestion.name}":`,
-                searchResult.error
-            );
-            // Continue with persistence if search fails
-        } else if (searchResult.value.length > 0) {
-            // Similar suggestion exists, fetch enriched data and yield it
-            const existingSuggestion = searchResult.value[0];
-            console.log(
-                `[Suggestions] Found similar suggestion: ${existingSuggestion.name} (score: ${existingSuggestion.score.toFixed(3)}) - reusing instead of creating duplicate`
-            );
-
-            const enrichedResult = await fetchEnrichedSuggestion(
-                existingSuggestion.id
-            );
-
-            if (enrichedResult.success) {
-                yield enrichedResult.value;
-                continue;
-            } else {
-                console.error(
-                    `[Suggestions] Failed to fetch enriched suggestion ${existingSuggestion.id}:`,
-                    enrichedResult.error
-                );
-                // Fall through to create new suggestion
-            }
-        }
-
-        // No similar suggestion found or fetch failed, persist new suggestion
-        const persistResult = await persistSuggestion(suggestion, {
-            cuisineTag: request.cuisine,
-            nameEn: suggestion.name_en,
-        });
-
-        if (!persistResult.success) {
-            console.error(
-                `[Suggestions] Failed to persist: ${suggestion.name}`,
-                persistResult.error
-            );
-            // Skip this suggestion if persistence fails
-            continue;
-        }
-
-        // Yield to client with enriched ingredient and tag data (id + name)
-        yield {
-            id: persistResult.value.suggestionId,
-            name: suggestion.name,
-            nameEn: suggestion.name_en,
-            description: suggestion.description,
-            difficulty: suggestion.difficulty,
-            ingredients: persistResult.value.ingredients,
-            tags: persistResult.value.tags,
-        };
+        const enriched = await persistOrReuseSuggestion(suggestion, request);
+        if (enriched) yield enriched;
     }
 }

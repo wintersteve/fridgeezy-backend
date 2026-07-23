@@ -18,7 +18,10 @@ export const IngredientSchema = z.object({
     type: z.literal("ingredient"),
     name: z.string(),
     category: z.string(), // Required for streaming display - but ignored during persistence
-    parent: z.string().nullable(),
+    // Optional: the model routinely omits this, and a missing key was making the
+    // WHOLE ingredient fail validation (nullable still requires the key present),
+    // so every ingredient was being dropped from the recipe.
+    parent: z.string().nullable().optional(),
     quantity: z.number(),
     unit: z.string(),
     comment: z.string().optional(),

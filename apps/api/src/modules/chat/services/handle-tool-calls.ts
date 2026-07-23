@@ -1,7 +1,7 @@
 import type { ChatMessage, ToolCall } from "@fridgeezy/schemas";
 
 interface McpToolHandler {
-    handler: (input: any) => Promise<any>;
+    handler: (input: any, context?: any) => Promise<any>;
 }
 
 interface McpTools {
@@ -9,11 +9,20 @@ interface McpTools {
 }
 
 /**
+ * Optional per-tool context passed through to handlers as a second argument —
+ * e.g. streaming callbacks. Keyed by tool name; a tool that doesn't recognise
+ * its context simply ignores the extra argument.
+ */
+export type ToolCallContext = Record<string, unknown>;
+
+/**
  * Execute a single tool call and return the result as a tool message
  */
 async function handleSingleToolCall(
     toolCall: ToolCall,
-    mcpTools: McpTools
+    mcpTools: McpTools,
+    argOverrides: Record<string, Record<string, unknown>> = {},
+    toolContext: Record<string, ToolCallContext> = {}
 ): Promise<ChatMessage> {
     const tool = mcpTools[toolCall.function.name];
 
@@ -28,8 +37,14 @@ async function handleSingleToolCall(
     }
 
     try {
-        const args = JSON.parse(toolCall.function.arguments);
-        const mcpResult = await tool.handler(args);
+        const args = {
+            ...JSON.parse(toolCall.function.arguments),
+            ...argOverrides[toolCall.function.name],
+        };
+        const mcpResult = await tool.handler(
+            args,
+            toolContext[toolCall.function.name]
+        );
 
         // MCP tools return { content: [{ type: "text", text: "..." }] }
         // Extract the text content
@@ -69,10 +84,19 @@ async function handleSingleToolCall(
  */
 export async function handleToolCalls(
     toolCalls: ToolCall[],
-    mcpTools: McpTools
+    mcpTools: McpTools,
+    argOverrides: Record<string, Record<string, unknown>> = {},
+    toolContext: Record<string, ToolCallContext> = {}
 ): Promise<ChatMessage[]> {
     const results = await Promise.all(
-        toolCalls.map((toolCall) => handleSingleToolCall(toolCall, mcpTools))
+        toolCalls.map((toolCall) =>
+            handleSingleToolCall(
+                toolCall,
+                mcpTools,
+                argOverrides,
+                toolContext
+            )
+        )
     );
 
     return results;

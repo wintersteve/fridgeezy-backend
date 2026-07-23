@@ -1,5 +1,8 @@
+import { randomUUID } from "node:crypto";
+
 import { findSuggestionByName } from "../../suggestions/services/find-suggestion-by-name";
 import { generateSuggestionsStream } from "../../suggestions/services/generate-suggestions-stream";
+import { streamSingleSuggestion } from "../../suggestions/services/stream-single-suggestion";
 
 import { fetchRecipeSummary } from "./fetch-recipe-summary";
 import { searchRecipes } from "./search-recipes";
@@ -8,6 +11,10 @@ export interface RecipeSuggestionInput {
     query: string;
     matchThreshold?: number;
     maxResults?: number;
+    /** Dietary tags any generated suggestion must satisfy. */
+    dietaryRestrictions?: string[];
+    /** Ingredients to never suggest (allergies/dislikes). */
+    blacklist?: string[];
 }
 
 export interface RecipeSuggestionItem {
@@ -19,6 +26,38 @@ export interface RecipeSuggestionItem {
     matchScore?: number;
     ingredients: Array<{ id: string; name: string }>;
     tags: Array<{ id: string; name: string }>;
+    /**
+     * Present only for LLM-generated suggestions: correlates this (enriched)
+     * item with the partial that was emitted via `onPartialSuggestion` before
+     * persistence, so a streaming caller can upgrade the card in place.
+     */
+    tempId?: string;
+}
+
+/**
+ * A generated suggestion streaming in field-by-field, before persistence — no
+ * ids, raw string ingredients/tags. Emitted repeatedly (cumulatively) via
+ * `onPartialSuggestion` as each field lands, so a caller can reveal the card
+ * one field at a time. `name` is always present (it streams first); everything
+ * else fills in over subsequent frames. The final enriched item shares `tempId`.
+ */
+export interface PartialRecipeSuggestion {
+    tempId: string;
+    source: "new_suggestion";
+    name: string;
+    description?: string;
+    difficulty?: "easy" | "medium" | "hard";
+    ingredients?: string[];
+    tags?: string[];
+}
+
+export interface SearchRecipeSuggestionsOptions {
+    /**
+     * Present for streaming callers (chat). When set, stage 3 generates a SINGLE
+     * suggestion and streams its fields out through this callback as they land;
+     * when absent, stage 3 falls back to the multi-suggestion JSONL generator.
+     */
+    onPartialSuggestion?: (partial: PartialRecipeSuggestion) => void;
 }
 
 export interface SearchMetadata {
@@ -42,9 +81,17 @@ export interface RecipeSuggestionResult {
  * @returns Suggestions with metadata about search results
  */
 export async function searchRecipeSuggestions(
-    input: RecipeSuggestionInput
+    input: RecipeSuggestionInput,
+    options: SearchRecipeSuggestionsOptions = {}
 ): Promise<RecipeSuggestionResult> {
-    const { query, matchThreshold = 0.75, maxResults = 5 } = input;
+    const {
+        query,
+        matchThreshold = 0.75,
+        maxResults = 5,
+        dietaryRestrictions,
+        blacklist,
+    } = input;
+    const { onPartialSuggestion } = options;
 
     const suggestions: RecipeSuggestionItem[] = [];
     const metadata: SearchMetadata = {
@@ -129,36 +176,83 @@ export async function searchRecipeSuggestions(
         );
 
         try {
-            // Use the suggestion generation stream to create enriched suggestions
-            // The query is treated as a general recipe concept/ingredient
-            const stream = generateSuggestionsStream({
-                ingredients: [query],
-            });
+            if (onPartialSuggestion) {
+                // Streaming caller (chat): generate ONE suggestion and stream
+                // its fields out — title first, then description, etc. — sharing
+                // a tempId so the enriched item below upgrades the same card.
+                const tempId = randomUUID();
 
-            // Consume the stream and collect up to maxResults suggestions
-            let generatedCount = 0;
-            for await (const suggestion of stream) {
-                if (generatedCount >= maxResults) {
-                    break;
+                const enriched = await streamSingleSuggestion(
+                    { ingredients: [query], dietaryRestrictions, blacklist },
+                    {
+                        onField: (fields) => {
+                            // `name` streams first; hold the frame until it lands
+                            // so the card never renders without a title.
+                            if (!fields.name) return;
+                            onPartialSuggestion({
+                                tempId,
+                                source: "new_suggestion",
+                                name: fields.name,
+                                description: fields.description,
+                                difficulty: fields.difficulty,
+                                ingredients: fields.ingredients,
+                                tags: fields.tags,
+                            });
+                        },
+                    }
+                );
+
+                if (enriched) {
+                    suggestions.push({
+                        id: enriched.id,
+                        name: enriched.name,
+                        description: enriched.description,
+                        difficulty: enriched.difficulty,
+                        source: "new_suggestion",
+                        tempId,
+                        ingredients: enriched.ingredients.map((ing) => ({
+                            id: ing.id,
+                            name: ing.name,
+                        })),
+                        tags: enriched.tags.map((tag) => ({
+                            id: tag.id,
+                            name: tag.name,
+                        })),
+                    });
+                    metadata.newSuggestionsCreated++;
                 }
-
-                suggestions.push({
-                    id: suggestion.id,
-                    name: suggestion.name,
-                    description: suggestion.description,
-                    difficulty: suggestion.difficulty,
-                    source: "new_suggestion",
-                    ingredients: suggestion.ingredients.map((ing) => ({
-                        id: ing.id,
-                        name: ing.name,
-                    })),
-                    tags: suggestion.tags.map((tag) => ({
-                        id: tag.id,
-                        name: tag.name,
-                    })),
+            } else {
+                // Non-streaming caller: keep the multi-suggestion JSONL generator.
+                let generatedCount = 0;
+                const stream = generateSuggestionsStream({
+                    ingredients: [query],
+                    dietaryRestrictions,
+                    blacklist,
                 });
-                metadata.newSuggestionsCreated++;
-                generatedCount++;
+
+                for await (const suggestion of stream) {
+                    if (generatedCount >= maxResults) {
+                        break;
+                    }
+
+                    suggestions.push({
+                        id: suggestion.id,
+                        name: suggestion.name,
+                        description: suggestion.description,
+                        difficulty: suggestion.difficulty,
+                        source: "new_suggestion",
+                        ingredients: suggestion.ingredients.map((ing) => ({
+                            id: ing.id,
+                            name: ing.name,
+                        })),
+                        tags: suggestion.tags.map((tag) => ({
+                            id: tag.id,
+                            name: tag.name,
+                        })),
+                    });
+                    metadata.newSuggestionsCreated++;
+                    generatedCount++;
+                }
             }
         } catch (error) {
             console.error(

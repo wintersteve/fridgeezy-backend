@@ -17,14 +17,20 @@ export interface GeneratedImage {
     mimeType: string;
 }
 
+/**
+ * Default image model. Flash is markedly cheaper and faster than the Pro
+ * preview and is plenty for the stylised recipe illustrations we generate.
+ * Override with GENAI_IMAGE_MODEL (e.g. "gemini-3-pro-image-preview") to A/B
+ * quality without a code change.
+ */
+const DEFAULT_IMAGE_MODEL: NonNullable<GenerateImageOptions["model"]> =
+    (process.env.GENAI_IMAGE_MODEL as GenerateImageOptions["model"]) ??
+    "gemini-2.5-flash-image";
+
 export async function generateImage(
     options: GenerateImageOptions
 ): Promise<GeneratedImage> {
-    const {
-        prompt,
-        model = "gemini-3-pro-image-preview",
-        aspectRatio,
-    } = options;
+    const { prompt, model = DEFAULT_IMAGE_MODEL, aspectRatio } = options;
 
     try {
         // Use generateContent instead of generateImages for Nano Banana models

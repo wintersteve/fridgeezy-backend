@@ -36,6 +36,16 @@ export const ChatRequestSchema = z.object({
     stream: z.boolean().default(true),
     model: z.string().default("gpt-4o"),
     temperature: z.number().min(0).max(2).default(0.7).optional(),
+    /**
+     * The user's dietary tags (e.g. "vegan", "gluten_free"). Applied to any
+     * recipe suggestions generated this turn so they respect the user's diet.
+     */
+    dietaryRestrictions: z.array(z.string()).optional(),
+    /**
+     * Ingredients the user never wants suggested (allergies / dislikes).
+     * Recipes that normally contain any of these are excluded.
+     */
+    blacklist: z.array(z.string()).optional(),
 });
 
 /**

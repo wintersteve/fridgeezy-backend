@@ -47,6 +47,44 @@ export function endSseStream(res: ServerResponse): void {
  * @param schemas - Array of Zod schemas to validate against
  * @yields Objects with `parsed` (validated data) and `schemaIndex` (which schema matched)
  */
+/**
+ * Validate one already-parsed JSON value against the schemas and yield matches.
+ *
+ * The model is asked for JSONL (one object per line) but occasionally wraps its
+ * output in a JSON array — and is explicitly instructed to emit an empty array
+ * (`[]`) to signal "no authentic dishes". So accept both shapes: flatten an
+ * array and validate each element, which lets `[]` yield nothing quietly and a
+ * `[{...},{...}]` payload be parsed instead of dropped as "matched no schema".
+ */
+function* validateParsed<T extends z.ZodType[]>(
+    parsed: unknown,
+    schemas: T,
+    context: string
+): Generator<{ parsed: any; schemaIndex: number }> {
+    const items = Array.isArray(parsed) ? parsed : [parsed];
+
+    for (const item of items) {
+        let matched = false;
+        for (let i = 0; i < schemas.length; i++) {
+            try {
+                const validated = schemas[i].parse(item);
+                yield { parsed: validated, schemaIndex: i };
+                matched = true;
+                break; // Found matching schema, stop trying
+            } catch {
+                // Try next schema
+                continue;
+            }
+        }
+        if (!matched) {
+            console.warn(
+                `[processJsonlStream] ${context} matched no schema:`,
+                JSON.stringify(item).slice(0, 200)
+            );
+        }
+    }
+}
+
 export async function* processJsonlStream<T extends z.ZodType[]>(
     stream: AsyncIterable<{
         choices: Array<{ delta?: { content?: string | null } }>;
@@ -73,27 +111,11 @@ export async function* processJsonlStream<T extends z.ZodType[]>(
             if (trimmed.startsWith("```")) continue;
 
             try {
-                const parsed = JSON.parse(trimmed);
-
-                // Try to match against one of the schemas
-                let matched = false;
-                for (let i = 0; i < schemas.length; i++) {
-                    try {
-                        const validated = schemas[i].parse(parsed);
-                        yield { parsed: validated, schemaIndex: i };
-                        matched = true;
-                        break; // Found matching schema, stop trying
-                    } catch {
-                        // Try next schema
-                        continue;
-                    }
-                }
-                if (!matched) {
-                    console.warn(
-                        "[processJsonlStream] Parsed JSON matched no schema:",
-                        JSON.stringify(parsed).slice(0, 200)
-                    );
-                }
+                yield* validateParsed(
+                    JSON.parse(trimmed),
+                    schemas,
+                    "Parsed JSON"
+                );
             } catch {
                 console.warn(
                     "[processJsonlStream] Failed to parse JSON line:",
@@ -107,25 +129,11 @@ export async function* processJsonlStream<T extends z.ZodType[]>(
     const remaining = buffer.trim();
     if (remaining && !remaining.startsWith("```")) {
         try {
-            const parsed = JSON.parse(remaining);
-
-            let matched = false;
-            for (let i = 0; i < schemas.length; i++) {
-                try {
-                    const validated = schemas[i].parse(parsed);
-                    yield { parsed: validated, schemaIndex: i };
-                    matched = true;
-                    break;
-                } catch {
-                    continue;
-                }
-            }
-            if (!matched) {
-                console.warn(
-                    "[processJsonlStream] Remaining buffer matched no schema:",
-                    JSON.stringify(parsed).slice(0, 200)
-                );
-            }
+            yield* validateParsed(
+                JSON.parse(remaining),
+                schemas,
+                "Remaining buffer"
+            );
         } catch {
             console.warn(
                 "[processJsonlStream] Failed to parse remaining buffer:",

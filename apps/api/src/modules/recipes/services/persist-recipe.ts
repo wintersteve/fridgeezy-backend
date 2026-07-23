@@ -3,7 +3,10 @@ import { generateEmbedding } from "@fridgeezy/openai";
 import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
 import { RecipesRepository, UnitsRepository } from "@fridgeezy/supabase";
 
-import { generateAndUploadRecipeImage } from "./create-recipe-image";
+import {
+    generateAndUploadRecipeImage,
+    getRecipeImagePublicUrl,
+} from "./create-recipe-image";
 
 const DEFAULT_IMAGE_URL = "";
 const unitsRepository = new UnitsRepository();
@@ -105,23 +108,11 @@ export async function persistRecipeWithIngredientIds(
     recipe: GenerateRecipeResponseDto
 ): Promise<Result<string, PersistenceError>> {
     try {
-        // Generate image
-        let imageUrl: string;
-        try {
-            imageUrl = await generateAndUploadRecipeImage(recipe.name);
-            if (!imageUrl) {
-                console.warn(
-                    `Image generation returned empty URL for recipe: ${recipe.name}, using default`
-                );
-                imageUrl = DEFAULT_IMAGE_URL;
-            }
-        } catch (error) {
-            console.error(
-                "Image generation failed, using default:",
-                error instanceof Error ? error.message : error
-            );
-            imageUrl = DEFAULT_IMAGE_URL;
-        }
+        // The recipe stream already kicked off image generation (fire-and-forget)
+        // for this exact name, and it lands at a deterministic path. Use that URL
+        // now instead of generating a SECOND time and blocking the save on the
+        // (slow, costly) image model — the async upload backfills the file.
+        const imageUrl = getRecipeImagePublicUrl(recipe.name);
 
         // Resolve unit strings to valid abbreviations before persisting
         for (const ingredient of recipe.ingredients) {

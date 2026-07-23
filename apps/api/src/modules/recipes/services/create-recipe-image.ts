@@ -14,6 +14,22 @@ const normalizeFileName = (name: string): string => {
         .replace(/^_+|_+$/g, ""); // Trim leading/trailing underscores
 };
 
+// A recipe's image always lives at this single, deterministic path (one
+// extension), so its public URL can be computed from the name alone \u2014 no
+// storage lookup, and no need to await generation before knowing the URL.
+const imageStoragePath = (name: string): string =>
+    `${normalizeFileName(name)}.png`;
+
+/**
+ * The deterministic public URL a recipe's image will live at, derived purely
+ * from its name. Valid to store BEFORE generation finishes uploading \u2014 the URL
+ * resolves once the (async) upload lands. Lets persistence set `image_url`
+ * without blocking on, or re-triggering, image generation.
+ */
+export const getRecipeImagePublicUrl = (name: string): string =>
+    supabaseAdmin.storage.from("recipes").getPublicUrl(imageStoragePath(name))
+        .data.publicUrl;
+
 const buildPrompt = (
     name: string
 ) => `An illustrated, bird's-eye (top-down) view of ${name}, presented simply and elegantly in its most natural serving vessel — whether that's a plate, bowl, jar, glass, or any other appropriate container for this type of food.
@@ -38,21 +54,15 @@ export async function generateAndUploadRecipeImage(
     name: string
 ): Promise<string> {
     try {
-        const normalizedName = normalizeFileName(name);
+        const filePath = imageStoragePath(name);
 
-        // Check if image already exists (try both extensions)
-        for (const ext of ["png", "jpg"]) {
-            const existingPath = `${normalizedName}.${ext}`;
-            const { data: existingFile } = await supabaseAdmin.storage
-                .from("recipes")
-                .list("", { search: existingPath });
+        // Reuse an existing image for this dish name if we already have one.
+        const { data: existingFile } = await supabaseAdmin.storage
+            .from("recipes")
+            .list("", { search: filePath });
 
-            if (existingFile?.some((file) => file.name === existingPath)) {
-                const { data } = supabaseAdmin.storage
-                    .from("recipes")
-                    .getPublicUrl(existingPath);
-                return data.publicUrl;
-            }
+        if (existingFile?.some((file) => file.name === filePath)) {
+            return getRecipeImagePublicUrl(name);
         }
 
         const { base64Data, mimeType } = await generateImage({
@@ -69,12 +79,8 @@ export async function generateAndUploadRecipeImage(
         // Convert base64 to buffer
         const buffer = Buffer.from(base64Data, "base64");
 
-        // Determine file extension based on mime type
-        const extension = mimeType === "image/jpeg" ? "jpg" : "png";
-        const fileName = `${normalizedName}.${extension}`;
-        const filePath = `${fileName}`;
-
-        // Upload to Supabase storage
+        // Always store at the single deterministic path (the content type still
+        // reflects the real bytes, which is what clients render by).
         const { error } = await supabaseAdmin.storage
             .from("recipes")
             .upload(filePath, buffer, {
@@ -87,12 +93,7 @@ export async function generateAndUploadRecipeImage(
             return ""; // Return empty string on upload error
         }
 
-        // Get public URL
-        const { data } = supabaseAdmin.storage
-            .from("recipes")
-            .getPublicUrl(filePath);
-
-        return data.publicUrl;
+        return getRecipeImagePublicUrl(name);
     } catch (error) {
         console.error("Failed to generate and upload recipe image:", error);
         return ""; // Return empty string on error

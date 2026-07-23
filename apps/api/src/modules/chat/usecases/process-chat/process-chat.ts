@@ -2,6 +2,7 @@ import { ChatRequestSchema } from "@fridgeezy/schemas";
 import type { Request, Response } from "express";
 
 import { getRecipeSuggestionsTool } from "../../../mcp/tools";
+import type { PartialRecipeSuggestion } from "../../../recipes/services/search-recipe-suggestions";
 import {
     convertMcpToolsToOpenAiTools,
     createChatCompletion,
@@ -168,7 +169,37 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                         // Run tool execution in background while we stream content
                         const toolResultsPromise = handleToolCalls(
                             currentToolCalls,
-                            mcpTools
+                            mcpTools,
+                            // Chat only surfaces a single suggestion; other
+                            // callers keep the service default of 5. Forward the
+                            // user's diet/allergies so generated suggestions
+                            // respect them regardless of what the model asked for.
+                            {
+                                GET_RECIPE_SUGGESTIONS: {
+                                    maxResults: 1,
+                                    dietaryRestrictions:
+                                        request.dietaryRestrictions,
+                                    blacklist: request.blacklist,
+                                },
+                            },
+                            {
+                                // Emit each generated suggestion as an early,
+                                // id-less `suggestion` frame the moment the LLM
+                                // finishes it — before the (slow) persistence —
+                                // so the card renders immediately. The enriched
+                                // frame flushed below carries the same `tempId`,
+                                // letting the client upgrade the card in place.
+                                GET_RECIPE_SUGGESTIONS: {
+                                    onPartialSuggestion: (
+                                        partial: PartialRecipeSuggestion
+                                    ) => {
+                                        writeSseEvent(res, {
+                                            type: "suggestion",
+                                            data: partial,
+                                        });
+                                    },
+                                },
+                            }
                         );
 
                         // Stream content in parallel (no tools — pure conversational response)

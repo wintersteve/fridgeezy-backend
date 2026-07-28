@@ -73,7 +73,7 @@ export class TagsRepository implements ITagsRepository {
     }
 
     async vectorSearch(
-        query: string,
+        embedding: number[],
         threshold: number
     ): Promise<Result<TagVectorMatch | null, DomainError>> {
         try {
@@ -84,10 +84,13 @@ export class TagsRepository implements ITagsRepository {
                 "course",
             ] as const;
 
+            // Convert embedding array to the format Supabase expects (JSON string)
+            const queryEmbedding = JSON.stringify(embedding);
+
             // Search all tag types in parallel
             const searchPromises = tagTypes.map((type) =>
                 supabase.rpc("search_tags", {
-                    search_query: query,
+                    query_embedding: queryEmbedding,
                     match_type: type,
                     match_threshold: threshold,
                     match_count: 1,

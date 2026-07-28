@@ -1340,7 +1340,7 @@ export type Database = {
           match_count?: number
           match_threshold?: number
           match_type: Database["public"]["Enums"]["tag_type"]
-          search_query: string
+          query_embedding: string
         }
         Returns: {
           canonical_id: string

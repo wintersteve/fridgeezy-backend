@@ -117,6 +117,20 @@ export async function matchIngredients(
                             matchType: "vector",
                             confidence: vectorMatch.similarity,
                         });
+
+                        // Learn the surface name as an alias so the next
+                        // occurrence resolves via the O(1) alias step instead of
+                        // a fresh embedding + vector search. Best-effort.
+                        const aliasResult = await ingredientsRepo.addAlias(
+                            vectorMatch.ingredient.id,
+                            name
+                        );
+                        if (!aliasResult.success) {
+                            console.error(
+                                `Failed to learn alias "${name}":`,
+                                aliasResult.error
+                            );
+                        }
                     } else {
                         toCreate.push({ name, embedding });
                     }

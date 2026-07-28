@@ -2,6 +2,17 @@ import { failure, PersistenceError, Result, success } from "@fridgeezy/domain";
 import { generateEmbedding } from "@fridgeezy/openai";
 import { CategoriesRepository, IngredientsRepository } from "@fridgeezy/supabase";
 
+import { adjudicateIngredient } from "./adjudicate-ingredient";
+
+/** Cosine similarity at or above which a vector match is auto-accepted. */
+const ACCEPT_THRESHOLD = 0.85;
+/**
+ * Lower bound of the "gray band". Candidates in [GRAY_BAND_THRESHOLD,
+ * ACCEPT_THRESHOLD) are handed to the LLM to decide same / new / invalid;
+ * anything below is treated as no candidate.
+ */
+const GRAY_BAND_THRESHOLD = 0.7;
+
 export interface IngredientMatch {
     originalName: string;
     ingredientId: string;
@@ -87,91 +98,104 @@ export async function matchIngredients(
             unmatchedOriginalNames = unmatchedOriginalNames.filter((name) => !aliasMatches.has(name));
         }
 
-        // Step 3: Vector search (one at a time with embeddings).
-        // Carry each miss's embedding forward so Step 4 can reuse it instead of
-        // regenerating the same vector for the same name.
-        const toCreate: Array<{ name: string; embedding?: number[] }> = [];
-        if (unmatchedOriginalNames.length > 0) {
-            for (const name of unmatchedOriginalNames) {
-                try {
-                    // Generate embedding for this ingredient name
-                    const embedding = await generateEmbedding(name);
-
-                    // Search for similar ingredients
-                    const vectorMatchResult =
-                        await ingredientsRepo.vectorSearch(embedding, 0.85);
-                    if (vectorMatchResult.success === false) {
-                        console.error(
-                            `Vector search failed for "${name}":`,
-                            vectorMatchResult.error
-                        );
-                        toCreate.push({ name, embedding });
-                        continue;
-                    }
-
-                    const vectorMatch = vectorMatchResult.value;
-                    if (vectorMatch) {
-                        matches.push({
-                            originalName: name,
-                            ingredientId: vectorMatch.ingredient.id,
-                            matchType: "vector",
-                            confidence: vectorMatch.similarity,
-                        });
-
-                        // Learn the surface name as an alias so the next
-                        // occurrence resolves via the O(1) alias step instead of
-                        // a fresh embedding + vector search. Best-effort.
-                        const aliasResult = await ingredientsRepo.addAlias(
-                            vectorMatch.ingredient.id,
-                            name
-                        );
-                        if (!aliasResult.success) {
-                            console.error(
-                                `Failed to learn alias "${name}":`,
-                                aliasResult.error
-                            );
-                        }
-                    } else {
-                        toCreate.push({ name, embedding });
-                    }
-                } catch (error) {
-                    console.error(
-                        `Failed to generate embedding for "${name}":`,
-                        error
-                    );
-                    toCreate.push({ name });
-                }
+        // Step 3+4: vector match, adjudicate the gray zone, and create only
+        // validated new ingredients. The name's embedding is computed once and
+        // reused for the vector search, the adjudication candidate, and (on
+        // create) the category match.
+        //
+        // - similarity >= ACCEPT_THRESHOLD → auto-accept the match.
+        // - GRAY_BAND_THRESHOLD <= similarity < ACCEPT_THRESHOLD, or no candidate
+        //   → ask the LLM whether it's the same as the candidate, a genuinely new
+        //   ingredient, or not a real ingredient. Only real new ones are created;
+        //   junk is dropped rather than polluting the catalog.
+        const learnAlias = async (ingredientId: string, alias: string) => {
+            const aliasResult = await ingredientsRepo.addAlias(
+                ingredientId,
+                alias
+            );
+            if (!aliasResult.success) {
+                console.error(
+                    `Failed to learn alias "${alias}":`,
+                    aliasResult.error
+                );
             }
-        }
+        };
 
-        // Step 4: Create new ingredients with auto-assigned categories
-        for (const { name, embedding: precomputedEmbedding } of toCreate) {
+        for (const name of unmatchedOriginalNames) {
+            // Embed once; reused for the vector search, category match, and store.
+            let embedding: number[];
+            try {
+                embedding = await generateEmbedding(name);
+            } catch (error) {
+                console.error(
+                    `Failed to generate embedding for "${name}":`,
+                    error
+                );
+                return failure(
+                    new PersistenceError(
+                        `Failed to generate embedding for "${name}": ${error instanceof Error ? error.message : "Unknown error"}`
+                    )
+                );
+            }
+
+            // Vector search across the gray band (>= GRAY_BAND_THRESHOLD).
+            const vectorMatchResult = await ingredientsRepo.vectorSearch(
+                embedding,
+                GRAY_BAND_THRESHOLD
+            );
+            if (vectorMatchResult.success === false) {
+                console.error(
+                    `Vector search failed for "${name}":`,
+                    vectorMatchResult.error
+                );
+            }
+            const candidate = vectorMatchResult.success
+                ? vectorMatchResult.value
+                : null;
+
+            // High-confidence auto-accept.
+            if (candidate && candidate.similarity >= ACCEPT_THRESHOLD) {
+                matches.push({
+                    originalName: name,
+                    ingredientId: candidate.ingredient.id,
+                    matchType: "vector",
+                    confidence: candidate.similarity,
+                });
+                await learnAlias(candidate.ingredient.id, name);
+                continue;
+            }
+
+            // Gray band or no candidate: let the LLM adjudicate.
+            const decision = await adjudicateIngredient(
+                name,
+                candidate?.ingredient.name
+            );
+
+            if (decision === "same" && candidate) {
+                matches.push({
+                    originalName: name,
+                    ingredientId: candidate.ingredient.id,
+                    matchType: "vector",
+                    confidence: candidate.similarity,
+                });
+                await learnAlias(candidate.ingredient.id, name);
+                continue;
+            }
+
+            if (decision === "invalid") {
+                console.warn(
+                    `[Ingredients] Skipping "${name}" — adjudged not a real ingredient`
+                );
+                continue;
+            }
+
+            // decision === "new": create with an auto-assigned category.
             try {
                 const canonicalId = toCanonicalId(name);
 
-                // Reuse the embedding computed during the vector-search step;
-                // only regenerate if that step failed to produce one.
-                let embedding: number[];
-                if (precomputedEmbedding) {
-                    embedding = precomputedEmbedding;
-                } else {
-                    try {
-                        embedding = await generateEmbedding(name);
-                    } catch (error) {
-                        console.error(
-                            `Failed to generate embedding for new ingredient "${name}":`,
-                            error
-                        );
-                        return failure(
-                            new PersistenceError(
-                                `Failed to generate embedding for "${name}": ${error instanceof Error ? error.message : "Unknown error"}`
-                            )
-                        );
-                    }
-                }
-
                 // Find best matching category (always returns a match)
-                const categoryMatch = await categoriesRepo.findBestMatch(embedding);
+                const categoryMatch =
+                    await categoriesRepo.findBestMatch(embedding);
                 if (!categoryMatch.success) {
                     console.error(
                         `Failed to find category for "${name}":`,

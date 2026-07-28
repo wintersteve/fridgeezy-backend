@@ -61,6 +61,13 @@
                     "cwd": "apps/database"
                 }
             },
+            "dedupe-ingredients": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/scripts/dedupe-ingredients.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "up": {
                 "executor": "nx:run-commands",
                 "options": {

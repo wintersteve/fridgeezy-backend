@@ -118,24 +118,23 @@ signatures are stable.
       the generators: pass retrieved candidate catalog ingredients into the
       suggestion/recipe prompts so the model reuses canonical names rather than
       free-texting. (Fallback: a post-hoc resolver step.)
-- [ ] **Alias-learning loop**: when the vector step matches a surface name to an
-      existing ingredient (e.g. "spring onion" → "scallion"), **write the alias**
-      so the next hit is an O(1) exact match and the synonym graph becomes real.
-- [ ] **Creation gate** (ingredient-level authenticity): no auto-create on a bare
-      miss. Near-miss band → LLM adjudication ("is X the same as candidate Y?").
-      Genuine new → an "is this a real culinary ingredient?" check + a confidence
-      floor before minting a row.
-- [ ] **Use the generator's `category`/`parent`** (validated against the
-      controlled category set) instead of nearest-centroid auto-assignment; keep
-      centroid only as a last-resort fallback. **Unify** the two category
-      pipelines (`persist_recipe` get-or-create vs `matchIngredients` centroid)
-      into one.
-- [ ] **Leverage `parent`** hierarchy for rollup/dedup (leg_of_lamb ⊂ lamb) —
-      pass category/parent through the suggestion matcher (currently `string[]`).
-- [ ] **Performance:** batch embeddings (OpenAI array input), parallelize
-      per-item vector searches.
-- [ ] **Backfill**: one-time pass to dedupe + re-canonicalize existing
-      ingredients and seed aliases from current near-duplicates.
+- [x] **Alias-learning loop** (#9): the vector step writes the surface name as an
+      alias so the next hit is an O(1) exact match.
+- [x] **Creation gate** (#10): gray-band [0.70, 0.85) + LLM adjudication —
+      same → reuse candidate; invalid → drop (no catalog pollution); new → create.
+- [x] **LLM-chosen category** (#11): the adjudication picks a controlled-vocabulary
+      category, centroid only as fallback (the suggestion path's analog of "use the
+      generator's category"). Full SQL/TS pipeline unification remains a larger
+      follow-up (noted below).
+- [x] **Backfill** (#12): `dedupe-ingredients` script + `merge_ingredient` RPC —
+      finds near-duplicate rows (vector + LLM confirm), clusters them, folds each
+      into its oldest member (atomic reference repoint), seeding aliases. Dry-run
+      by default (`DEDUP_APPLY=true` to execute).
+
+Deferred to a later pass (not blockers for Phase 3): grounding *generation* by
+retrieval (doesn't fit the suggestion flow — the resolver above is the grounding);
+full `persist_recipe`(SQL) vs `matchIngredients`(TS) unification; `parent`-hierarchy
+rollup; batch/parallel embedding in the matcher.
 
 **Acceptance:** "scallion"/"spring onion"/"green onion" resolve to one row;
 alias table grows automatically on fuzzy matches; a hallucinated ingredient is

@@ -26,10 +26,15 @@ overlap (embeddings, in-DB OpenAI calls), it's called out.
   survives a model swap and separates concerns.
 - **Ingredients are a prerequisite for dish dedup** — a dish signature is only
   stable if its ingredients are canonical. Sequence ingredients first.
-- **One embedding model** everywhere. Default: standardize on
-  `text-embedding-3-large` (3072d) — it's the dedup-critical quality path and the
-  corpus is small enough that re-embedding is cheap. (Only open decision — see
-  Phase 1.)
+- **One embedding model** everywhere — **CONFIRMED: `text-embedding-3-small`
+  (1536d)** (2026-07-28). pgvector can't build an HNSW/IVFFlat index above 2000
+  dims, so the 3072/large columns are un-indexable (the recipe index is literally
+  commented out for this reason). 1536/small is indexable everywhere and lets us
+  finally index the recipe/suggestion vectors that are currently seq-scanned;
+  quality delta on short text (names, signatures) is modest and Phase 3's dedup
+  adds LLM adjudication anyway. This reverses the plan's original 3-large default.
+  ⇒ re-embed `recipes` + `recipe_suggestions` (large→small); ingredients / tags /
+  categories / units already match.
 
 ---
 
@@ -87,8 +92,11 @@ error.
 
 ## Phase 1 — Embedding consolidation (foundational)
 
-- [ ] **Decide the single model** (default: `text-embedding-3-large` / 3072).
-      This is the one open decision — confirm before the re-embed.
+- [x] **Decide the single model** — CONFIRMED `text-embedding-3-small` (1536),
+      for the pgvector index-cap reason above.
+- Progress: tags (#5), recipe_suggestions (#6 / slice 2a), recipes (slice 2b) move
+  the query/store embedding app-side and onto 1536. Slice 3 still owed: drop the
+  `generate_embedding*` functions and add HNSW indexes on the 1536 columns.
 - [ ] Move the **in-DB `generate_embedding`** (the `http`-extension OpenAI call
       inside Postgres) into the app layer / a dedicated embedding service. DB
       functions receive a precomputed vector instead of calling out. Removes the

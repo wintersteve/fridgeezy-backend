@@ -74,6 +74,36 @@ export class RecipesRepository implements IRecipesRepository {
     }
 
     /**
+     * Set (or replace) a recipe's fts embedding after it has been persisted.
+     * The app computes the embedding (text-embedding-3-small) and stores it here
+     * so Postgres never calls OpenAI. Best-effort: the caller treats a failure as
+     * non-fatal (the row can be re-embedded by the backfill).
+     */
+    async updateEmbedding(
+        recipeId: string,
+        embedding: number[]
+    ): Promise<Result<void, PersistenceError>> {
+        try {
+            const { error } = await supabaseAdmin
+                .from("recipes")
+                .update({ fts: JSON.stringify(embedding) })
+                .eq("id", recipeId);
+
+            if (error) {
+                return failure(new PersistenceError(error.message));
+            }
+
+            return success(undefined);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to update recipe embedding: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
+
+    /**
      * Persist a recipe using ingredient IDs directly (no canonical_id lookup).
      * Used when generating from a suggestion where ingredient IDs are already known.
      *

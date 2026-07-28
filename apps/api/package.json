@@ -109,6 +109,20 @@
                     "command": "npx jiti src/evals/calibrate-thresholds.eval.ts",
                     "cwd": "apps/api"
                 }
+            },
+            "calibrate-ingredients": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/calibrate-ingredients.eval.ts",
+                    "cwd": "apps/api"
+                }
+            },
+            "calibrate-authenticity": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/calibrate-authenticity.eval.ts",
+                    "cwd": "apps/api"
+                }
             }
         }
     },

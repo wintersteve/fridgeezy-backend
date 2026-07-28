@@ -218,8 +218,8 @@ export class SuggestionsRepository implements ISuggestionsRepository {
      */
     async searchSimilar(
         query: string,
-        matchThreshold: number = 0.95,
-        matchCount: number = 1
+        matchThreshold = 0.95,
+        matchCount = 1
     ): Promise<
         Result<
             Array<{

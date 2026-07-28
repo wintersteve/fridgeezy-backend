@@ -16,7 +16,9 @@
         }
     },
     "dependencies": {
-        "@fridgeezy/types": "*"
+        "@fridgeezy/schemas": "*",
+        "@fridgeezy/types": "*",
+        "vite": "^7.0.0"
     },
     "nx": {
         "tags": [

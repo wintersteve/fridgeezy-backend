@@ -134,10 +134,12 @@ export async function persistOrReuseSuggestion(
         return null;
     }
 
-    // No similar suggestion found or fetch failed, persist new suggestion
+    // No similar suggestion found or fetch failed, persist new suggestion.
+    // Reuse the signature embedding we already computed for the dedup search.
     const persistResult = await persistSuggestion(suggestion, {
         cuisineTag: request.cuisine,
         nameEn: suggestion.name_en,
+        signatureEmbedding,
     });
 
     if (!persistResult.success) {

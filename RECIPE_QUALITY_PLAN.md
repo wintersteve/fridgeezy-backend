@@ -2,6 +2,26 @@
 
 Created 2026-07-28.
 
+## Status (2026-07-28)
+
+All phases implemented and merged:
+- **Phase 0** — quick fixes (#1). **Phase 1** — embedding consolidation to
+  text-embedding-3-small, no PG-side OpenAI, HNSW indexes (#5/#6/#7/#8, migrations
+  applied + backfilled).
+- **Phase 2** — ingredient canonicalization: alias-learning (#9), creation gate
+  (#10), LLM category (#11), dedup backfill + merge_ingredient (#12).
+- **Phase 3** — dish-signature dedup (#13). **Phase 4** — authenticity gate (#14).
+- **Phase 5** — eval harness (`nx run @fridgeezy/api:eval`): **8/8** on the
+  acceptance fixtures (Som Tam ≡ Green Papaya Salad, Murgh Makhani ≡ Butter
+  Chicken merge; Som Tam Thai ≠ Lao, Roux ≠ Béchamel distinct; Carbonara-with-
+  Asparagus + gibberish dropped). Observability = the `[Suggestions]`/
+  `[Ingredients]` decision logs added throughout.
+
+Deferred follow-ups (non-blocking): English-name `canonical_id` identity + a
+suggestion alias table; the dish-family (`parent_dish`) variation model; full
+SQL/TS ingredient-pipeline unification + `parent`-hierarchy rollup; grounding
+generation by retrieval; feature-flagged shadow rollout.
+
 Scope: fix suggestion + ingredient generation so that (1) only **authentic**
 dishes enter discovery (no hallucinations, no invented mashups), (2) the same
 dish under different names is a **single** canonical entry (Papaya Salad ≡ Som

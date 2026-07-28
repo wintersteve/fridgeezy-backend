@@ -1,5 +1,5 @@
 import { failure, PersistenceError, Result, success } from "@fridgeezy/domain";
-import { generateEmbedding } from "@fridgeezy/openai";
+import { generateBatchEmbeddings } from "@fridgeezy/openai";
 import { CategoriesRepository, IngredientsRepository } from "@fridgeezy/supabase";
 
 import { adjudicateIngredient } from "./adjudicate-ingredient";
@@ -130,22 +130,32 @@ export async function matchIngredients(
             }
         };
 
-        for (const name of unmatchedOriginalNames) {
-            // Embed once; reused for the vector search, category match, and store.
-            let embedding: number[];
+        // Batch-embed all unmatched names in one call (text-embedding-3-small)
+        // instead of a round-trip per name. Each embedding is reused for the
+        // vector search, the category match, and storage.
+        const embeddingByName = new Map<string, number[]>();
+        if (unmatchedOriginalNames.length > 0) {
             try {
-                embedding = await generateEmbedding(name);
-            } catch (error) {
-                console.error(
-                    `Failed to generate embedding for "${name}":`,
-                    error
+                const batch = await generateBatchEmbeddings(
+                    unmatchedOriginalNames,
+                    { model: "text-embedding-3-small", dimensions: 1536 }
                 );
+                unmatchedOriginalNames.forEach((n, i) =>
+                    embeddingByName.set(n, batch.embeddings[i])
+                );
+            } catch (error) {
+                console.error("Failed to batch-embed ingredient names:", error);
                 return failure(
                     new PersistenceError(
-                        `Failed to generate embedding for "${name}": ${error instanceof Error ? error.message : "Unknown error"}`
+                        `Failed to embed ingredient names: ${error instanceof Error ? error.message : "Unknown error"}`
                     )
                 );
             }
+        }
+
+        for (const name of unmatchedOriginalNames) {
+            const embedding = embeddingByName.get(name);
+            if (!embedding) continue;
 
             // Vector search across the gray band (>= GRAY_BAND_THRESHOLD).
             const vectorMatchResult = await ingredientsRepo.vectorSearch(

@@ -12,6 +12,12 @@ export interface PersistSuggestionContext {
     cuisineTag?: string;
     /** The English name of the recipe for image generation and file naming */
     nameEn?: string;
+    /**
+     * Precomputed signature embedding. persist-or-reuse already embeds the
+     * signature to run the dedup search — passing it here avoids re-embedding the
+     * identical signature for storage.
+     */
+    signatureEmbedding?: number[];
 }
 
 export interface PersistedIngredient {
@@ -47,20 +53,6 @@ export async function persistSuggestion(
     context?: PersistSuggestionContext
 ): Promise<Result<PersistedSuggestion, PersistenceError>> {
     try {
-        // Match ingredients
-        const ingredientMatchesResult = await matchIngredients(
-            suggestion.ingredients
-        );
-        if (!ingredientMatchesResult.success) {
-            console.error(
-                `Failed to match ingredients for "${suggestion.name}":`,
-                ingredientMatchesResult.error
-            );
-            return ingredientMatchesResult;
-        }
-
-        const ingredientMatches = ingredientMatchesResult.value;
-
         // Build typed tag inputs - mark the cuisine tag from context as type: "cuisine"
         const tagInputs: TagInput[] = suggestion.tags.map((tag) => {
             // If this tag matches the cuisine from context, mark it as cuisine type
@@ -73,8 +65,37 @@ export async function persistSuggestion(
             return { name: tag };
         });
 
-        // Match tags
-        const tagMatchesResult = await matchTags(tagInputs);
+        // The dish SIGNATURE embedding (English name + tags + ingredients) is what
+        // makes cross-name dedup work; embed it app-side so Postgres never calls
+        // OpenAI. Reuse the caller's embedding when provided (persist-or-reuse
+        // already computed it for the dedup search) — otherwise embed here.
+        const signaturePromise = context?.signatureEmbedding
+            ? Promise.resolve(context.signatureEmbedding)
+            : generateEmbedding(
+                  buildSuggestionSignature({
+                      name: suggestion.name,
+                      nameEn: suggestion.name_en,
+                      tags: suggestion.tags,
+                      ingredients: suggestion.ingredients,
+                  })
+              );
+
+        // Ingredient match, tag match, and the signature embedding are
+        // independent — run them concurrently.
+        const [ingredientMatchesResult, tagMatchesResult, nameEmbedding] =
+            await Promise.all([
+                matchIngredients(suggestion.ingredients),
+                matchTags(tagInputs),
+                signaturePromise,
+            ]);
+
+        if (!ingredientMatchesResult.success) {
+            console.error(
+                `Failed to match ingredients for "${suggestion.name}":`,
+                ingredientMatchesResult.error
+            );
+            return ingredientMatchesResult;
+        }
         if (!tagMatchesResult.success) {
             console.error(
                 `Failed to match tags for "${suggestion.name}":`,
@@ -83,18 +104,8 @@ export async function persistSuggestion(
             return tagMatchesResult;
         }
 
+        const ingredientMatches = ingredientMatchesResult.value;
         const tagMatches = tagMatchesResult.value;
-
-        // Embed the dish SIGNATURE (English name + tags + ingredients) app-side
-        // so Postgres never calls OpenAI — passed to persist_suggestion. The
-        // signature is what makes cross-name dedup work (see suggestion-signature).
-        const signature = buildSuggestionSignature({
-            name: suggestion.name,
-            nameEn: suggestion.name_en,
-            tags: suggestion.tags,
-            ingredients: suggestion.ingredients,
-        });
-        const nameEmbedding = await generateEmbedding(signature);
 
         // Persist suggestion with relations
         const suggestionsRepo = new SuggestionsRepository();

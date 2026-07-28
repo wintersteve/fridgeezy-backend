@@ -13,6 +13,9 @@
             "path": "../../libs/genai/tsconfig.lib.json"
         },
         {
+            "path": "../../libs/toolkit/tsconfig.lib.json"
+        },
+        {
             "path": "../../libs/openai/tsconfig.lib.json"
         },
         {

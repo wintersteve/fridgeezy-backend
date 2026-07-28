@@ -47,6 +47,13 @@
                     "cwd": "apps/database"
                 }
             },
+            "embed-suggestions": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/scripts/generate-suggestion-embeddings.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "up": {
                 "executor": "nx:run-commands",
                 "options": {

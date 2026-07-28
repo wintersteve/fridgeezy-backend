@@ -1,4 +1,5 @@
 import { failure, PersistenceError, Result } from "@fridgeezy/domain";
+import { generateEmbedding } from "@fridgeezy/openai";
 import { GenerateSuggestionResponseDto } from "@fridgeezy/schemas";
 import { SuggestionsRepository } from "@fridgeezy/supabase";
 
@@ -83,6 +84,10 @@ export async function persistSuggestion(
 
         const tagMatches = tagMatchesResult.value;
 
+        // Embed the suggestion name app-side (text-embedding-3-small) so Postgres
+        // never calls OpenAI — passed through to persist_suggestion for storage.
+        const nameEmbedding = await generateEmbedding(suggestion.name);
+
         // Persist suggestion with relations
         const suggestionsRepo = new SuggestionsRepository();
         const persistResult = await suggestionsRepo.persistWithRelations(
@@ -93,6 +98,7 @@ export async function persistSuggestion(
             },
             ingredientMatches.map((m) => m.ingredientId),
             tagMatches.map((m) => m.tagId),
+            nameEmbedding,
             context?.nameEn
         );
 

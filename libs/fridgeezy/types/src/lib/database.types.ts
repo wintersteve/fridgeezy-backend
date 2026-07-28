@@ -1266,28 +1266,18 @@ export type Database = {
             }
             Returns: string
           }
-      persist_suggestion:
-        | {
-            Args: {
-              p_description: string
-              p_difficulty: Database["public"]["Enums"]["difficulty_type"]
-              p_ingredient_ids: string[]
-              p_name: string
-              p_tag_ids: string[]
-            }
-            Returns: string
-          }
-        | {
-            Args: {
-              p_description: string
-              p_difficulty: Database["public"]["Enums"]["difficulty_type"]
-              p_ingredient_ids: string[]
-              p_name: string
-              p_name_en?: string
-              p_tag_ids: string[]
-            }
-            Returns: string
-          }
+      persist_suggestion: {
+        Args: {
+          p_description: string
+          p_difficulty: Database["public"]["Enums"]["difficulty_type"]
+          p_embedding: string
+          p_ingredient_ids: string[]
+          p_name: string
+          p_name_en?: string
+          p_tag_ids: string[]
+        }
+        Returns: string
+      }
       search_categories: {
         Args: { match_count?: number; query_embedding: string }
         Returns: {
@@ -1313,7 +1303,7 @@ export type Database = {
         Args: {
           match_count?: number
           match_threshold?: number
-          search_query: string
+          query_embedding: string
         }
         Returns: {
           description: string

@@ -217,7 +217,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
      * Search for similar suggestions using vector similarity
      */
     async searchSimilar(
-        query: string,
+        embedding: number[],
         matchThreshold = 0.95,
         matchCount = 1
     ): Promise<
@@ -236,7 +236,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
             const { data, error } = await supabase.rpc(
                 "search_recipe_suggestions",
                 {
-                    search_query: query,
+                    query_embedding: JSON.stringify(embedding),
                     match_threshold: matchThreshold,
                     match_count: matchCount,
                 }
@@ -272,6 +272,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
         suggestion: Omit<RecipeSuggestionInsertPayload, "canonical_id">,
         ingredientIds: string[],
         tagIds: string[],
+        embedding: number[],
         nameEn?: string
     ): Promise<Result<string, PersistenceError>> {
         try {
@@ -281,7 +282,9 @@ export class SuggestionsRepository implements ISuggestionsRepository {
                 p_difficulty: suggestion.difficulty as "easy" | "medium" | "hard",
                 p_ingredient_ids: ingredientIds,
                 p_tag_ids: tagIds,
-                p_name_en: nameEn ?? null,
+                p_embedding: JSON.stringify(embedding),
+                // Omit when absent so the SQL default (null) applies
+                p_name_en: nameEn ?? undefined,
             });
 
             if (error) {

@@ -1,3 +1,4 @@
+import { generateEmbedding } from "@fridgeezy/openai";
 import {
     EnrichedSuggestionResponseDto,
     GenerateSuggestionRequestDto,
@@ -39,9 +40,11 @@ export async function persistOrReuseSuggestion(
     }
 
     // Layer 2: fuzzy similarity match (similarity threshold: 0.95) to catch
-    // near-duplicate spellings the exact match can't.
+    // near-duplicate spellings the exact match can't. Embed the query name
+    // app-side (text-embedding-3-small) and pass the vector to the search.
+    const nameEmbedding = await generateEmbedding(suggestion.name);
     const searchResult = await suggestionsRepo.searchSimilar(
-        suggestion.name,
+        nameEmbedding,
         0.95,
         1
     );

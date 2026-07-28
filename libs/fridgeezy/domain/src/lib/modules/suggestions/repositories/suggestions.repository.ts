@@ -82,11 +82,15 @@ export interface ISuggestionsRepository {
      * @param suggestion The suggestion data to persist
      * @param ingredientIds Array of ingredient UUIDs to associate
      * @param tagIds Array of tag UUIDs to associate
+     * @param embedding Precomputed name embedding (text-embedding-3-small, 1536-dim)
+     * @param nameEn Optional English name of the dish
      * @returns Result containing the created suggestion UUID
      */
     persistWithRelations(
         suggestion: RecipeSuggestionInsertPayload,
         ingredientIds: string[],
-        tagIds: string[]
+        tagIds: string[],
+        embedding: number[],
+        nameEn?: string
     ): Promise<Result<string, DomainError>>;
 }

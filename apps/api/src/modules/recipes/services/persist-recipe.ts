@@ -12,6 +12,52 @@ const DEFAULT_IMAGE_URL = "";
 const unitsRepository = new UnitsRepository();
 
 /**
+ * Collapse ingredients that resolve to the same DB ingredient. The
+ * `recipe_ingredients` table allows only one row per (recipe, ingredient), but
+ * the LLM sometimes lists an ingredient more than once (e.g. an egg "for dough"
+ * and "for wash"), which resolves to a single ingredient id and would otherwise
+ * violate the unique constraint. Merge duplicates by ingredientId — summing
+ * quantities when the unit matches, else keeping the first. Ingredients without
+ * an ingredientId are left as-is (a NULL id doesn't collide).
+ */
+function dedupeIngredientsById(
+    ingredients: GenerateRecipeResponseDto["ingredients"]
+): GenerateRecipeResponseDto["ingredients"] {
+    const byId = new Map<
+        string,
+        GenerateRecipeResponseDto["ingredients"][number]
+    >();
+    const result: GenerateRecipeResponseDto["ingredients"] = [];
+
+    for (const ingredient of ingredients) {
+        const id = (ingredient as { ingredientId?: string }).ingredientId;
+
+        if (!id) {
+            result.push(ingredient);
+            continue;
+        }
+
+        const existing = byId.get(id);
+        if (!existing) {
+            byId.set(id, ingredient);
+            result.push(ingredient);
+            continue;
+        }
+
+        // Same ingredient again — fold it into the first occurrence.
+        if (
+            existing.unit === ingredient.unit &&
+            typeof existing.quantity === "number" &&
+            typeof ingredient.quantity === "number"
+        ) {
+            existing.quantity += ingredient.quantity;
+        }
+    }
+
+    return result;
+}
+
+/**
  * Persist a complete recipe to Supabase.
  *
  * This service orchestrates:
@@ -108,6 +154,10 @@ export async function persistRecipeWithIngredientIds(
     recipe: GenerateRecipeResponseDto
 ): Promise<Result<string, PersistenceError>> {
     try {
+        // Collapse ingredients that map to the same DB ingredient so the insert
+        // doesn't violate recipe_ingredients' (recipe_id, ingredient_id) unique key.
+        recipe.ingredients = dedupeIngredientsById(recipe.ingredients);
+
         // The recipe stream already kicked off image generation (fire-and-forget)
         // for this exact name, and it lands at a deterministic path. Use that URL
         // now instead of generating a SECOND time and blocking the save on the

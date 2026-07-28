@@ -18,6 +18,7 @@ import {
     formatUnitsForPrompt,
     formatTagsForPrompt,
 } from "../../services";
+import { generateAndUploadRecipeImage } from "../../services/create-recipe-image";
 import { persistRecipeWithIngredientIds } from "../../services/persist-recipe";
 
 /**
@@ -156,6 +157,13 @@ export const generateRecipe = createStreamHandler({
             servings: body.servings,
             tags: tagNames,
         };
+
+        // Kick off image generation now (name is known), so it runs in parallel
+        // with the entire recipe generation instead of waiting for the header.
+        // Fire-and-forget: persistence reads the deterministic URL either way.
+        generateAndUploadRecipeImage(suggestion.name).catch((error) => {
+            console.error("Image generation failed:", error);
+        });
 
         // 6. Call OpenAI
         const stream = await openai.chat.completions.create({

@@ -235,84 +235,6 @@ export type Database = {
           },
         ]
       }
-      ingredient_pairings: {
-        Row: {
-          created_at: string
-          id: string
-          ingredient_id: string
-          notes: string | null
-          paired_ingredient_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          ingredient_id: string
-          notes?: string | null
-          paired_ingredient_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          ingredient_id?: string
-          notes?: string | null
-          paired_ingredient_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ingredient_pairings_ingredient_id_fkey"
-            columns: ["ingredient_id"]
-            isOneToOne: false
-            referencedRelation: "ingredients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ingredient_pairings_paired_ingredient_id_fkey"
-            columns: ["paired_ingredient_id"]
-            isOneToOne: false
-            referencedRelation: "ingredients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ingredient_substitutes: {
-        Row: {
-          created_at: string
-          id: string
-          ingredient_id: string
-          notes: string | null
-          substitute_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          ingredient_id: string
-          notes?: string | null
-          substitute_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          ingredient_id?: string
-          notes?: string | null
-          substitute_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ingredient_substitutes_ingredient_id_fkey"
-            columns: ["ingredient_id"]
-            isOneToOne: false
-            referencedRelation: "ingredients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ingredient_substitutes_substitute_id_fkey"
-            columns: ["substitute_id"]
-            isOneToOne: false
-            referencedRelation: "ingredients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       ingredients: {
         Row: {
           canonical_id: string
@@ -375,61 +297,6 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "ingredients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      pantry_items: {
-        Row: {
-          created_at: string
-          expires_at: string | null
-          id: string
-          ingredient_id: string
-          profile_id: string
-          quantity: number | null
-          unit_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          expires_at?: string | null
-          id?: string
-          ingredient_id: string
-          profile_id: string
-          quantity?: number | null
-          unit_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          expires_at?: string | null
-          id?: string
-          ingredient_id?: string
-          profile_id?: string
-          quantity?: number | null
-          unit_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pantry_items_ingredient_id_fkey"
-            columns: ["ingredient_id"]
-            isOneToOne: false
-            referencedRelation: "ingredients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pantry_items_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pantry_items_unit_id_fkey"
-            columns: ["unit_id"]
-            isOneToOne: false
-            referencedRelation: "units"
             referencedColumns: ["id"]
           },
         ]
@@ -619,79 +486,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      prompt_variables: {
-        Row: {
-          created_at: string
-          id: string
-          label: string
-          position: number
-          prompt_id: string
-          tag_type: Database["public"]["Enums"]["tag_type"] | null
-          variable_type: Database["public"]["Enums"]["prompt_variable_type"]
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          label: string
-          position: number
-          prompt_id: string
-          tag_type?: Database["public"]["Enums"]["tag_type"] | null
-          variable_type: Database["public"]["Enums"]["prompt_variable_type"]
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          label?: string
-          position?: number
-          prompt_id?: string
-          tag_type?: Database["public"]["Enums"]["tag_type"] | null
-          variable_type?: Database["public"]["Enums"]["prompt_variable_type"]
-        }
-        Relationships: [
-          {
-            foreignKeyName: "prompt_variables_prompt_id_fkey"
-            columns: ["prompt_id"]
-            isOneToOne: false
-            referencedRelation: "prompts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      prompts: {
-        Row: {
-          created_at: string
-          id: string
-          position: number
-          profile_id: string
-          prompt: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          position?: number
-          profile_id: string
-          prompt: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          position?: number
-          profile_id?: string
-          prompt?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "prompts_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       recipe_ingredients: {
         Row: {
@@ -940,8 +734,58 @@ export type Database = {
           },
         ]
       }
+      recipe_variants: {
+        Row: {
+          base_recipe_id: string
+          created_at: string
+          id: string
+          label: string
+          profile_id: string
+          recipe_id: string
+        }
+        Insert: {
+          base_recipe_id: string
+          created_at?: string
+          id?: string
+          label: string
+          profile_id: string
+          recipe_id: string
+        }
+        Update: {
+          base_recipe_id?: string
+          created_at?: string
+          id?: string
+          label?: string
+          profile_id?: string
+          recipe_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_variants_base_recipe_id_fkey"
+            columns: ["base_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_variants_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_variants_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recipes: {
         Row: {
+          base_recipe_id: string | null
           carbs: number | null
           cook_time: string | null
           created_at: string
@@ -951,6 +795,7 @@ export type Database = {
           fts: string | null
           id: string
           image: string | null
+          is_generated: boolean
           kcal: number | null
           name: string
           name_en: string | null
@@ -961,6 +806,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          base_recipe_id?: string | null
           carbs?: number | null
           cook_time?: string | null
           created_at?: string
@@ -970,6 +816,7 @@ export type Database = {
           fts?: string | null
           id?: string
           image?: string | null
+          is_generated?: boolean
           kcal?: number | null
           name: string
           name_en?: string | null
@@ -980,6 +827,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          base_recipe_id?: string | null
           carbs?: number | null
           cook_time?: string | null
           created_at?: string
@@ -989,6 +837,7 @@ export type Database = {
           fts?: string | null
           id?: string
           image?: string | null
+          is_generated?: boolean
           kcal?: number | null
           name?: string
           name_en?: string | null
@@ -998,7 +847,15 @@ export type Database = {
           tips?: string[] | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "recipes_base_recipe_id_fkey"
+            columns: ["base_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shopping_lists: {
         Row: {
@@ -1174,7 +1031,7 @@ export type Database = {
     }
     Functions: {
       bytea_to_text: { Args: { data: string }; Returns: string }
-      delete_expired_pantry_items: { Args: never; Returns: number }
+      delete_orphan_generated_recipes: { Args: never; Returns: number }
       find_recipes: {
         Args: {
           ingredients?: string[]
@@ -1194,12 +1051,6 @@ export type Database = {
       generate_embedding_small: {
         Args: { input_text: string }
         Returns: string
-      }
-      get_prompt_variable_types: {
-        Args: never
-        Returns: {
-          variable_type: string
-        }[]
       }
       has_user: { Args: { email: string }; Returns: boolean }
       http: {
@@ -1528,13 +1379,6 @@ export type Database = {
     }
     Enums: {
       difficulty_type: "easy" | "medium" | "hard"
-      prompt_variable_type:
-        | "component"
-        | "course"
-        | "type"
-        | "ingredient"
-        | "tag"
-        | "text"
       recipe_interaction_type: "viewed" | "favourite" | "cooked"
       tag_type: "dietary" | "component" | "course" | "cuisine"
       unit_system: "metric" | "imperial" | "universal"
@@ -1693,14 +1537,6 @@ export const Constants = {
   public: {
     Enums: {
       difficulty_type: ["easy", "medium", "hard"],
-      prompt_variable_type: [
-        "component",
-        "course",
-        "type",
-        "ingredient",
-        "tag",
-        "text",
-      ],
       recipe_interaction_type: ["viewed", "favourite", "cooked"],
       tag_type: ["dietary", "component", "course", "cuisine"],
       unit_system: ["metric", "imperial", "universal"],

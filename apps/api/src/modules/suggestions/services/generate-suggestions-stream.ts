@@ -11,7 +11,7 @@ import type OpenAI from "openai";
 
 import { persistOrReuseSuggestion } from "./persist-or-reuse-suggestion";
 
-const SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly 5 authentic, real-world recipe suggestions based on the user's request.
+const SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly 4 authentic, real-world recipe suggestions based on the user's request.
 
 The "Ingredients" line below may list literal ingredients, but it may ALSO be a dish name (e.g. "sandwich", "carbonara"), a meal or course concept (e.g. "breakfast", "quick dinner", "random recipe"), or a cuisine. Interpret it flexibly:
 - Literal ingredients -> real dishes that prominently feature them.
@@ -42,7 +42,7 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 - MUST be singular
 
 ## Output Format
-Output EXACTLY 5 recipes, one JSON object per line (JSONL format). No markdown, no code blocks, no extra text.
+Output EXACTLY 4 recipes, one JSON object per line (JSONL format). No markdown, no code blocks, no extra text.
 
 Each recipe object must include:
 - name

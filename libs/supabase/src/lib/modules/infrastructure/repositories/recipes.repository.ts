@@ -142,4 +142,55 @@ export class RecipesRepository implements IRecipesRepository {
             );
         }
     }
+
+    /**
+     * Record a freshly persisted recipe as a variant of the recipe it was
+     * modified from. A variant keeps the base's name, so this is what keeps the
+     * duplicate out of search/discovery — it must run whether or not the user
+     * goes on to save the variant.
+     *
+     * Families stay flat: modifying a variant points the new row at that
+     * variant's own base, never at the variant.
+     *
+     * @returns Result containing the family's base recipe UUID or error
+     */
+    async markAsVariant(
+        recipeId: string,
+        sourceRecipeId: string
+    ): Promise<Result<string, PersistenceError>> {
+        try {
+            const { data: source, error: sourceError } = await supabaseAdmin
+                .from("recipes")
+                .select("base_recipe_id")
+                .eq("id", sourceRecipeId)
+                .maybeSingle();
+
+            if (sourceError) {
+                return failure(
+                    new PersistenceError(`Database error: ${sourceError.message}`)
+                );
+            }
+
+            const baseRecipeId = source?.base_recipe_id ?? sourceRecipeId;
+
+            const { error } = await supabaseAdmin
+                .from("recipes")
+                .update({ base_recipe_id: baseRecipeId })
+                .eq("id", recipeId);
+
+            if (error) {
+                return failure(
+                    new PersistenceError(`Database error: ${error.message}`)
+                );
+            }
+
+            return success(baseRecipeId);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to mark recipe as variant: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
 }

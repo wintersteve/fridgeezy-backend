@@ -6,62 +6,12 @@ import type { PartialRecipeSuggestion } from "../../../recipes/services/search-r
 import {
     convertMcpToolsToOpenAiTools,
     createChatCompletion,
+    endSseStream,
     handleToolCalls,
+    initSseStream,
+    parseJsonBody,
+    writeSseEvent,
 } from "../../services";
-
-/**
- * SSE helper to write Server-Sent Events
- */
-function writeSseEvent(
-    res: Response,
-    event: { type: string; data?: any }
-): void {
-    res.write(`event: ${event.type}\n`);
-    if (event.data !== undefined) {
-        res.write(`data: ${JSON.stringify(event.data)}\n`);
-    }
-    res.write("\n");
-}
-
-/**
- * Initialize SSE stream with proper headers
- */
-function initSseStream(res: Response): void {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-}
-
-/**
- * End SSE stream
- */
-function endSseStream(res: Response): void {
-    writeSseEvent(res, { type: "end" });
-    res.end();
-}
-
-/**
- * Parse JSON body from request
- */
-async function parseJsonBody(req: Request): Promise<any> {
-    return new Promise((resolve, reject) => {
-        let body = "";
-        req.on("data", (chunk) => {
-            body += chunk.toString();
-        });
-        req.on("end", () => {
-            try {
-                resolve(JSON.parse(body));
-            } catch (error) {
-                reject(new Error("Invalid JSON"));
-            }
-        });
-        req.on("error", reject);
-    });
-}
 
 /**
  * Main chat processing use-case

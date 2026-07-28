@@ -4,8 +4,6 @@ import { Stream } from "openai/core/streaming.mjs";
 import { ChatCompletionChunk } from "openai/resources/index.mjs";
 import { z } from "zod/v4";
 
-import { generateAndUploadRecipeImage } from "./create-recipe-image";
-
 /**
  * Initial state passed to the recipe stream, containing data from the suggestion.
  */
@@ -20,7 +18,6 @@ export interface RecipeStreamInitialState {
 export interface RecipeStreamConfig {
     schemas: [z.ZodType, z.ZodType, z.ZodType, z.ZodType, z.ZodType]; // Header, Nutrition, Ingredient, Instruction, Tip
     initialState: RecipeStreamInitialState;
-    skipImageGeneration?: boolean; // Skip image generation if reusing existing image
     /**
      * Map of lowercase ingredient names to their database UUIDs.
      * Used to attach ingredient IDs during streaming when generating from a suggestion.
@@ -65,16 +62,9 @@ export async function* createRecipeStream(
             recipe.description = parsed.description;
             recipe.prepTime = parsed.prepTime;
             recipe.cookTime = parsed.cookTime;
-
-            // Generate and upload recipe image in parallel (don't await)
-            // Skip if we're reusing an existing image (e.g., escalate-difficulty use case)
-            if (!config.skipImageGeneration) {
-                generateAndUploadRecipeImage(config.initialState.name).catch(
-                    (error) => {
-                        console.error("Image generation failed:", error);
-                    }
-                );
-            }
+            // NB: image generation is kicked off by the usecase BEFORE this
+            // stream starts (the name is known up front), so it runs in parallel
+            // with the whole recipe generation rather than starting here.
         }
         // Schema 1: Nutrition
         else if (schemaIndex === 1) {
@@ -91,6 +81,10 @@ export async function* createRecipeStream(
                 parent: parsed.parent,
                 quantity: parsed.quantity,
                 unit: parsed.unit,
+                // Optional prep note (e.g. "finely chopped"); only present when
+                // the LLM deems it useful. Carried through so it streams to the
+                // client and is persisted alongside the ingredient.
+                ...(parsed.comment ? { comment: parsed.comment } : {}),
             };
 
             // Attach ingredient ID from map if available

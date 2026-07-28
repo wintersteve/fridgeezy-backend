@@ -215,7 +215,8 @@ export const escalateDifficulty = createStreamHandler({
                     servings: existingRecipe.servings,
                     tags: existingRecipe.tags, // MUST remain constant
                 },
-                skipImageGeneration: true, // Reuse existing image instead of generating new one
+                // No image generation here — escalate reuses the existing
+                // recipe's image (passed to persistRecipe as existingImageUrl).
             }),
         };
     },

@@ -14,10 +14,8 @@ export async function findSuggestionByName(
 ): Promise<EnrichedSuggestionResponseDto | null> {
     const repository = new SuggestionsRepository();
 
-    console.log(name);
     // Search for suggestion by exact name match
     const result = await repository.findByName(name);
-    console.log("result", result);
 
     if (!result.success || !result.value) {
         return null;

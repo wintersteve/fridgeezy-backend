@@ -103,10 +103,11 @@ No markdown, no code blocks, just the JSON object.`;
                     ],
                 },
             ],
-            max_completion_tokens: 1000,
+            max_completion_tokens: 2000,
         });
 
-        const content = response.choices[0]?.message?.content?.trim();
+        const choice = response.choices[0];
+        const content = choice?.message?.content?.trim();
 
         if (!content) {
             return {
@@ -116,9 +117,31 @@ No markdown, no code blocks, just the JSON object.`;
             };
         }
 
-        // Parse and validate the response
-        const parsed = JSON.parse(content);
-        const result = ExtractedIngredientsSchema.parse(parsed);
+        // A response cut off at the token cap yields invalid JSON — surface it as
+        // a clear, actionable error instead of a generic parse failure.
+        if (choice.finish_reason === "length") {
+            return {
+                type: "raw" as const,
+                statusCode: 500,
+                data: {
+                    error: "Ingredient extraction was truncated (token limit). Try a clearer or less crowded image.",
+                },
+            };
+        }
+
+        // Parse and validate defensively — the model can drift from the
+        // requested JSON shape, and an unguarded parse would throw a 500.
+        let result: z.infer<typeof ExtractedIngredientsSchema>;
+        try {
+            result = ExtractedIngredientsSchema.parse(JSON.parse(content));
+        } catch (error) {
+            console.error("Failed to parse extracted ingredients:", error);
+            return {
+                type: "raw" as const,
+                statusCode: 502,
+                data: { error: "Model returned malformed ingredient data" },
+            };
+        }
 
         return {
             type: "json" as const,

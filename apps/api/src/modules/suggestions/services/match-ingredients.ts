@@ -87,10 +87,11 @@ export async function matchIngredients(
             unmatchedOriginalNames = unmatchedOriginalNames.filter((name) => !aliasMatches.has(name));
         }
 
-        // Step 3: Vector search (one at a time with embeddings)
+        // Step 3: Vector search (one at a time with embeddings).
+        // Carry each miss's embedding forward so Step 4 can reuse it instead of
+        // regenerating the same vector for the same name.
+        const toCreate: Array<{ name: string; embedding?: number[] }> = [];
         if (unmatchedOriginalNames.length > 0) {
-            const stillUnmatched: string[] = [];
-
             for (const name of unmatchedOriginalNames) {
                 try {
                     // Generate embedding for this ingredient name
@@ -104,7 +105,7 @@ export async function matchIngredients(
                             `Vector search failed for "${name}":`,
                             vectorMatchResult.error
                         );
-                        stillUnmatched.push(name);
+                        toCreate.push({ name, embedding });
                         continue;
                     }
 
@@ -117,39 +118,42 @@ export async function matchIngredients(
                             confidence: vectorMatch.similarity,
                         });
                     } else {
-                        stillUnmatched.push(name);
+                        toCreate.push({ name, embedding });
                     }
                 } catch (error) {
                     console.error(
                         `Failed to generate embedding for "${name}":`,
                         error
                     );
-                    stillUnmatched.push(name);
+                    toCreate.push({ name });
                 }
             }
-
-            unmatchedOriginalNames = stillUnmatched;
         }
 
         // Step 4: Create new ingredients with auto-assigned categories
-        for (const name of unmatchedOriginalNames) {
+        for (const { name, embedding: precomputedEmbedding } of toCreate) {
             try {
                 const canonicalId = toCanonicalId(name);
 
-                // Generate embedding - required for both ingredient storage and category matching
+                // Reuse the embedding computed during the vector-search step;
+                // only regenerate if that step failed to produce one.
                 let embedding: number[];
-                try {
-                    embedding = await generateEmbedding(name);
-                } catch (error) {
-                    console.error(
-                        `Failed to generate embedding for new ingredient "${name}":`,
-                        error
-                    );
-                    return failure(
-                        new PersistenceError(
-                            `Failed to generate embedding for "${name}": ${error instanceof Error ? error.message : "Unknown error"}`
-                        )
-                    );
+                if (precomputedEmbedding) {
+                    embedding = precomputedEmbedding;
+                } else {
+                    try {
+                        embedding = await generateEmbedding(name);
+                    } catch (error) {
+                        console.error(
+                            `Failed to generate embedding for new ingredient "${name}":`,
+                            error
+                        );
+                        return failure(
+                            new PersistenceError(
+                                `Failed to generate embedding for "${name}": ${error instanceof Error ? error.message : "Unknown error"}`
+                            )
+                        );
+                    }
                 }
 
                 // Find best matching category (always returns a match)

@@ -102,6 +102,13 @@
                     "command": "npx jiti src/evals/dedup-authenticity.eval.ts",
                     "cwd": "apps/api"
                 }
+            },
+            "calibrate": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/calibrate-thresholds.eval.ts",
+                    "cwd": "apps/api"
+                }
             }
         }
     },

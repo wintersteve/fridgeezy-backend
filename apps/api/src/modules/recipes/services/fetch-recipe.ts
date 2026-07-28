@@ -53,7 +53,7 @@ export async function fetchRecipe(
         name: recipe.name,
         nameEn: recipe.name_en ?? null,
         description: recipe.description || "",
-        difficulty: recipe.difficulty!,
+        difficulty: recipe.difficulty as "easy" | "medium" | "hard",
         servings: recipe.servings,
         prepTime: parseInt(recipe.prep_time?.replace(" min", "") || "0"),
         cookTime: parseInt(recipe.cook_time?.replace(" min", "") || "0"),

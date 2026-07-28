@@ -104,11 +104,13 @@
         "@modelcontextprotocol/sdk": "^1.25.1",
         "dotenv": "^17.2.3",
         "openai": "^6.15.0",
+        "reflect-metadata": "^0.2.2",
         "zod": "^4.2.1",
-        "ts-case-convert": "^2.1.0",
         "@fridgeezy/domain": "0.0.1",
-        "@fridgeezy/schemas": "0.0.1",
+        "@fridgeezy/genai": "0.0.1",
         "@fridgeezy/openai": "0.0.1",
+        "@fridgeezy/schemas": "0.0.1",
+        "@fridgeezy/streaming-server": "0.0.1",
         "@fridgeezy/supabase": "0.0.1",
         "@fridgeezy/toolkit": "0.0.1"
     }

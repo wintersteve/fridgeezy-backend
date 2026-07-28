@@ -31,7 +31,7 @@ export async function* createChatCompletion(
                 return {
                     role: "tool" as const,
                     content: msg.content || "",
-                    tool_call_id: msg.tool_call_id!,
+                    tool_call_id: msg.tool_call_id || "",
                 };
             }
 
@@ -66,7 +66,7 @@ export async function* createChatCompletion(
                 stream: true,
             });
 
-            let accumulatedToolCalls: any[] = [];
+            const accumulatedToolCalls: any[] = [];
 
             for await (const chunk of completion) {
                 const choice = chunk.choices[0];

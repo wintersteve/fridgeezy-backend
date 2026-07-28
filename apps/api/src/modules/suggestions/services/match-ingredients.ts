@@ -166,12 +166,12 @@ export async function matchIngredients(
             }
 
             // Gray band or no candidate: let the LLM adjudicate.
-            const decision = await adjudicateIngredient(
+            const adjudication = await adjudicateIngredient(
                 name,
                 candidate?.ingredient.name
             );
 
-            if (decision === "same" && candidate) {
+            if (adjudication.decision === "same" && candidate) {
                 matches.push({
                     originalName: name,
                     ingredientId: candidate.ingredient.id,
@@ -182,36 +182,52 @@ export async function matchIngredients(
                 continue;
             }
 
-            if (decision === "invalid") {
+            if (adjudication.decision === "invalid") {
                 console.warn(
                     `[Ingredients] Skipping "${name}" — adjudged not a real ingredient`
                 );
                 continue;
             }
 
-            // decision === "new": create with an auto-assigned category.
+            // decision === "new": create. Prefer the LLM-chosen controlled
+            // category; fall back to nearest-centroid only if it can't be resolved.
             try {
                 const canonicalId = toCanonicalId(name);
 
-                // Find best matching category (always returns a match)
-                const categoryMatch =
-                    await categoriesRepo.findBestMatch(embedding);
-                if (!categoryMatch.success) {
-                    console.error(
-                        `Failed to find category for "${name}":`,
-                        categoryMatch.error
+                let categoryId: string | undefined;
+                if (adjudication.category) {
+                    const catResult = await categoriesRepo.findByCanonicalId(
+                        toCanonicalId(adjudication.category)
                     );
-                    return failure(categoryMatch.error);
+                    if (catResult.success && catResult.value) {
+                        categoryId = catResult.value.id;
+                        console.log(
+                            `[Ingredients] Assigned "${name}" to category "${catResult.value.name}" (adjudicated)`
+                        );
+                    }
                 }
 
-                console.log(
-                    `[Ingredients] Auto-assigned "${name}" to category "${categoryMatch.value.category.name}" (similarity: ${categoryMatch.value.similarity.toFixed(3)})`
-                );
+                if (!categoryId) {
+                    // Fallback: nearest-centroid (always returns a match).
+                    const categoryMatch =
+                        await categoriesRepo.findBestMatch(embedding);
+                    if (!categoryMatch.success) {
+                        console.error(
+                            `Failed to find category for "${name}":`,
+                            categoryMatch.error
+                        );
+                        return failure(categoryMatch.error);
+                    }
+                    categoryId = categoryMatch.value.category.id;
+                    console.log(
+                        `[Ingredients] Assigned "${name}" to category "${categoryMatch.value.category.name}" (centroid fallback, similarity: ${categoryMatch.value.similarity.toFixed(3)})`
+                    );
+                }
 
                 const createResult = await ingredientsRepo.create({
                     name,
                     canonical_id: canonicalId,
-                    category_id: categoryMatch.value.category.id,
+                    category_id: categoryId,
                     embedding: JSON.stringify(embedding),
                 });
 

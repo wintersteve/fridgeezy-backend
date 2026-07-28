@@ -13,10 +13,13 @@ export class McpController {
     static async chat(req: Request, res: Response): Promise<void> {
         const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
-        if (sessionId && sessions.has(sessionId)) {
-            const session = sessions.get(sessionId)!;
+        const existingSession = sessionId
+            ? sessions.get(sessionId)
+            : undefined;
+
+        if (existingSession) {
             // Express req/res are compatible with IncomingMessage/ServerResponse
-            await session.transport.handleRequest(req as any, res as any);
+            await existingSession.transport.handleRequest(req as any, res as any);
         } else if (!sessionId && req.method === "POST") {
             const transport = new StreamableHTTPServerTransport({
                 sessionIdGenerator: () => randomUUID(),

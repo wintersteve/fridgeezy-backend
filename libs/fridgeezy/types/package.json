@@ -1,0 +1,40 @@
+{
+  "name": "@fridgeezy/types",
+  "version": "0.0.1",
+  "description": "Shared database types for Fridgeezy applications (auto-generated from Supabase)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@fridgeezy/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "fridgeezy",
+    "types",
+    "database",
+    "supabase"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "generate:types": "node ../../../tools/scripts/generate-entity-types.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "nx": {
+    "tags": [
+      "scope:shared"
+    ]
+  }
+}

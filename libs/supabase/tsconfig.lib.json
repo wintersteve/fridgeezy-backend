@@ -1,0 +1,24 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "baseUrl": ".",
+        "rootDir": "src",
+        "outDir": "dist",
+        "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo",
+        "emitDeclarationOnly": true,
+        "forceConsistentCasingInFileNames": true,
+        "types": ["node", "vite/client"]
+    },
+    "include": ["src/**/*.ts"],
+    "references": [
+        {
+            "path": "../fridgeezy/schemas/tsconfig.lib.json"
+        },
+        {
+            "path": "../fridgeezy/types/tsconfig.lib.json"
+        },
+        {
+            "path": "../fridgeezy/domain/tsconfig.lib.json"
+        }
+    ]
+}

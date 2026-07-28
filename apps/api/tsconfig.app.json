@@ -1,0 +1,34 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "outDir": "dist",
+        "types": ["node"],
+        "rootDir": "src",
+        "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo"
+    },
+    "include": ["src/**/*.ts"],
+    "exclude": ["eslint.config.js", "eslint.config.cjs", "eslint.config.mjs"],
+    "references": [
+        {
+            "path": "../../libs/genai/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/streaming-server/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/toolkit/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/supabase/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/openai/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/fridgeezy/schemas/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/fridgeezy/domain/tsconfig.lib.json"
+        }
+    ]
+}

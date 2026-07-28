@@ -1,0 +1,19 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "files": [],
+    "include": ["vite.config.mts"],
+    "references": [
+        {
+            "path": "../fridgeezy/schemas"
+        },
+        {
+            "path": "../fridgeezy/types"
+        },
+        {
+            "path": "../fridgeezy/domain"
+        },
+        {
+            "path": "./tsconfig.lib.json"
+        }
+    ]
+}

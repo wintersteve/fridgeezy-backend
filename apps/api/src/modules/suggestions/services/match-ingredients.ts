@@ -4,14 +4,23 @@ import { CategoriesRepository, IngredientsRepository } from "@fridgeezy/supabase
 
 import { adjudicateIngredient } from "./adjudicate-ingredient";
 
-/** Cosine similarity at or above which a vector match is auto-accepted. */
+// Calibrated from real ingredient name-embedding similarity (see
+// evals/calibrate-ingredients). Name-only embeddings are a weak synonym signal:
+// true synonyms score LOW (scallion↔green onion ~0.68, cilantro↔coriander ~0.68,
+// bell pepper↔capsicum ~0.62) — mostly below the old 0.70 floor, so they never
+// reached the LLM and got created as duplicates. Distinct-but-related pairs
+// (chicken breast↔thigh ~0.70) can score higher, so there's no clean cutoff — the
+// LLM is the real discriminator. Keep ACCEPT high (auto-accept only near-identical,
+// above the "same base, more specific" confound like olive oil↔EVOO ~0.75), and
+// drop the gray floor so synonyms actually reach adjudication.
+/** Cosine similarity at or above which a vector match is auto-accepted (no LLM). */
 const ACCEPT_THRESHOLD = 0.85;
 /**
  * Lower bound of the "gray band". Candidates in [GRAY_BAND_THRESHOLD,
  * ACCEPT_THRESHOLD) are handed to the LLM to decide same / new / invalid;
  * anything below is treated as no candidate.
  */
-const GRAY_BAND_THRESHOLD = 0.7;
+const GRAY_BAND_THRESHOLD = 0.6;
 
 export interface IngredientMatch {
     originalName: string;

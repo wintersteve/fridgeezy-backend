@@ -16,10 +16,16 @@ import {
 } from "./suggestion-signature";
 import { verifySuggestionAuthenticity } from "./verify-suggestion-authenticity";
 
-/** Signature cosine similarity at/above which two dishes auto-merge. */
-const SIGNATURE_HIGH_THRESHOLD = 0.93;
+// Thresholds calibrated from real signature-similarity distributions (see
+// evals/calibrate-thresholds): same-dish pairs range ~0.74–1.00, different-dish
+// pairs top out ~0.80 (they overlap — a low-signal same-dish pair like
+// "Gyoza"/"Japanese Dumplings" scores ~0.74, below a near-miss distinct pair like
+// Thai/Lao papaya salad ~0.80). So auto-merge only well above the distinct max,
+// and send everything down to ~0.72 to the LLM rather than a hard cutoff.
+/** Signature cosine similarity at/above which two dishes auto-merge (no LLM). */
+const SIGNATURE_HIGH_THRESHOLD = 0.92;
 /** Below this, candidates are treated as distinct dishes (no adjudication). */
-const SIGNATURE_LOW_THRESHOLD = 0.8;
+const SIGNATURE_LOW_THRESHOLD = 0.72;
 
 /**
  * Turn one validated LLM suggestion into an enriched (id + {id,name} chips)

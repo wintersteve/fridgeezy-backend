@@ -43,6 +43,15 @@ const SAME_PAIRS: Array<[DishFixture, DishFixture]> = [
         { name: "Murgh Makhani", nameEn: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "garam masala"] },
         { name: "Butter Chicken", nameEn: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream"] },
     ],
+    // Low-signal same-dish pairs (calibrated ~0.74–0.85) — now in the LLM gray band.
+    [
+        { name: "Gyōza", nameEn: "Japanese Pan-Fried Dumplings", tags: ["japanese", "appetizer", "dish"], ingredients: ["pork", "cabbage", "garlic", "ginger", "dumpling wrapper"] },
+        { name: "Japanese Dumplings", nameEn: "Gyoza", tags: ["japanese", "appetizer", "dish"], ingredients: ["ground pork", "napa cabbage", "garlic", "ginger", "wrapper"] },
+    ],
+    [
+        { name: "Phở Bò", nameEn: "Vietnamese Beef Noodle Soup", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "scallion", "cilantro"] },
+        { name: "Pho", nameEn: "Beef Pho", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "herbs"] },
+    ],
 ];
 
 // Genuine variations / distinct dishes — should STAY DISTINCT (adjudicate not-same).
@@ -54,6 +63,20 @@ const DISTINCT_PAIRS: Array<[DishFixture, DishFixture]> = [
     [
         { name: "Roux", nameEn: "Roux", tags: ["french", "roux", "component"], ingredients: ["flour", "butter"] },
         { name: "Béchamel", nameEn: "Bechamel Sauce", tags: ["french", "sauce", "component"], ingredients: ["flour", "butter", "milk"] },
+    ],
+    // Near-miss distinct pairs (calibrated ~0.72–0.80) — in the LLM gray band; the
+    // adjudicator must keep them apart.
+    [
+        { name: "Butter Chicken", nameEn: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "fenugreek"] },
+        { name: "Chicken Tikka Masala", nameEn: "Chicken Tikka Masala", tags: ["indian", "main", "dish"], ingredients: ["chicken", "yogurt", "tomato", "cream", "garam masala", "onion"] },
+    ],
+    [
+        { name: "Carbonara", nameEn: "Spaghetti alla Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
+        { name: "Cacio e Pepe", nameEn: "Cacio e Pepe", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "pecorino", "black pepper"] },
+    ],
+    [
+        { name: "Pad Thai", nameEn: "Pad Thai", tags: ["thai", "main", "dish"], ingredients: ["rice noodle", "shrimp", "tamarind", "peanut", "egg", "bean sprout"] },
+        { name: "Pad See Ew", nameEn: "Pad See Ew", tags: ["thai", "main", "dish"], ingredients: ["wide rice noodle", "chicken", "soy sauce", "egg", "chinese broccoli"] },
     ],
 ];
 

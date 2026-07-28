@@ -88,10 +88,11 @@ export async function matchTags(
 
             for (const input of unmatchedInputs) {
                 try {
-                    // Search for similar tags across all types
-                    // Embedding is generated server-side by the search_tags function
+                    // Embed the query app-side (text-embedding-3-small) and pass
+                    // the vector to search_tags — no OpenAI call from Postgres.
+                    const embedding = await generateEmbedding(input.name);
                     const vectorMatchResult = await tagsRepo.vectorSearch(
-                        input.name,
+                        embedding,
                         0.75
                     );
                     if (vectorMatchResult.success === false) {

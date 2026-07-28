@@ -28,12 +28,12 @@ export interface ITagsRepository {
 
     /**
      * Search for a tag using vector similarity across all tag types
-     * @param query Text query to search for (embedding generated server-side)
+     * @param embedding Precomputed query embedding (text-embedding-3-small, 1536-dim)
      * @param threshold Similarity threshold (0.0-1.0), default 0.75
      * @returns Best matching tag with similarity score, or null if no match above threshold
      */
     vectorSearch(
-        query: string,
+        embedding: number[],
         threshold: number
     ): Promise<Result<TagVectorMatch | null, DomainError>>;
 

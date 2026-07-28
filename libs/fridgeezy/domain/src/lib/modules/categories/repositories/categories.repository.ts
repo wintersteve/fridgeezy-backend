@@ -15,4 +15,12 @@ export interface ICategoriesRepository {
     findBestMatch(
         embedding: number[]
     ): Promise<Result<CategoryVectorMatch, DomainError>>;
+
+    /**
+     * Find a category by its canonical id (slug), or null if none exists.
+     * Used to resolve a controlled-vocabulary category name to a row.
+     */
+    findByCanonicalId(
+        canonicalId: string
+    ): Promise<Result<Category | null, DomainError>>;
 }

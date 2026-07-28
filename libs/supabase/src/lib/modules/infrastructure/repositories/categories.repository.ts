@@ -47,4 +47,20 @@ export class CategoriesRepository implements ICategoriesRepository {
             similarity: data[0].similarity,
         });
     }
+
+    async findByCanonicalId(
+        canonicalId: string
+    ): Promise<Result<Category | null, DomainError>> {
+        const { data, error } = await supabase
+            .from("categories")
+            .select("*")
+            .eq("canonical_id", canonicalId)
+            .maybeSingle();
+
+        if (error) {
+            return failure(new PersistenceError(error.message));
+        }
+
+        return success((data as Category | null) ?? null);
+    }
 }

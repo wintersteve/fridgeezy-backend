@@ -133,6 +133,22 @@ export async function persistRecipe(
 
         const result = await repository.persist(recipe, imageUrl);
 
+        // Store the name embedding app-side (text-embedding-3-small) so Postgres
+        // never calls OpenAI. Best-effort — don't fail the save if this fails.
+        if (result.success) {
+            const embedding = await generateEmbedding(recipe.name);
+            const embeddingResult = await repository.updateEmbedding(
+                result.value,
+                embedding
+            );
+            if (!embeddingResult.success) {
+                console.error(
+                    `Failed to store embedding for recipe "${recipe.name}":`,
+                    embeddingResult.error
+                );
+            }
+        }
+
         return result;
     } catch (error) {
         return failure(
@@ -193,6 +209,22 @@ export async function persistRecipeWithIngredientIds(
         // Persist using ingredient IDs
         const repository = new RecipesRepository();
         const result = await repository.persistWithIngredientIds(recipe, imageUrl);
+
+        // Store the name embedding app-side (text-embedding-3-small) so Postgres
+        // never calls OpenAI. Best-effort — don't fail the save if this fails.
+        if (result.success) {
+            const embedding = await generateEmbedding(recipe.name);
+            const embeddingResult = await repository.updateEmbedding(
+                result.value,
+                embedding
+            );
+            if (!embeddingResult.success) {
+                console.error(
+                    `Failed to store embedding for recipe "${recipe.name}":`,
+                    embeddingResult.error
+                );
+            }
+        }
 
         return result;
     } catch (error) {

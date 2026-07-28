@@ -1,3 +1,4 @@
+import { generateEmbedding } from "@fridgeezy/openai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
 
 export interface SearchRecipeResult {
@@ -20,8 +21,11 @@ export async function searchRecipes(
     threshold = 0.75,
     limit = 3
 ): Promise<SearchRecipeResult[]> {
+    // Embed the query app-side (text-embedding-3-small) and pass the vector to
+    // search_recipes — no OpenAI call from Postgres.
+    const embedding = await generateEmbedding(query);
     const { data, error } = await supabaseAdmin.rpc("search_recipes", {
-        search_query: query,
+        query_embedding: JSON.stringify(embedding),
         match_threshold: threshold,
         match_count: limit,
     });

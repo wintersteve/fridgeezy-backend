@@ -14,6 +14,7 @@ import {
     buildSuggestionSignature,
     describeSuggestion,
 } from "./suggestion-signature";
+import { verifySuggestionAuthenticity } from "./verify-suggestion-authenticity";
 
 /** Signature cosine similarity at/above which two dishes auto-merge. */
 const SIGNATURE_HIGH_THRESHOLD = 0.93;
@@ -114,6 +115,17 @@ export async function persistOrReuseSuggestion(
                 return existing;
             }
         }
+    }
+
+    // Authenticity gate — only runs for genuinely new dishes (dedup already
+    // returned any existing, already-vetted one). Keep inventions and
+    // hallucinations out of the discovery catalog.
+    const isAuthentic = await verifySuggestionAuthenticity(suggestion);
+    if (!isAuthentic) {
+        console.warn(
+            `[Suggestions] Dropping unauthentic dish "${suggestion.name}" (not attested for discovery)`
+        );
+        return null;
     }
 
     // No similar suggestion found or fetch failed, persist new suggestion

@@ -330,10 +330,12 @@ async function fetchExistingIngredients(
         const categoryName = categoryIdToName.get(ing.category_id);
         if (!categoryName) continue;
 
-        if (!existingByCategory.has(categoryName)) {
-            existingByCategory.set(categoryName, new Set());
+        let categorySet = existingByCategory.get(categoryName);
+        if (!categorySet) {
+            categorySet = new Set<string>();
+            existingByCategory.set(categoryName, categorySet);
         }
-        existingByCategory.get(categoryName)!.add(ing.canonical_id);
+        categorySet.add(ing.canonical_id);
     }
 
     const totalExisting = Array.from(existingByCategory.values()).reduce(
@@ -455,7 +457,9 @@ async function persistIngredients(
     );
 
     // Handle parent relationships
-    const parentRelations = uniqueIngredients.filter((ing) => ing.parent);
+    const parentRelations = uniqueIngredients.filter(
+        (ing): ing is Ingredient & { parent: string } => !!ing.parent
+    );
     if (parentRelations.length > 0) {
         console.log(
             `  Setting up ${parentRelations.length} parent relationships...`
@@ -463,7 +467,7 @@ async function persistIngredients(
 
         // Collect parent names that need database lookup
         const missingParentNames = parentRelations
-            .map((ing) => ing.parent!)
+            .map((ing) => ing.parent)
             .filter((parent) => !ingredientIds.has(parent));
 
         // Fetch missing parents from database
@@ -536,7 +540,7 @@ async function persistIngredients(
             const childId = ingredientIds.get(ing.name);
             // Prefer current batch, fallback to database
             const parentId =
-                ingredientIds.get(ing.parent!) || dbParentIds.get(ing.parent!);
+                ingredientIds.get(ing.parent) || dbParentIds.get(ing.parent);
 
             if (childId && parentId) {
                 const { error } = await supabaseAdmin

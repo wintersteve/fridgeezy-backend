@@ -102,6 +102,34 @@ export class IngredientsRepository implements IIngredientsRepository {
         }
     }
 
+    async addAlias(
+        ingredientId: string,
+        alias: string
+    ): Promise<Result<void, DomainError>> {
+        try {
+            // Idempotent: the alias column is unique — do nothing if it already
+            // exists (first writer wins; we don't repoint an existing alias).
+            const { error } = await supabase
+                .from("ingredient_aliases")
+                .upsert(
+                    { ingredient_id: ingredientId, alias },
+                    { onConflict: "alias", ignoreDuplicates: true }
+                );
+
+            if (error) {
+                return failure(new PersistenceError(error.message));
+            }
+
+            return success(undefined);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to add ingredient alias: ${error instanceof Error ? error.message : String(error)}`
+                )
+            );
+        }
+    }
+
     async vectorSearch(
         embedding: number[],
         threshold: number

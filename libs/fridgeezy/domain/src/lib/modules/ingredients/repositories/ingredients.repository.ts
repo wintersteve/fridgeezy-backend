@@ -27,6 +27,17 @@ export interface IIngredientsRepository {
     ): Promise<Result<Map<string, string>, DomainError>>;
 
     /**
+     * Record a learned alias → ingredient mapping. Idempotent: an alias that
+     * already exists is left untouched.
+     * @param ingredientId The canonical ingredient the alias points to
+     * @param alias The surface name to alias
+     */
+    addAlias(
+        ingredientId: string,
+        alias: string
+    ): Promise<Result<void, DomainError>>;
+
+    /**
      * Search for an ingredient using vector similarity
      * @param embedding Vector embedding (1536 dimensions)
      * @param threshold Similarity threshold (0.0-1.0), default 0.85

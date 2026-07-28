@@ -94,18 +94,15 @@ error.
 
 - [x] **Decide the single model** — CONFIRMED `text-embedding-3-small` (1536),
       for the pgvector index-cap reason above.
-- Progress: tags (#5), recipe_suggestions (#6 / slice 2a), recipes (slice 2b) move
-  the query/store embedding app-side and onto 1536. Slice 3 still owed: drop the
-  `generate_embedding*` functions and add HNSW indexes on the 1536 columns.
-- [ ] Move the **in-DB `generate_embedding`** (the `http`-extension OpenAI call
-      inside Postgres) into the app layer / a dedicated embedding service. DB
-      functions receive a precomputed vector instead of calling out. Removes the
-      DB→OpenAI coupling and unblocks the Bedrock migration (model no longer
-      hardcoded in SQL).
-- [ ] Migrate any column not on the chosen model (dimension change) and
-      **re-embed** the affected corpus (ingredients/tags/categories/units if
-      moving to 3072, or recipes/suggestions if moving to 1536).
-- [ ] Collapse `generate_embedding` / `generate_embedding_small` to one.
+- Progress: tags (#5), recipe_suggestions (#6 / slice 2a), recipes (slice 2b),
+  cleanup + indexes (slice 3). Phase 1 code complete — apply the migrations + run
+  the `embed-suggestions` / `embed-recipes` backfills to finish it on the DB.
+- [x] Move the **in-DB `generate_embedding`** into the app layer — search/store
+      functions now take a precomputed vector; done across slices 1/2a/2b.
+- [x] Migrate the off-model columns (`recipes.fts`, `recipe_suggestions.embedding`)
+      3072→1536 and re-embed via the backfill scripts.
+- [x] Collapse `generate_embedding` / `generate_embedding_small` — both **dropped**
+      in slice 3 (nothing calls them in-DB anymore).
 
 **Acceptance:** one embedding model across all tables; no outbound HTTP from
 Postgres; all `search_*` functions take a precomputed vector.

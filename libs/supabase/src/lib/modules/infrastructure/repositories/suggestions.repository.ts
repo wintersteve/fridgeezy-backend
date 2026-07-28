@@ -277,8 +277,8 @@ export class SuggestionsRepository implements ISuggestionsRepository {
         try {
             const { data, error } = await supabase.rpc("persist_suggestion", {
                 p_name: suggestion.name,
-                p_description: suggestion.description!,
-                p_difficulty: suggestion.difficulty!,
+                p_description: suggestion.description ?? "",
+                p_difficulty: suggestion.difficulty as "easy" | "medium" | "hard",
                 p_ingredient_ids: ingredientIds,
                 p_tag_ids: tagIds,
                 p_name_en: nameEn ?? null,

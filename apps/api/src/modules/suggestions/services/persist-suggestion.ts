@@ -5,6 +5,7 @@ import { SuggestionsRepository } from "@fridgeezy/supabase";
 
 import { matchIngredients, IngredientMatch } from "./match-ingredients";
 import { matchTags, TagInput, TagMatch } from "./match-tags";
+import { buildSuggestionSignature } from "./suggestion-signature";
 
 export interface PersistSuggestionContext {
     /** The cuisine from the original request - will be marked as type: "cuisine" for auto-creation */
@@ -84,9 +85,16 @@ export async function persistSuggestion(
 
         const tagMatches = tagMatchesResult.value;
 
-        // Embed the suggestion name app-side (text-embedding-3-small) so Postgres
-        // never calls OpenAI — passed through to persist_suggestion for storage.
-        const nameEmbedding = await generateEmbedding(suggestion.name);
+        // Embed the dish SIGNATURE (English name + tags + ingredients) app-side
+        // so Postgres never calls OpenAI — passed to persist_suggestion. The
+        // signature is what makes cross-name dedup work (see suggestion-signature).
+        const signature = buildSuggestionSignature({
+            name: suggestion.name,
+            nameEn: suggestion.name_en,
+            tags: suggestion.tags,
+            ingredients: suggestion.ingredients,
+        });
+        const nameEmbedding = await generateEmbedding(signature);
 
         // Persist suggestion with relations
         const suggestionsRepo = new SuggestionsRepository();

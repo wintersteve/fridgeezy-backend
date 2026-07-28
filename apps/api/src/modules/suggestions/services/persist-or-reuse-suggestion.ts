@@ -6,9 +6,19 @@ import {
 } from "@fridgeezy/schemas";
 import { SuggestionsRepository } from "@fridgeezy/supabase";
 
+import { adjudicateSameDish } from "./adjudicate-suggestion";
 import { fetchEnrichedSuggestion } from "./fetch-enriched-suggestion";
 import { findSuggestionByName } from "./find-suggestion-by-name";
 import { persistSuggestion } from "./persist-suggestion";
+import {
+    buildSuggestionSignature,
+    describeSuggestion,
+} from "./suggestion-signature";
+
+/** Signature cosine similarity at/above which two dishes auto-merge. */
+const SIGNATURE_HIGH_THRESHOLD = 0.93;
+/** Below this, candidates are treated as distinct dishes (no adjudication). */
+const SIGNATURE_LOW_THRESHOLD = 0.8;
 
 /**
  * Turn one validated LLM suggestion into an enriched (id + {id,name} chips)
@@ -39,14 +49,23 @@ export async function persistOrReuseSuggestion(
         return exactMatch;
     }
 
-    // Layer 2: fuzzy similarity match (similarity threshold: 0.95) to catch
-    // near-duplicate spellings the exact match can't. Embed the query name
-    // app-side (text-embedding-3-small) and pass the vector to the search.
-    const nameEmbedding = await generateEmbedding(suggestion.name);
+    // Layer 2: signature-based semantic dedup. Embed the dish SIGNATURE (English
+    // name + tags + ingredients) so the same dish under different names merges
+    // (Som Tam ≡ Green Papaya Salad) while genuine variations stay distinct.
+    // Recall nearest candidates, auto-merge the high-confidence ones, keep the
+    // far ones distinct, and let the LLM adjudicate the gray band in between.
+    const signatureEmbedding = await generateEmbedding(
+        buildSuggestionSignature({
+            name: suggestion.name,
+            nameEn: suggestion.name_en,
+            tags: suggestion.tags,
+            ingredients: suggestion.ingredients,
+        })
+    );
     const searchResult = await suggestionsRepo.searchSimilar(
-        nameEmbedding,
-        0.95,
-        1
+        signatureEmbedding,
+        SIGNATURE_LOW_THRESHOLD,
+        5
     );
 
     if (!searchResult.success) {
@@ -54,27 +73,47 @@ export async function persistOrReuseSuggestion(
             `[Suggestions] Failed to search similar suggestions for "${suggestion.name}":`,
             searchResult.error
         );
-        // Continue with persistence if search fails
-    } else if (searchResult.value.length > 0) {
-        // Similar suggestion exists, fetch enriched data and reuse it
-        const existingSuggestion = searchResult.value[0];
-        console.log(
-            `[Suggestions] Found similar suggestion: ${existingSuggestion.name} (score: ${existingSuggestion.score.toFixed(3)}) - reusing instead of creating duplicate`
-        );
+        // Continue with persistence if search fails.
+    } else {
+        // Candidates come back ordered by score descending.
+        for (const candidate of searchResult.value) {
+            if (candidate.score < SIGNATURE_LOW_THRESHOLD) break;
 
-        const enrichedResult = await fetchEnrichedSuggestion(
-            existingSuggestion.id
-        );
+            const enrichedResult = await fetchEnrichedSuggestion(candidate.id);
+            if (!enrichedResult.success) {
+                console.error(
+                    `[Suggestions] Failed to fetch candidate ${candidate.id}:`,
+                    enrichedResult.error
+                );
+                continue;
+            }
+            const existing = enrichedResult.value;
 
-        if (enrichedResult.success) {
-            return enrichedResult.value;
+            const autoMerge = candidate.score >= SIGNATURE_HIGH_THRESHOLD;
+            const isSameDish =
+                autoMerge ||
+                (await adjudicateSameDish(
+                    describeSuggestion(
+                        suggestion.name,
+                        suggestion.name_en,
+                        suggestion.tags,
+                        suggestion.ingredients
+                    ),
+                    describeSuggestion(
+                        existing.name,
+                        existing.nameEn,
+                        existing.tags.map((t) => t.name),
+                        existing.ingredients.map((i) => i.name)
+                    )
+                ));
+
+            if (isSameDish) {
+                console.log(
+                    `[Suggestions] Reusing "${existing.name}" for "${suggestion.name}" (score ${candidate.score.toFixed(3)}${autoMerge ? "" : ", adjudicated"})`
+                );
+                return existing;
+            }
         }
-
-        console.error(
-            `[Suggestions] Failed to fetch enriched suggestion ${existingSuggestion.id}:`,
-            enrichedResult.error
-        );
-        // Fall through to create a new suggestion
     }
 
     // No similar suggestion found or fetch failed, persist new suggestion

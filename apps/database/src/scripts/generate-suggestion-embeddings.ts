@@ -1,75 +1,83 @@
 import { generateBatchEmbeddings } from "@fridgeezy/openai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
+import { buildSuggestionSignature } from "@fridgeezy/toolkit";
 import { config } from "dotenv";
 
 config();
 
+interface SuggestionRow {
+    id: string;
+    name: string;
+    name_en: string | null;
+    recipe_suggestion_ingredients: Array<{ ingredients: { name: string } | null }>;
+    recipe_suggestion_tags: Array<{ tags: { name: string } | null }>;
+}
+
 /**
- * Backfill embeddings for recipe_suggestions after the 3072 -> 1536 migration.
- * Uses the suggestion name as the embedding text (text-embedding-3-small, 1536),
- * matching what the application now stores on insert via persist_suggestion.
+ * (Re)builds the recipe_suggestions embeddings from the dish SIGNATURE (English
+ * name + tags + ingredients) using the shared buildSuggestionSignature — the same
+ * text the app embeds on insert. Re-embeds every suggestion (not just null ones)
+ * so switching from name-embeddings to signature-embeddings is a single run.
  */
 export async function generateSuggestionEmbeddings() {
-    console.log("Starting recipe_suggestions embedding backfill...\n");
+    console.log("Starting recipe_suggestions signature-embedding backfill...\n");
 
     try {
-        // 1. Fetch suggestions missing an embedding (all of them, post-migration)
-        console.log("Fetching suggestions from database...");
-
-        const { data: suggestions, error: fetchError } = await supabaseAdmin
+        console.log("Fetching suggestions (with ingredients + tags)...");
+        const { data, error: fetchError } = await supabaseAdmin
             .from("recipe_suggestions")
-            .select("id, name")
-            .is("embedding", null)
+            .select(
+                "id, name, name_en, recipe_suggestion_ingredients(ingredients(name)), recipe_suggestion_tags(tags(name))"
+            )
             .order("name");
 
         if (fetchError) {
-            throw new Error(
-                `Failed to fetch suggestions: ${fetchError.message}`
-            );
+            throw new Error(`Failed to fetch suggestions: ${fetchError.message}`);
         }
 
-        if (!suggestions || suggestions.length === 0) {
-            console.log(
-                "No suggestions found without embeddings. Nothing to do!"
-            );
+        const suggestions = (data ?? []) as unknown as SuggestionRow[];
+        if (suggestions.length === 0) {
+            console.log("No suggestions found. Nothing to do!");
             return;
         }
 
-        console.log(`Found ${suggestions.length} suggestions to process.\n`);
+        console.log(`Found ${suggestions.length} suggestions to (re)signature.\n`);
 
-        // 2. Generate embeddings in batch (small model, 1536 dims)
-        console.log("Generating embeddings via OpenAI API...");
+        // Build one dish signature per suggestion (identical to the app's).
+        const signatures = suggestions.map((s) =>
+            buildSuggestionSignature({
+                name: s.name,
+                nameEn: s.name_en,
+                tags: s.recipe_suggestion_tags
+                    .map((t) => t.tags?.name)
+                    .filter((n): n is string => Boolean(n)),
+                ingredients: s.recipe_suggestion_ingredients
+                    .map((i) => i.ingredients?.name)
+                    .filter((n): n is string => Boolean(n)),
+            })
+        );
 
-        const names = suggestions.map((s) => s.name);
-
-        const result = await generateBatchEmbeddings(names, {
+        console.log("Generating signature embeddings via OpenAI API...");
+        const result = await generateBatchEmbeddings(signatures, {
             model: "text-embedding-3-small",
             dimensions: 1536,
         });
-
         console.log(
-            `Successfully generated ${result.embeddings.length} embeddings`
+            `Generated ${result.embeddings.length} embeddings (model ${result.model}, ${result.usage.total_tokens} tokens)\n`
         );
-        console.log(`Model: ${result.model}`);
-        console.log(`Tokens used: ${result.usage.total_tokens}\n`);
 
-        // 3. Store embeddings
-        console.log("Storing embeddings in database...");
+        console.log("Storing embeddings...");
         let successCount = 0;
         let errorCount = 0;
-
         for (let i = 0; i < suggestions.length; i++) {
-            const suggestion = suggestions[i];
-            const embedding = result.embeddings[i];
-
             const { error: updateError } = await supabaseAdmin
                 .from("recipe_suggestions")
-                .update({ embedding: JSON.stringify(embedding) })
-                .eq("id", suggestion.id);
+                .update({ embedding: JSON.stringify(result.embeddings[i]) })
+                .eq("id", suggestions[i].id);
 
             if (updateError) {
                 console.error(
-                    `  ✗ Failed to update ${suggestion.name}: ${updateError.message}`
+                    `  ✗ ${suggestions[i].name}: ${updateError.message}`
                 );
                 errorCount++;
             } else {
@@ -77,22 +85,16 @@ export async function generateSuggestionEmbeddings() {
             }
         }
 
-        // 4. Summary
         console.log("\n" + "=".repeat(50));
-        console.log("SUMMARY");
-        console.log("=".repeat(50));
-        console.log(`Total suggestions processed: ${suggestions.length}`);
-        console.log(`Successful updates: ${successCount}`);
-        console.log(`Failed updates: ${errorCount}`);
-        console.log(`API tokens used: ${result.usage.total_tokens}`);
-
-        // Estimate cost (text-embedding-3-small: $0.02 per 1M tokens)
+        console.log(
+            `Total: ${suggestions.length}, updated: ${successCount}, failed: ${errorCount}`
+        );
         const estimatedCost = (result.usage.total_tokens / 1_000_000) * 0.02;
-        console.log(`Estimated cost: $${estimatedCost.toFixed(6)}`);
+        console.log(
+            `API tokens: ${result.usage.total_tokens}, est. cost: $${estimatedCost.toFixed(6)}`
+        );
 
-        if (errorCount > 0) {
-            process.exit(1);
-        }
+        if (errorCount > 0) process.exit(1);
     } catch (error) {
         console.error(
             "\nFATAL ERROR:",
@@ -104,7 +106,7 @@ export async function generateSuggestionEmbeddings() {
 
 generateSuggestionEmbeddings()
     .then(() => {
-        console.log("\nScript completed successfully!");
+        console.log("\nDone.");
         process.exit(0);
     })
     .catch((error) => {

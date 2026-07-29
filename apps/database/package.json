@@ -68,6 +68,20 @@
                     "cwd": "apps/database"
                 }
             },
+            "generate-ingredient-seed": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/scripts/generate-ingredient-seed.ts",
+                    "cwd": "apps/database"
+                }
+            },
+            "seed-ingredients": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/scripts/seed-ingredients.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "up": {
                 "executor": "nx:run-commands",
                 "options": {

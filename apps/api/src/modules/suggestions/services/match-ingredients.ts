@@ -68,6 +68,21 @@ export async function matchIngredients(
         return parts.join("_");
     };
 
+    // Two names are only safe to AUTO-accept (merge without asking the LLM) when
+    // they are the same words in a different order/spacing — i.e. identical
+    // canonical token sets. A modifier boundary (e.g. "basil" vs "thai basil",
+    // "oregano" vs "dried oregano") embeds very close (shared head noun) and would
+    // otherwise clear the similarity threshold and silently collapse a genuine
+    // distinction (variety, fresh/dried). Different token sets must go to the LLM,
+    // which correctly rules variety/state as a distinct ingredient.
+    const sameTokenSet = (a: string, b: string): boolean => {
+        const ta = new Set(toCanonicalId(a).split("_").filter(Boolean));
+        const tb = new Set(toCanonicalId(b).split("_").filter(Boolean));
+        if (ta.size !== tb.size) return false;
+        for (const t of ta) if (!tb.has(t)) return false;
+        return true;
+    };
+
     // Create mapping from canonical ID to original name
     const canonicalToOriginal = new Map<string, string>();
     names.forEach(name => {
@@ -197,8 +212,16 @@ export async function matchIngredients(
                     ? vectorMatchResult.value
                     : null;
 
-                // High-confidence auto-accept — no LLM needed.
-                if (candidate && candidate.similarity >= ACCEPT_THRESHOLD) {
+                // High-confidence auto-accept — no LLM needed — but ONLY when the
+                // names are the same words (identical token set). A modifier
+                // boundary (variety/state, e.g. "thai basil" vs "basil") can clear
+                // the similarity threshold too, so those are sent to the LLM
+                // instead of being silently merged.
+                if (
+                    candidate &&
+                    candidate.similarity >= ACCEPT_THRESHOLD &&
+                    sameTokenSet(name, candidate.ingredient.name)
+                ) {
                     return {
                         kind: "accept",
                         name,

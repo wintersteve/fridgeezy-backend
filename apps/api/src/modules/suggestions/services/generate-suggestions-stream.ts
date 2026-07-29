@@ -84,13 +84,22 @@ export async function* generateSuggestionsStream(
         stream: true,
     });
 
-    // Process JSONL stream with validation
+    // Persist/dedup each suggestion CONCURRENTLY: kick off the work as soon as
+    // each JSONL line is parsed (rather than awaiting one before reading the
+    // next), then yield in generation order as they resolve. Each suggestion's
+    // dedup + authenticity + ingredient/tag matching is independent; the only
+    // shared writes are new ingredient/tag rows, and their creates are
+    // conflict-safe (reuse the row that wins a duplicate-key race).
+    const pending: Promise<EnrichedSuggestionResponseDto | null>[] = [];
     for await (const { parsed } of processJsonlStream(stream, [
         GenerateSuggestionResponseSchema,
     ])) {
         const suggestion = parsed as GenerateSuggestionResponseDto;
+        pending.push(persistOrReuseSuggestion(suggestion, request));
+    }
 
-        const enriched = await persistOrReuseSuggestion(suggestion, request);
+    for (const persist of pending) {
+        const enriched = await persist;
         if (enriched) yield enriched;
     }
 }

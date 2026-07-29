@@ -82,45 +82,47 @@ export async function matchTags(
             .map((id) => canonicalToInput.get(id))
             .filter((input): input is TagInput => input !== undefined);
 
-        // Step 2: Vector search (embedding generated server-side)
+        // Step 2: Vector search (PARALLEL, read-only). Embed each remaining tag
+        // app-side (text-embedding-3-small) and search — independent reads, so
+        // run them concurrently instead of one tag at a time.
         if (unmatchedInputs.length > 0) {
-            const stillUnmatched: TagInput[] = [];
-
-            for (const input of unmatchedInputs) {
-                try {
-                    // Embed the query app-side (text-embedding-3-small) and pass
-                    // the vector to search_tags — no OpenAI call from Postgres.
-                    const embedding = await generateEmbedding(input.name);
-                    const vectorMatchResult = await tagsRepo.vectorSearch(
-                        embedding,
-                        0.75
-                    );
-                    if (vectorMatchResult.success === false) {
+            const searched = await Promise.all(
+                unmatchedInputs.map(async (input) => {
+                    try {
+                        const embedding = await generateEmbedding(input.name);
+                        const vectorMatchResult = await tagsRepo.vectorSearch(
+                            embedding,
+                            0.75
+                        );
+                        if (vectorMatchResult.success === false) {
+                            console.error(
+                                `Vector search failed for "${input.name}":`,
+                                vectorMatchResult.error
+                            );
+                            return { input, match: null };
+                        }
+                        return { input, match: vectorMatchResult.value };
+                    } catch (error) {
                         console.error(
                             `Vector search failed for "${input.name}":`,
-                            vectorMatchResult.error
+                            error
                         );
-                        stillUnmatched.push(input);
-                        continue;
+                        return { input, match: null };
                     }
+                })
+            );
 
-                    const vectorMatch = vectorMatchResult.value;
-                    if (vectorMatch) {
-                        matches.push({
-                            originalName: input.name,
-                            tagId: vectorMatch.tag.id,
-                            tagType: vectorMatch.tag.type,
-                            matchType: "vector",
-                            confidence: vectorMatch.similarity,
-                        });
-                    } else {
-                        stillUnmatched.push(input);
-                    }
-                } catch (error) {
-                    console.error(
-                        `Vector search failed for "${input.name}":`,
-                        error
-                    );
+            const stillUnmatched: TagInput[] = [];
+            for (const { input, match } of searched) {
+                if (match) {
+                    matches.push({
+                        originalName: input.name,
+                        tagId: match.tag.id,
+                        tagType: match.tag.type,
+                        matchType: "vector",
+                        confidence: match.similarity,
+                    });
+                } else {
                     stillUnmatched.push(input);
                 }
             }

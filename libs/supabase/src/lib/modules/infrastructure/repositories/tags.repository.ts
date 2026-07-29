@@ -155,6 +155,18 @@ export class TagsRepository implements ITagsRepository {
                 .single();
 
             if (error) {
+                // Concurrent create race (duplicate canonical_id): reuse the row
+                // that won rather than failing the whole suggestion.
+                if (error.code === "23505" && tag.canonical_id) {
+                    const existing = await supabase
+                        .from("tags")
+                        .select()
+                        .eq("canonical_id", tag.canonical_id)
+                        .single();
+                    if (!existing.error && existing.data) {
+                        return success(existing.data as Tag);
+                    }
+                }
                 return failure(new PersistenceError(error.message));
             }
 

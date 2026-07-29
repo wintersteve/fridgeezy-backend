@@ -107,8 +107,14 @@ export async function searchRecipeSuggestions(
         maxResults
     );
 
-    for (const result of vectorResults) {
-        const recipeSummary = await fetchRecipeSummary(result.id);
+    // Fetch each hit's summary in parallel (independent reads) rather than one
+    // round-trip per result, then assemble in the original ranked order.
+    const summaries = await Promise.all(
+        vectorResults.map((result) => fetchRecipeSummary(result.id))
+    );
+
+    vectorResults.forEach((result, i) => {
+        const recipeSummary = summaries[i];
 
         if (recipeSummary) {
             suggestions.push({
@@ -129,7 +135,7 @@ export async function searchRecipeSuggestions(
             });
             metadata.vectorSearchHits++;
         }
-    }
+    });
 
     // If we have enough results from vector search, return early
     if (suggestions.length >= maxResults) {

@@ -186,6 +186,18 @@ export class IngredientsRepository implements IIngredientsRepository {
                 .single();
 
             if (error) {
+                // Concurrent create race (duplicate canonical_id): reuse the row
+                // that won rather than failing the whole suggestion.
+                if (error.code === "23505" && ingredient.canonical_id) {
+                    const existing = await supabase
+                        .from("ingredients")
+                        .select()
+                        .eq("canonical_id", ingredient.canonical_id)
+                        .single();
+                    if (!existing.error && existing.data) {
+                        return success(existing.data as Ingredient);
+                    }
+                }
                 return failure(new PersistenceError(error.message));
             }
 

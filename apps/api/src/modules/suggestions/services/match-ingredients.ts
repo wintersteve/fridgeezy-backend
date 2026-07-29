@@ -153,125 +153,158 @@ export async function matchIngredients(
             }
         }
 
-        for (const name of unmatchedOriginalNames) {
-            const embedding = embeddingByName.get(name);
-            if (!embedding) continue;
+        // Decision phase (PARALLEL, read-only): per unmatched name, vector search
+        // + LLM adjudication. This is the expensive part — the LLM adjudications
+        // used to run one ingredient at a time; run them concurrently.
+        type Resolution =
+            | { kind: "accept"; name: string; ingredientId: string; similarity: number }
+            | { kind: "invalid"; name: string }
+            | { kind: "create"; name: string; embedding: number[]; category?: string }
+            | { kind: "skip"; name: string };
 
-            // Vector search across the gray band (>= GRAY_BAND_THRESHOLD).
-            const vectorMatchResult = await ingredientsRepo.vectorSearch(
-                embedding,
-                GRAY_BAND_THRESHOLD
-            );
-            if (vectorMatchResult.success === false) {
-                console.error(
-                    `Vector search failed for "${name}":`,
-                    vectorMatchResult.error
+        const resolutions = await Promise.all(
+            unmatchedOriginalNames.map(async (name): Promise<Resolution> => {
+                const embedding = embeddingByName.get(name);
+                if (!embedding) return { kind: "skip", name };
+
+                const vectorMatchResult = await ingredientsRepo.vectorSearch(
+                    embedding,
+                    GRAY_BAND_THRESHOLD
                 );
-            }
-            const candidate = vectorMatchResult.success
-                ? vectorMatchResult.value
-                : null;
+                if (vectorMatchResult.success === false) {
+                    console.error(
+                        `Vector search failed for "${name}":`,
+                        vectorMatchResult.error
+                    );
+                }
+                const candidate = vectorMatchResult.success
+                    ? vectorMatchResult.value
+                    : null;
 
-            // High-confidence auto-accept.
-            if (candidate && candidate.similarity >= ACCEPT_THRESHOLD) {
+                // High-confidence auto-accept — no LLM needed.
+                if (candidate && candidate.similarity >= ACCEPT_THRESHOLD) {
+                    return {
+                        kind: "accept",
+                        name,
+                        ingredientId: candidate.ingredient.id,
+                        similarity: candidate.similarity,
+                    };
+                }
+
+                // Gray band or no candidate: let the LLM adjudicate.
+                const adjudication = await adjudicateIngredient(
+                    name,
+                    candidate?.ingredient.name
+                );
+                if (adjudication.decision === "same" && candidate) {
+                    return {
+                        kind: "accept",
+                        name,
+                        ingredientId: candidate.ingredient.id,
+                        similarity: candidate.similarity,
+                    };
+                }
+                if (adjudication.decision === "invalid") {
+                    return { kind: "invalid", name };
+                }
+                return {
+                    kind: "create",
+                    name,
+                    embedding,
+                    category: adjudication.category,
+                };
+            })
+        );
+
+        // Apply phase (SERIAL): the writes (alias learning, ingredient creation)
+        // run in order — keeps create error semantics and avoids intra-suggestion
+        // insert races on the ingredient canonical_id unique constraint.
+        for (const r of resolutions) {
+            if (r.kind === "skip") continue;
+
+            if (r.kind === "accept") {
                 matches.push({
-                    originalName: name,
-                    ingredientId: candidate.ingredient.id,
+                    originalName: r.name,
+                    ingredientId: r.ingredientId,
                     matchType: "vector",
-                    confidence: candidate.similarity,
+                    confidence: r.similarity,
                 });
-                await learnAlias(candidate.ingredient.id, name);
+                await learnAlias(r.ingredientId, r.name);
                 continue;
             }
 
-            // Gray band or no candidate: let the LLM adjudicate.
-            const adjudication = await adjudicateIngredient(
-                name,
-                candidate?.ingredient.name
-            );
-
-            if (adjudication.decision === "same" && candidate) {
-                matches.push({
-                    originalName: name,
-                    ingredientId: candidate.ingredient.id,
-                    matchType: "vector",
-                    confidence: candidate.similarity,
-                });
-                await learnAlias(candidate.ingredient.id, name);
-                continue;
-            }
-
-            if (adjudication.decision === "invalid") {
+            if (r.kind === "invalid") {
                 console.warn(
-                    `[Ingredients] Skipping "${name}" — adjudged not a real ingredient`
+                    `[Ingredients] Skipping "${r.name}" — adjudged not a real ingredient`
                 );
                 continue;
             }
 
-            // decision === "new": create. Prefer the LLM-chosen controlled
-            // category; fall back to nearest-centroid only if it can't be resolved.
+            // create: prefer the LLM-chosen controlled category; fall back to
+            // nearest-centroid only if it can't be resolved.
             try {
-                const canonicalId = toCanonicalId(name);
+                const canonicalId = toCanonicalId(r.name);
 
                 let categoryId: string | undefined;
-                if (adjudication.category) {
+                if (r.category) {
                     const catResult = await categoriesRepo.findByCanonicalId(
-                        toCanonicalId(adjudication.category)
+                        toCanonicalId(r.category)
                     );
                     if (catResult.success && catResult.value) {
                         categoryId = catResult.value.id;
                         console.log(
-                            `[Ingredients] Assigned "${name}" to category "${catResult.value.name}" (adjudicated)`
+                            `[Ingredients] Assigned "${r.name}" to category "${catResult.value.name}" (adjudicated)`
                         );
                     }
                 }
 
                 if (!categoryId) {
                     // Fallback: nearest-centroid (always returns a match).
-                    const categoryMatch =
-                        await categoriesRepo.findBestMatch(embedding);
+                    const categoryMatch = await categoriesRepo.findBestMatch(
+                        r.embedding
+                    );
                     if (!categoryMatch.success) {
                         console.error(
-                            `Failed to find category for "${name}":`,
+                            `Failed to find category for "${r.name}":`,
                             categoryMatch.error
                         );
                         return failure(categoryMatch.error);
                     }
                     categoryId = categoryMatch.value.category.id;
                     console.log(
-                        `[Ingredients] Assigned "${name}" to category "${categoryMatch.value.category.name}" (centroid fallback, similarity: ${categoryMatch.value.similarity.toFixed(3)})`
+                        `[Ingredients] Assigned "${r.name}" to category "${categoryMatch.value.category.name}" (centroid fallback, similarity: ${categoryMatch.value.similarity.toFixed(3)})`
                     );
                 }
 
                 const createResult = await ingredientsRepo.create({
-                    name,
+                    name: r.name,
                     canonical_id: canonicalId,
                     category_id: categoryId,
-                    embedding: JSON.stringify(embedding),
+                    embedding: JSON.stringify(r.embedding),
                 });
 
                 if (createResult.success === false) {
                     console.error(
-                        `Failed to create ingredient "${name}":`,
+                        `Failed to create ingredient "${r.name}":`,
                         createResult.error
                     );
                     return failure(
                         new PersistenceError(
-                            `Failed to create ingredient "${name}": ${createResult.error.message}`
+                            `Failed to create ingredient "${r.name}": ${createResult.error.message}`
                         )
                     );
                 }
 
                 matches.push({
-                    originalName: name,
+                    originalName: r.name,
                     ingredientId: createResult.value.id,
                     matchType: "created",
                 });
             } catch (error) {
-                console.error(`Failed to create ingredient "${name}":`, error);
+                console.error(`Failed to create ingredient "${r.name}":`, error);
                 return failure(
                     new PersistenceError(
-                        `Failed to create ingredient "${name}": ${error instanceof Error ? error.message : "Unknown error"}`
+                        `Failed to create ingredient "${r.name}": ${error instanceof Error ? error.message : "Unknown error"}`
                     )
                 );
             }

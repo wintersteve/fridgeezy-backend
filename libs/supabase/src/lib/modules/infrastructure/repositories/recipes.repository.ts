@@ -332,4 +332,74 @@ export class RecipesRepository implements IRecipesRepository {
             );
         }
     }
+
+    /**
+     * The recipe a suggestion was already promoted into, if any.
+     *
+     * Promotion is one-way and deletes the suggestion once the recipe exists, so
+     * a repeated promote of the same id would otherwise regenerate a recipe that
+     * has already been written and paid for.
+     *
+     * @returns Result containing the recipe UUID, or null when never promoted
+     */
+    async findBySuggestionId(
+        suggestionId: string
+    ): Promise<Result<string | null, PersistenceError>> {
+        try {
+            // Type assertion needed until database types are regenerated after
+            // the source_suggestion_id migration.
+            const { data, error } = await (supabaseAdmin as any)
+                .from("recipes")
+                .select("id")
+                .eq("source_suggestion_id", suggestionId)
+                .maybeSingle();
+
+            if (error) {
+                return failure(
+                    new PersistenceError(`Database error: ${error.message}`)
+                );
+            }
+
+            return success((data?.id as string) ?? null);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to look up promoted recipe: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
+
+    /**
+     * Record which suggestion a freshly persisted recipe was promoted from. Must
+     * run before the suggestion is deleted, since that id is the only handle a
+     * returning client has on the recipe.
+     */
+    async markPromotedFrom(
+        recipeId: string,
+        suggestionId: string
+    ): Promise<Result<void, PersistenceError>> {
+        try {
+            // Type assertion needed until database types are regenerated after
+            // the source_suggestion_id migration.
+            const { error } = await (supabaseAdmin as any)
+                .from("recipes")
+                .update({ source_suggestion_id: suggestionId })
+                .eq("id", recipeId);
+
+            if (error) {
+                return failure(
+                    new PersistenceError(`Database error: ${error.message}`)
+                );
+            }
+
+            return success(undefined);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to record promoted suggestion: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
 }

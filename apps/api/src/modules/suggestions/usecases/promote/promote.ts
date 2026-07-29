@@ -8,7 +8,7 @@ import {
     TipSchema,
 } from "@fridgeezy/schemas";
 import { createStreamHandler } from "@fridgeezy/streaming-server";
-import { SuggestionsRepository } from "@fridgeezy/supabase";
+import { RecipesRepository, SuggestionsRepository } from "@fridgeezy/supabase";
 import { Request } from "express";
 
 import { trackBackgroundTask } from "../../../../background-tasks";
@@ -125,6 +125,29 @@ export const promoteSuggestion = createStreamHandler({
             throw new Error("Suggestion ID is required");
         }
 
+        // 0. Promotion is one-way: the suggestion is deleted once its recipe
+        // exists. So if this id has already been promoted, hand back that recipe
+        // straight away rather than regenerating it — a client that dropped out
+        // mid-stream and came back would otherwise pay for the whole recipe a
+        // second time (and, since the suggestion is gone, 404 instead).
+        const recipesRepository = new RecipesRepository();
+        const promotedResult = await recipesRepository.findBySuggestionId(id);
+
+        if (promotedResult.success && promotedResult.value) {
+            const promotedId = promotedResult.value;
+
+            console.log(
+                `Suggestion ${id} was already promoted to recipe ${promotedId}`
+            );
+
+            return {
+                type: "stream" as const,
+                stream: (async function* () {
+                    yield { type: "complete", id: promotedId };
+                })(),
+            };
+        }
+
         // 1. Fetch enriched suggestion with ingredients and tags
         const suggestionResult = await fetchEnrichedSuggestion(id);
 
@@ -147,6 +170,33 @@ export const promoteSuggestion = createStreamHandler({
         }
 
         const suggestion = suggestionResult.value;
+
+        // 1b. Reuse-before-generate: if a recipe for this dish already exists
+        // (same canonical name, not a variant), hand it back instead of
+        // generating a duplicate. Covers a fresh suggestion for an
+        // already-materialised dish, and a concurrent promotion whose sibling
+        // already committed. The now-redundant suggestion is deleted.
+        const existingByName = await recipesRepository.findByCanonicalName(
+            suggestion.name
+        );
+
+        if (existingByName.success && existingByName.value) {
+            const existingId = existingByName.value;
+
+            console.log(
+                `Suggestion ${id} ("${suggestion.name}") already exists as recipe ${existingId} — reusing`
+            );
+
+            const suggestionsRepo = new SuggestionsRepository();
+            await suggestionsRepo.delete(id);
+
+            return {
+                type: "stream" as const,
+                stream: (async function* () {
+                    yield { type: "complete", id: existingId };
+                })(),
+            };
+        }
 
         // 2. Create ingredient ID map (lowercase name -> UUID)
         const ingredientIdMap = new Map<string, string>();
@@ -237,6 +287,21 @@ export const promoteSuggestion = createStreamHandler({
                         `Recipe persisted successfully with ID: ${persistResult.value}`
                     );
 
+                    // Point the recipe back at the suggestion it came from
+                    // BEFORE the suggestion is deleted — that id is the only
+                    // handle a returning client still has on this recipe.
+                    const markResult = await recipesRepository.markPromotedFrom(
+                        persistResult.value,
+                        id
+                    );
+
+                    if (!markResult.success) {
+                        console.error(
+                            "Failed to record promoted suggestion:",
+                            markResult.error.message
+                        );
+                    }
+
                     // Delete the suggestion after successful recipe creation
                     const suggestionsRepo = new SuggestionsRepository();
                     const deleteResult = await suggestionsRepo.delete(id);
@@ -262,8 +327,23 @@ export const promoteSuggestion = createStreamHandler({
                         "Failed to persist recipe:",
                         persistResult.error.message
                     );
-                    // Yield completion without ID if persistence failed
-                    yield lastResult;
+
+                    // A concurrent promotion of the same dish may have committed
+                    // the recipe between our reuse check and this insert (once the
+                    // partial unique index is in place, that insert fails here).
+                    // Reuse the row that won rather than returning no id.
+                    const raced = await recipesRepository.findByCanonicalName(
+                        lastResult.recipe.name
+                    );
+
+                    if (raced.success && raced.value) {
+                        const suggestionsRepo = new SuggestionsRepository();
+                        await suggestionsRepo.delete(id);
+                        yield { ...lastResult, id: raced.value };
+                    } else {
+                        // Yield completion without ID if persistence failed
+                        yield lastResult;
+                    }
                 }
             } else if (lastResult) {
                 // Yield the last result if it wasn't a complete type

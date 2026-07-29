@@ -15,6 +15,17 @@ function quoteFilterValue(value: string): string {
     return value.replace(/([\\"])/g, "\\$1");
 }
 
+/**
+ * Deterministic slug — MUST stay identical to the Postgres
+ * `normalize_to_canonical_id(text)` function so this matches the generated
+ * `recipes.canonical_id` column exactly (no leading/trailing underscore trim).
+ */
+const normalizeToCanonicalId = (input: string): string =>
+    input
+        .replace(/[^a-zA-Z0-9]+/g, "_")
+        .replace(/_+/g, "_")
+        .toLowerCase();
+
 export class RecipesRepository implements IRecipesRepository {
     /**
      * Persist a complete recipe with all related entities.
@@ -328,6 +339,143 @@ export class RecipesRepository implements IRecipesRepository {
             return failure(
                 new PersistenceError(
                     `Failed to mark recipe as variant: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
+
+    /**
+     * The recipe a suggestion was already promoted into, if any.
+     *
+     * Promotion is one-way and deletes the suggestion once the recipe exists, so
+     * a repeated promote of the same id would otherwise regenerate a recipe that
+     * has already been written and paid for.
+     *
+     * @returns Result containing the recipe UUID, or null when never promoted
+     */
+    async findBySuggestionId(
+        suggestionId: string
+    ): Promise<Result<string | null, PersistenceError>> {
+        try {
+            // Type assertion needed until database types are regenerated after
+            // the source_suggestion_id migration.
+            const { data, error } = await (supabaseAdmin as any)
+                .from("recipes")
+                .select("id")
+                .eq("source_suggestion_id", suggestionId)
+                .maybeSingle();
+
+            if (error) {
+                return failure(
+                    new PersistenceError(`Database error: ${error.message}`)
+                );
+            }
+
+            return success((data?.id as string) ?? null);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to look up promoted recipe: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
+
+    /**
+     * Record which suggestion a freshly persisted recipe was promoted from. Must
+     * run before the suggestion is deleted, since that id is the only handle a
+     * returning client has on the recipe.
+     */
+    async markPromotedFrom(
+        recipeId: string,
+        suggestionId: string
+    ): Promise<Result<void, PersistenceError>> {
+        try {
+            // Type assertion needed until database types are regenerated after
+            // the source_suggestion_id migration.
+            const { error } = await (supabaseAdmin as any)
+                .from("recipes")
+                .update({ source_suggestion_id: suggestionId })
+                .eq("id", recipeId);
+
+            if (error) {
+                return failure(
+                    new PersistenceError(`Database error: ${error.message}`)
+                );
+            }
+
+            return success(undefined);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to record promoted suggestion: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
+
+    /**
+     * Find an existing NON-variant recipe with the same canonical name (the
+     * deterministic slug of the name). Used to reuse an already-generated recipe
+     * instead of producing a duplicate. Variants (base_recipe_id set) share
+     * names by design and are excluded. Returns the recipe id or null.
+     */
+    async findByCanonicalName(
+        name: string
+    ): Promise<Result<string | null, PersistenceError>> {
+        try {
+            const canonicalId = normalizeToCanonicalId(name);
+            // Type assertion needed until database types are regenerated after
+            // the canonical_id migration.
+            const { data, error } = await (supabaseAdmin as any)
+                .from("recipes")
+                .select("id")
+                .eq("canonical_id", canonicalId)
+                .is("base_recipe_id", null)
+                .order("created_at", { ascending: true })
+                .limit(1);
+
+            if (error) {
+                return failure(
+                    new PersistenceError(`Database error: ${error.message}`)
+                );
+            }
+
+            return success((data?.[0]?.id as string) ?? null);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to look up recipe by canonical name: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
+
+    /**
+     * Fold one recipe into another (repoint all references, delete the source)
+     * via the merge_recipe RPC. Driven by the dedupe-recipes backfill.
+     */
+    async mergeRecipe(
+        fromId: string,
+        intoId: string
+    ): Promise<Result<void, PersistenceError>> {
+        try {
+            const { error } = await (supabaseAdmin.rpc as any)("merge_recipe", {
+                p_from: fromId,
+                p_into: intoId,
+            });
+
+            if (error) {
+                return failure(
+                    new PersistenceError(`Database error: ${error.message}`)
+                );
+            }
+
+            return success(undefined);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to merge recipe: ${error instanceof Error ? error.message : "Unknown error"}`
                 )
             );
         }

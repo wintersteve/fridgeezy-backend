@@ -68,6 +68,13 @@
                     "cwd": "apps/database"
                 }
             },
+            "dedupe-recipes": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/scripts/dedupe-recipes.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "up": {
                 "executor": "nx:run-commands",
                 "options": {

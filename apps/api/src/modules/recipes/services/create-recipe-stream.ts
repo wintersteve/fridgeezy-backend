@@ -1,5 +1,6 @@
 import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
+import { splitIngredientName } from "@fridgeezy/toolkit";
 import { Stream } from "openai/core/streaming.mjs";
 import { ChatCompletionChunk } from "openai/resources/index.mjs";
 import { z } from "zod/v4";
@@ -84,28 +85,36 @@ export async function* createRecipeStream(
         }
         // Schema 2: Ingredient
         else if (schemaIndex === 2) {
+            // Ingredient names must not carry parenthetical qualifiers — strip
+            // any "(...)" from the name and fold it into the comment. This keeps
+            // the name clean AND lets the exact-name map lookup below match.
+            const { name: cleanName, note } = splitIngredientName(
+                parsed.name,
+                parsed.comment
+            );
+
             const ingredient: any = {
-                name: parsed.name,
+                name: cleanName,
                 category: parsed.category,
                 parent: parsed.parent,
                 quantity: parsed.quantity,
                 unit: parsed.unit,
-                // Optional prep note (e.g. "finely chopped"); only present when
-                // the LLM deems it useful. Carried through so it streams to the
+                // Prep note (e.g. "finely chopped") plus anything lifted out of a
+                // parenthetical in the name. Carried through so it streams to the
                 // client and is persisted alongside the ingredient.
-                ...(parsed.comment ? { comment: parsed.comment } : {}),
+                ...(note ? { comment: note } : {}),
             };
 
             // Attach ingredient ID from map if available
             if (config.ingredientIdMap) {
                 const ingredientId = config.ingredientIdMap.get(
-                    parsed.name.toLowerCase()
+                    cleanName.toLowerCase()
                 );
                 if (ingredientId) {
                     ingredient.ingredientId = ingredientId;
                 } else {
                     console.warn(
-                        `[RecipeStream] LLM generated ingredient "${parsed.name}" not in suggestion ingredient map`
+                        `[RecipeStream] LLM generated ingredient "${cleanName}" not in suggestion ingredient map`
                     );
                 }
             }
@@ -114,15 +123,21 @@ export async function* createRecipeStream(
         }
         // Schema 3: Instruction
         else if (schemaIndex === 3) {
+            // Clean parentheticals off the referenced names so they match the
+            // (also-cleaned) ingredient names and the id map.
+            const cleanedNames: string[] | undefined = parsed.ingredients?.map(
+                (n: string) => splitIngredientName(n).name
+            );
+
             const instruction: any = {
                 text: parsed.text,
-                ingredients: parsed.ingredients,
+                ingredients: cleanedNames,
             };
 
             // Map ingredient names to IDs if map available
-            if (config.ingredientIdMap && parsed.ingredients) {
+            if (config.ingredientIdMap && cleanedNames) {
                 const ingredientIds: string[] = [];
-                for (const ingredientName of parsed.ingredients) {
+                for (const ingredientName of cleanedNames) {
                     const ingredientId = config.ingredientIdMap.get(
                         ingredientName.toLowerCase()
                     );

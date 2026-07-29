@@ -1,6 +1,7 @@
 import { failure, PersistenceError, Result, success } from "@fridgeezy/domain";
 import { generateBatchEmbeddings } from "@fridgeezy/openai";
 import { CategoriesRepository, IngredientsRepository } from "@fridgeezy/supabase";
+import { splitIngredientName } from "@fridgeezy/toolkit";
 
 import { adjudicateIngredient } from "./adjudicate-ingredient";
 
@@ -52,9 +53,16 @@ export async function matchIngredients(
             .replace(/[^a-z0-9]+/g, "_")
             .replace(/^_+|_+$/g, "");
 
+    // Ingredient names must not carry parenthetical qualifiers — strip any
+    // "(...)" before matching so they never enter the catalog (there is no
+    // comment field here, so the note is dropped).
+    const cleanedNames = names
+        .map((name) => splitIngredientName(name).name)
+        .filter((name) => name.length > 0);
+
     // Create mapping from canonical ID to original name
     const canonicalToOriginal = new Map<string, string>();
-    names.forEach(name => {
+    cleanedNames.forEach(name => {
         canonicalToOriginal.set(toCanonicalId(name), name);
     });
 

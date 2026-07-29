@@ -51,6 +51,7 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 
 ## Ingredients
 - MUST be singular
+- MUST be the plain ingredient name only — NEVER include parentheses or qualifiers (e.g. "chicken breast", NOT "chicken breast (boneless)")
 
 ## Output Format
 Output EXACTLY 4 recipes, one JSON object per line (JSONL format). No markdown, no code blocks, no extra text.

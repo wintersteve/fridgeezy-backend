@@ -1,4 +1,4 @@
-import { failure, PersistenceError, Result } from "@fridgeezy/domain";
+import { failure, PersistenceError, Result, success } from "@fridgeezy/domain";
 import { generateEmbedding } from "@fridgeezy/openai";
 import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
 import { RecipesRepository, UnitsRepository } from "@fridgeezy/supabase";
@@ -10,6 +10,49 @@ import {
 
 const DEFAULT_IMAGE_URL = "";
 const unitsRepository = new UnitsRepository();
+
+/**
+ * Resolve every ingredient's free-text unit to a valid abbreviation, mutating
+ * each ingredient in place. Resolutions are independent, so they run in
+ * parallel (a direct lookup, plus a vector-search fallback + embedding on miss)
+ * instead of one round-trip per ingredient. Fails on the first unit that can't
+ * be resolved.
+ */
+async function resolveIngredientUnits(
+    ingredients: GenerateRecipeResponseDto["ingredients"]
+): Promise<Result<void, PersistenceError>> {
+    const resolutions = await Promise.all(
+        ingredients.map(async (ingredient) => {
+            // 1. Try direct lookup (canonical_id, then abbreviation)
+            let unitResult = await unitsRepository.resolveUnit(ingredient.unit);
+
+            // 2. If not found, try vector search fallback
+            if (!unitResult.success) {
+                const embedding = await generateEmbedding(ingredient.unit);
+                unitResult = await unitsRepository.resolveUnit(
+                    ingredient.unit,
+                    embedding
+                );
+            }
+
+            return { ingredient, unitResult };
+        })
+    );
+
+    for (const { ingredient, unitResult } of resolutions) {
+        if (!unitResult.success) {
+            return failure(
+                new PersistenceError(
+                    `Unit "${ingredient.unit}" not found for ingredient "${ingredient.name}"`
+                )
+            );
+        }
+        // Update the unit to use the valid abbreviation
+        ingredient.unit = unitResult.value.abbreviation;
+    }
+
+    return success(undefined);
+}
 
 /**
  * Collapse ingredients that resolve to the same DB ingredient. The
@@ -103,29 +146,9 @@ export async function persistRecipe(
         }
 
         // Resolve unit strings to valid abbreviations before persisting
-        for (const ingredient of recipe.ingredients) {
-            // 1. Try direct lookup (canonical_id, then abbreviation)
-            let unitResult = await unitsRepository.resolveUnit(ingredient.unit);
-
-            // 2. If not found, try vector search fallback
-            if (!unitResult.success) {
-                const embedding = await generateEmbedding(ingredient.unit);
-                unitResult = await unitsRepository.resolveUnit(
-                    ingredient.unit,
-                    embedding
-                );
-            }
-
-            if (!unitResult.success) {
-                return failure(
-                    new PersistenceError(
-                        `Unit "${ingredient.unit}" not found for ingredient "${ingredient.name}"`
-                    )
-                );
-            }
-
-            // Update the unit to use the valid abbreviation
-            ingredient.unit = unitResult.value.abbreviation;
+        const unitsResolved = await resolveIngredientUnits(recipe.ingredients);
+        if (!unitsResolved.success) {
+            return unitsResolved;
         }
 
         // Persist to database via repository
@@ -181,29 +204,9 @@ export async function persistRecipeWithIngredientIds(
         const imageUrl = getRecipeImagePublicUrl(recipe.name);
 
         // Resolve unit strings to valid abbreviations before persisting
-        for (const ingredient of recipe.ingredients) {
-            // 1. Try direct lookup (canonical_id, then abbreviation)
-            let unitResult = await unitsRepository.resolveUnit(ingredient.unit);
-
-            // 2. If not found, try vector search fallback
-            if (!unitResult.success) {
-                const embedding = await generateEmbedding(ingredient.unit);
-                unitResult = await unitsRepository.resolveUnit(
-                    ingredient.unit,
-                    embedding
-                );
-            }
-
-            if (!unitResult.success) {
-                return failure(
-                    new PersistenceError(
-                        `Unit "${ingredient.unit}" not found for ingredient "${ingredient.name}"`
-                    )
-                );
-            }
-
-            // Update the unit to use the valid abbreviation
-            ingredient.unit = unitResult.value.abbreviation;
+        const unitsResolved = await resolveIngredientUnits(recipe.ingredients);
+        if (!unitsResolved.success) {
+            return unitsResolved;
         }
 
         // Persist using ingredient IDs

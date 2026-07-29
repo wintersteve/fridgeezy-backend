@@ -247,8 +247,12 @@ export async function matchIngredients(
 
                 let categoryId: string | undefined;
                 if (r.category) {
+                    // r.category is already a category canonical_id (one of the
+                    // controlled INGREDIENT_CATEGORIES) — look it up directly.
+                    // Do NOT run it through toCanonicalId: that singularizes and
+                    // would turn e.g. "herbs_spices" into "herbs_spice".
                     const catResult = await categoriesRepo.findByCanonicalId(
-                        toCanonicalId(r.category)
+                        r.category
                     );
                     if (catResult.success && catResult.value) {
                         categoryId = catResult.value.id;

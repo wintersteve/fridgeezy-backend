@@ -103,6 +103,14 @@ Shared streaming plumbing that must keep working regardless of provider:
       `BLOCKED_ON_MODEL_ACCESS` (`candidates.ts`): Sonnet 5, Opus 4.8, Opus 5.
       Neither step is possible from the CLI. **The Bedrock half of the eval
       cannot run until this lands** — the OpenAI baseline half works today.
+      **Re-probed 2026-07-30 and it got worse:** the gate now also catches
+      `eu.anthropic.claude-sonnet-4-6`, recorded above as the best invocable model
+      — so *no* Anthropic model runs on this account today, and the eval has no
+      Bedrock candidate at all, not just a limited one. Non-Anthropic Bedrock is
+      unaffected: `eu.cohere.embed-v4:0` and `eu.amazon.nova-micro-v1:0` both
+      invoke fine in eu-central-1, so this is Anthropic entitlement, not Bedrock
+      access. Cohere Embed v4 was confirmed to return **1536-dim** vectors on this
+      account, which settles the Phase 4 embedding decision empirically.
 
 ### Phase 0 findings that change Phase 1
 
@@ -135,11 +143,21 @@ Shared streaming plumbing that must keep working regardless of provider:
 Ship this while still running the existing Express server locally, so the model
 change is validated in isolation before touching hosting.
 
-- [ ] Add a Bedrock client lib (mirror `libs/openai` / `libs/genai` shape).
-      Use the **`AnthropicBedrockMantle`** client from `@anthropic-ai/bedrock-sdk`
-      for Claude; Bedrock model IDs take the `anthropic.` prefix
-      (e.g. `anthropic.claude-*`). Region required; auth via AWS credential chain
-      (IAM role in Lambda, profile locally).
+- [x] Add a Bedrock client lib (mirror `libs/openai` / `libs/genai` shape):
+      **`libs/bedrock`** (`@fridgeezy/bedrock`, see its README) — client +
+      `streamCompletion` (OpenAI-shaped chunks, thinking deltas filtered out) +
+      `createCompletion` for the non-streaming call sites. Region and model come
+      from `AWS_REGION` / `BEDROCK_MODEL_ID`; auth via the AWS credential chain
+      (IAM role in Lambda, profile locally), so there is nothing to validate at
+      import.
+      **Corrects this checkbox's original instructions, per the Phase 0 findings:**
+      use the legacy **`AnthropicBedrock`** client — `AnthropicBedrockMantle` is
+      not entitled on this account — and model IDs must be **inference profiles**
+      (`eu.anthropic.*`), not the bare `anthropic.*` foundation-model form.
+      *Builds and lints; unvalidated against a live model.* A real call reaches
+      Bedrock and returns the account's use-case gate, which proves credentials,
+      region, model-ID form and request shape are right; response parsing is
+      unexercised until access lands.
 - [ ] Introduce a thin **provider abstraction** so call sites don't hard-code the
       SDK — one `generateStream(...)` that yields text deltas. This keeps
       `processJsonlStream` unchanged (it accumulates a text stream and doesn't

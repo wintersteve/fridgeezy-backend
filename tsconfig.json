@@ -32,6 +32,9 @@
         },
         {
             "path": "./libs/fridgeezy/types"
+        },
+        {
+            "path": "./libs/bedrock"
         }
     ]
 }

@@ -66,26 +66,67 @@ Shared streaming plumbing that must keep working regardless of provider:
 
 ## Phase 0 — Decisions & eval harness (do before writing migration code)
 
-- [ ] **Pick the Bedrock text model.** Recommendation: Claude on Bedrock
-      (`anthropic.claude-*`) for the accuracy-critical structured generation
-      (suggestions, recipes) — strongest instruction-following for the strict
-      JSONL + tagging rules. Consider Amazon Nova (Lite/Micro) only for cheaper,
-      lower-stakes paths *after* it passes evals.
-- [ ] **Pick the vision model** for ingredient extraction (Claude on Bedrock
-      supports image input).
-- [ ] **Decide embeddings target** (Titan Text Embeddings v2 or Cohere on
-      Bedrock) — note dimension change (Phase 4).
-- [ ] **Decide image model.** Bedrock has no drop-in for the Gemini illustration
-      style. Options: (a) keep Gemini as-is (simplest — images aren't the
-      migration's point), or (b) move to Nova Canvas / Titan Image and re-tune
-      the prompt in `create-recipe-image.ts`. Recommend (a) for now.
-- [ ] **Build an eval harness** for authenticity + structure adherence: a fixed
-      set of inputs, run through both the OpenAI baseline and each Bedrock
-      candidate, score on (real dish? all core ingredients present? exactly 1
-      component/cuisine/course tag? valid JSONL? nutrition non-zero?). This is
-      the gate for the whole inference migration.
-- [ ] Choose AWS region (must serve the chosen Bedrock models) and request model
-      access in the Bedrock console.
+- [x] **Pick the Bedrock text model.** Claude, as expected. Which Claude is
+      constrained by account access, not preference: **Sonnet 4.6**
+      (`eu.anthropic.claude-sonnet-4-6`) is the best model actually invocable
+      today. Sonnet 5 is the target once access lands — it is the current Sonnet
+      and its adaptive-thinking/effort surface is what the harness already sends.
+      Nova is not worth evaluating until Claude has a baseline to beat.
+- [x] **Pick the vision model** for ingredient extraction: same model as the text
+      path (Claude on Bedrock takes image input). Worth knowing for later:
+      high-resolution vision (2576px long edge, ~3x the image tokens) arrives at
+      Sonnet 5 — Sonnet 4.6 caps at 1568px, so re-check extraction accuracy
+      rather than assuming it carries over.
+- [x] **Decide embeddings target: Cohere Embed v4** (`eu.cohere.embed-v4:0`,
+      available in eu-central-1) over Titan v2. Reason: v4 emits 1536-dim
+      vectors, matching the 24 existing `vector(1536)` columns, so no column
+      migration for those. Titan v2 maxes at 1024 and would force one.
+      **Correction to Phase 4's framing:** matching dimensions does *not* avoid
+      the re-embed — the vector spaces differ, so the whole corpus must be
+      re-embedded regardless. Matching dimensions only avoids the schema change.
+      The 10 `vector(3072)` columns have no Bedrock equivalent at that width and
+      need a column change either way.
+- [x] **Decide image model:** keep Gemini (option a). Images aren't what this
+      migration is for, and Bedrock has no drop-in for the illustration style.
+- [x] **Build an eval harness** — `apps/api/src/evals/model-migration/`
+      (see its README). Fixed input set, byte-identical prompts, five scorers
+      (real dish / core ingredients / tag cardinality / valid JSONL / nutrition
+      non-zero) plus a leak counter. Run with
+      `npx nx run @fridgeezy/api:eval-model-migration -- --repeat=5`.
+      **Use `--repeat`:** the baseline scored 0/4 then 4/4 on tag cardinality
+      across consecutive single-sample runs — one sample per fixture is noise.
+- [x] Choose AWS region: **eu-central-1**. Serves the Claude family and matches
+      where the Lambda infra is defined.
+- [ ] ⚠️ **BLOCKED — console action required.** Bedrock returns *"Model use case
+      details have not been submitted for this account"*. Submit the Anthropic
+      use-case form in the Bedrock console, then request access for the models in
+      `BLOCKED_ON_MODEL_ACCESS` (`candidates.ts`): Sonnet 5, Opus 4.8, Opus 5.
+      Neither step is possible from the CLI. **The Bedrock half of the eval
+      cannot run until this lands** — the OpenAI baseline half works today.
+
+### Phase 0 findings that change Phase 1
+
+- **`AnthropicBedrockMantle` does not work on this account.** Every model ID
+  returns 404/403 on the Mantle endpoint across eu-central-1, us-east-1, and
+  us-west-2 — requests reach Anthropic and are rejected, so it is entitlement,
+  not a client bug. The harness uses the legacy `AnthropicBedrock`
+  (`bedrock-runtime`) client, which works. Phase 1's "use the Mantle client"
+  instruction needs revisiting.
+- **Model IDs must be inference profiles, not foundation models.** Bare
+  `anthropic.*` IDs fail with *"Invocation … with on-demand throughput isn't
+  supported"*; the `eu.anthropic.*` profile form works. Note `aws bedrock
+  list-foundation-models` returns the wrong form, and
+  `get-foundation-model-availability` reported `AUTHORIZED / AVAILABLE` for
+  models that then returned 403 — neither is a usable access check.
+- **The JSONL port is smaller than Phase 1 assumes.** `processJsonlStream` is
+  structurally typed against `{choices:[{delta:{content}}]}`, not against the
+  OpenAI SDK types, so a Bedrock adapter that emits that shape drops in with no
+  change to `processJsonlStream` or `extractStableJsonFields`.
+- **Do not disable thinking to save tokens on the streaming paths.** On Claude it
+  can leak `<thinking>` tags into the *visible* response, which corrupts the
+  JSONL line it lands on and gets that line silently dropped. Prefer adaptive
+  thinking at low/medium effort. The harness carries a `no-thinking` candidate
+  and a leak counter specifically to measure this.
 
 ---
 

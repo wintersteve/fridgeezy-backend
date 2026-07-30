@@ -11,7 +11,10 @@ import type OpenAI from "openai";
 
 import { persistOrReuseSuggestion } from "./persist-or-reuse-suggestion";
 
-const SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly 4 authentic, real-world recipe suggestions based on the user's request.
+// Exported for the model-migration eval harness, which must send byte-identical
+// prompts to every candidate — a copy in the eval would drift and invalidate the
+// comparison. Distinct name because the services barrel re-exports this module.
+export const SUGGESTIONS_SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly 4 authentic, real-world recipe suggestions based on the user's request.
 
 The "Ingredients" line below may list literal ingredients, but it may ALSO be a dish name (e.g. "sandwich", "carbonara"), a meal or course concept (e.g. "breakfast", "quick dinner", "random recipe"), or a cuisine. Interpret it flexibly:
 - Literal ingredients -> real dishes that prominently feature them.
@@ -52,7 +55,9 @@ Each recipe object must include:
 - ingredients (array of strings)
 - tags (array of strings with component, cuisine, and dietary tags)`;
 
-const buildUserPrompt = (request: GenerateSuggestionRequestDto): string => {
+export const buildSuggestionsUserPrompt = (
+    request: GenerateSuggestionRequestDto
+): string => {
     const formatFilter = (filter: string, value?: string | string[]) => {
         const isValid = Array.isArray(value) ? value.length > 0 : !!value;
         return isValid ? `${filter}: ${castArray(value).join(",")}` : "";
@@ -78,8 +83,8 @@ export async function* generateSuggestionsStream(
     const stream = await client.chat.completions.create({
         model: "gpt-4.1",
         messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: buildUserPrompt(request) },
+            { role: "system", content: SUGGESTIONS_SYSTEM_PROMPT },
+            { role: "user", content: buildSuggestionsUserPrompt(request) },
         ],
         stream: true,
     });

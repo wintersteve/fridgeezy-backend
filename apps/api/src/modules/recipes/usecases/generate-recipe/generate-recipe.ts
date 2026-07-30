@@ -24,8 +24,12 @@ import { persistRecipeWithIngredientIds } from "../../services/persist-recipe";
 /**
  * Build system prompt with explicit ingredient constraints.
  * The LLM MUST use ONLY the provided ingredients.
+ *
+ * Exported for the model-migration eval harness, which must send byte-identical
+ * prompts to every candidate — a copy in the eval would drift and invalidate the
+ * comparison.
  */
-const buildSystemPrompt = (
+export const buildRecipeSystemPrompt = (
     units: string,
     tags: string,
     ingredientNames: string[]
@@ -89,9 +93,10 @@ Optional tip lines:
 No markdown, no code blocks, just JSONL.`;
 
 /**
- * Build user prompt using suggestion data.
+ * Build user prompt using suggestion data. Exported alongside
+ * `buildRecipeSystemPrompt` for the model-migration eval harness.
  */
-const buildUserPrompt = (
+export const buildRecipeUserPrompt = (
     name: string,
     difficulty: string,
     ingredientNames: string[],
@@ -171,11 +176,11 @@ export const generateRecipe = createStreamHandler({
             messages: [
                 {
                     role: "system",
-                    content: buildSystemPrompt(unitsPrompt, tagsPrompt, ingredientNames),
+                    content: buildRecipeSystemPrompt(unitsPrompt, tagsPrompt, ingredientNames),
                 },
                 {
                     role: "user",
-                    content: buildUserPrompt(
+                    content: buildRecipeUserPrompt(
                         suggestion.name,
                         suggestion.difficulty,
                         ingredientNames,

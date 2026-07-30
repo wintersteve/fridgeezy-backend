@@ -12,6 +12,7 @@
         "lint:shared": "nx run-many -t lint --projects=tag:scope:shared"
     },
     "dependencies": {
+        "@anthropic-ai/bedrock-sdk": "^0.32.0",
         "@expo-google-fonts/inter": "^0.4.2",
         "@expo-google-fonts/lora": "^0.4.1",
         "@expo-google-fonts/playfair-display": "^0.4.2",

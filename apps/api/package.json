@@ -123,10 +123,19 @@
                     "command": "npx jiti src/evals/calibrate-authenticity.eval.ts",
                     "cwd": "apps/api"
                 }
+            },
+            "eval-model-migration": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/model-migration/run.eval.ts",
+                    "cwd": "apps/api",
+                    "forwardAllArgs": true
+                }
             }
         }
     },
     "dependencies": {
+        "@anthropic-ai/bedrock-sdk": "^0.32.0",
         "express": "^5.2.1",
         "cors": "^2.8.5",
         "@modelcontextprotocol/sdk": "^1.25.1",

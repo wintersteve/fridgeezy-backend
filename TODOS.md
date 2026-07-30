@@ -158,10 +158,25 @@ change is validated in isolation before touching hosting.
       Bedrock and returns the account's use-case gate, which proves credentials,
       region, model-ID form and request shape are right; response parsing is
       unexercised until access lands.
-- [ ] Introduce a thin **provider abstraction** so call sites don't hard-code the
+- [x] Introduce a thin **provider abstraction** so call sites don't hard-code the
       SDK — one `generateStream(...)` that yields text deltas. This keeps
       `processJsonlStream` unchanged (it accumulates a text stream and doesn't
       care about the provider) and lets you A/B OpenAI vs Bedrock behind a flag.
+      **`libs/llm`** (`@fridgeezy/llm`, see its README): `generateStream` +
+      `generateCompletion`, provider from `LLM_PROVIDER` (**default `openai`**, so
+      landing it moves no traffic; an unknown value throws) with a per-call
+      `provider` override for A/B. Models are named per provider
+      (`{ openai: "gpt-4.1" }`), Bedrock falling back to `BEDROCK_MODEL_ID`.
+      Verified live: provider resolution, and the OpenAI branch streaming through
+      the real `processJsonlStream` into parsed JSONL.
+      **Asymmetries it deliberately does not paper over:** `maxTokens` is
+      Bedrock-only (OpenAI stays uncapped so the baseline is unchanged); `json`
+      maps to `response_format` on OpenAI but is a no-op on Bedrock, where the
+      prompt must ask for JSON; `thinking`/`effort` are Bedrock-only.
+      **Found while building it:** `libs/openai` throws at *import* on a missing
+      `OPENAI_API_KEY`, so the facade imports each client lazily — otherwise a
+      Bedrock-only Lambda would still need an OpenAI key to boot. Watch for the
+      same trap in any other module that imports the OpenAI client at top level.
 - [ ] Port the streaming shape: OpenAI `chat.completions.create({stream:true})`
       → Bedrock/Anthropic Messages streaming. Feed the text deltas
       (`content_block_delta` / `text_delta`) into the existing JSONL parser.

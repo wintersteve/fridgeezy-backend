@@ -35,6 +35,9 @@
         },
         {
             "path": "./libs/bedrock"
+        },
+        {
+            "path": "./libs/llm"
         }
     ]
 }

@@ -133,29 +133,32 @@ change is validated in isolation before touching hosting.
 
 ## Phase 3 — Lambda hosting
 
-- [ ] Wrap the app for Lambda. Two options:
-      (a) keep Express behind an adapter, or (b) split the SSE endpoints
-      (`/suggestions`, `/recipes`, `/chat`, `/mcp`) into dedicated streaming
-      handlers. Note `express-app.ts` deliberately skips `express.json()` and
-      reads the raw stream — preserve that raw-body handling.
-- [ ] Use **Lambda response streaming** (`awslambda.streamifyResponse`) via a
-      **Function URL** (or ALB). **Do not** front the streaming endpoints with
-      API Gateway — it buffers and breaks SSE.
-- [ ] Keep the parallel fire-and-forget image generation
-      (`generateAndUploadRecipeImage`, kicked off in `generate-recipe.ts`)
-      working — verify it isn't killed when the response stream closes (Lambda
-      freezes the execution context after the response ends; a fire-and-forget
-      promise may not complete). May need to `await` it or move image gen to a
-      separate async invocation / queue.
+- [x] Wrap the app for Lambda — took option (a): `apps/api/src/lambda.ts` binds
+      the app to a loopback port and proxies each invocation to it. Route
+      assembly moved to `create-app.ts`, shared with `main.ts`, so local and
+      Lambda serve the same app. The loopback hop is what preserves the raw-body
+      handling `express-app.ts` depends on.
+- [x] Use **Lambda response streaming** (`awslambda.streamifyResponse`) via a
+      **Function URL**. Verified locally that chunks surface at the producer's
+      cadence rather than being buffered. **Do not** front the streaming
+      endpoints with API Gateway — it buffers and breaks SSE.
+- [x] Keep the parallel fire-and-forget image generation working — both call
+      sites (`generate-recipe.ts`, `promote.ts`) now register through
+      `apps/api/src/background-tasks.ts`, and the handler drains that registry
+      after the response closes but before returning. Client latency is
+      unaffected; billed duration is not. If image generation starts dominating
+      duration, move it to a separate async invocation / queue — the registry is
+      the seam for that.
 - [ ] IAM role for the function: `bedrock:InvokeModel` /
       `bedrock:InvokeModelWithResponseStream`, Supabase access (via env), the MCP
       session store, and S3/Supabase storage for images.
 - [ ] Port env/config: `GOOGLE_API_KEY` (if keeping Gemini), Supabase keys,
       `GENAI_IMAGE_MODEL`, region, Bedrock model IDs. Move secrets to SSM
       Parameter Store / Secrets Manager (no `dotenv` in Lambda).
-- [ ] IaC: define the function, Function URL, IAM, and session store (SAM / CDK /
-      Terraform — pick one and check it in). There are no deploy artifacts in the
-      repo today.
+- [x] IaC: **Terraform**, checked in at [`infra/`](infra/README.md). Defines the
+      function, Function URL (`RESPONSE_STREAM`), IAM (logs + Bedrock + SSM),
+      log group, and per-environment tfvars. Still open: the session store
+      (blocked on Phase 2) and the S3 state backend (state is local today).
 - [ ] Set `max` timeout headroom for the longest stream (recipe generation) and a
       sane memory size; measure cold-start latency on the SSE paths.
 

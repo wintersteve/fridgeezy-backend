@@ -296,9 +296,14 @@ export const escalateDifficulty = createStreamHandler({
                     `Escalated recipe persisted with ID: ${persistResult.value}`
                 );
 
+                // `id` sits at the TOP LEVEL of the frame, not inside `recipe`.
+                // The client accumulates raw frames and reads `frame.id` off the
+                // last one, so an id nested in `recipe` is invisible to it —
+                // same shape modify-recipe and promote already emit.
                 yield {
                     type: "complete",
                     saved: true,
+                    id: persistResult.value,
                     recipe: { ...finalRecipe, id: persistResult.value },
                 };
             } else {

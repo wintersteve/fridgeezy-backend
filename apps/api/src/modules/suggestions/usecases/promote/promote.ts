@@ -178,6 +178,33 @@ export const promoteSuggestion = createStreamHandler({
 
         const suggestion = suggestionResult.value;
 
+        // 1b. Reuse-before-generate: if a recipe for this dish already exists
+        // (same canonical name, not a variant), hand it back instead of
+        // generating a duplicate. Covers a fresh suggestion for an
+        // already-materialised dish, and a concurrent promotion whose sibling
+        // already committed. The now-redundant suggestion is deleted.
+        const existingByName = await recipesRepository.findByCanonicalName(
+            suggestion.name
+        );
+
+        if (existingByName.success && existingByName.value) {
+            const existingId = existingByName.value;
+
+            console.log(
+                `Suggestion ${id} ("${suggestion.name}") already exists as recipe ${existingId} — reusing`
+            );
+
+            const suggestionsRepo = new SuggestionsRepository();
+            await suggestionsRepo.delete(id);
+
+            return {
+                type: "stream" as const,
+                stream: (async function* () {
+                    yield { type: "complete", id: existingId };
+                })(),
+            };
+        }
+
         // 2. Create ingredient ID map (lowercase name -> UUID)
         const ingredientIdMap = new Map<string, string>();
         for (const ing of suggestion.ingredients) {
@@ -307,8 +334,23 @@ export const promoteSuggestion = createStreamHandler({
                         "Failed to persist recipe:",
                         persistResult.error.message
                     );
-                    // Yield completion without ID if persistence failed
-                    yield lastResult;
+
+                    // A concurrent promotion of the same dish may have committed
+                    // the recipe between our reuse check and this insert (once the
+                    // partial unique index is in place, that insert fails here).
+                    // Reuse the row that won rather than returning no id.
+                    const raced = await recipesRepository.findByCanonicalName(
+                        lastResult.recipe.name
+                    );
+
+                    if (raced.success && raced.value) {
+                        const suggestionsRepo = new SuggestionsRepository();
+                        await suggestionsRepo.delete(id);
+                        yield { ...lastResult, id: raced.value };
+                    } else {
+                        // Yield completion without ID if persistence failed
+                        yield lastResult;
+                    }
                 }
             } else if (lastResult) {
                 // Yield the last result if it wasn't a complete type

@@ -160,7 +160,7 @@ MCP server or transport in this repo.
 
 `@fridgeezy/supabase` exposes one repository per table; RPC-heavy writes
 (`persistWithRelations`, merge functions) live in SQL under
-`apps/database/src/supabase/migrations/`. `@fridgeezy/domain` holds the
+`apps/database/supabase/migrations/`. `@fridgeezy/domain` holds the
 platform-agnostic types and repository interfaces those implement.
 
 ## Conventions

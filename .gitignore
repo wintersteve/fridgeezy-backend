@@ -41,4 +41,4 @@ cache/
 android/
 ios/
 # supabase CLI temp artifacts
-apps/database/src/supabase/.temp/
+apps/database/supabase/.temp/

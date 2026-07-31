@@ -100,14 +100,14 @@
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "supabase migration up --linked",
-                    "cwd": "apps/database/src"
+                    "cwd": "apps/database"
                 }
             },
             "reset": {
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "supabase db reset --linked",
-                    "cwd": "apps/database/src"
+                    "cwd": "apps/database"
                 }
             },
             "types": {

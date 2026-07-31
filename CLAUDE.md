@@ -118,7 +118,8 @@ request order — the client sizes its loading skeletons by slicing its own requ
 list and keys cards on `ingredientName`, so the service buffers out-of-order model
 lines, drops duplicates, and fills any ingredient the model skipped with a
 fallback frame. Substitutes are LLM-generated, not stored: the
-`ingredient_substitutes` table was dropped in `20260727000009` for that reason.
+`ingredient_substitutes` table was dropped for that reason and does not exist in
+the consolidated baseline.
 
 Each module under `apps/api/src/modules/<name>/` owns `<name>.routes.ts`,
 `<name>.controller.ts`, `usecases/` (one directory per endpoint), and `services/`

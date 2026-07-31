@@ -17,14 +17,14 @@ interface Fixture {
 }
 interface DishInput {
     name: string;
-    nameEn: string;
+    nameAlt: string;
     tags: string[];
     ingredients: string[];
 }
 
 const dto = (d: DishInput): GenerateSuggestionResponseDto => ({
     name: d.name,
-    name_en: d.nameEn,
+    name_alt: d.nameAlt,
     description: "eval fixture",
     difficulty: "medium",
     ingredients: d.ingredients,
@@ -33,19 +33,19 @@ const dto = (d: DishInput): GenerateSuggestionResponseDto => ({
 
 const FIXTURES: Fixture[] = [
     // Traditional canonical — expect PASS.
-    { expectPass: true, dish: { name: "Spaghetti alla Carbonara", nameEn: "Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] } },
-    { expectPass: true, dish: { name: "Murgh Makhani", nameEn: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream"] } },
-    { expectPass: true, dish: { name: "Pad Thai", nameEn: "Pad Thai", tags: ["thai", "main", "dish"], ingredients: ["rice noodle", "shrimp", "tamarind", "peanut", "egg"] } },
-    { expectPass: true, dish: { name: "Boeuf Bourguignon", nameEn: "Beef Bourguignon", tags: ["french", "main", "dish"], ingredients: ["beef", "red wine", "carrot", "onion", "mushroom", "bacon"] } },
+    { expectPass: true, dish: { name: "Spaghetti alla Carbonara", nameAlt: "Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] } },
+    { expectPass: true, dish: { name: "Murgh Makhani", nameAlt: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream"] } },
+    { expectPass: true, dish: { name: "Pad Thai", nameAlt: "Pad Thai", tags: ["thai", "main", "dish"], ingredients: ["rice noodle", "shrimp", "tamarind", "peanut", "egg"] } },
+    { expectPass: true, dish: { name: "Boeuf Bourguignon", nameAlt: "Beef Bourguignon", tags: ["french", "main", "dish"], ingredients: ["beef", "red wine", "carrot", "onion", "mushroom", "bacon"] } },
     // Regional variant — expect PASS.
-    { expectPass: true, dish: { name: "Som Tam Lao", nameEn: "Lao Green Papaya Salad", tags: ["lao", "salad", "dish"], ingredients: ["green papaya", "padaek", "field crab", "fish sauce", "lime"] } },
+    { expectPass: true, dish: { name: "Som Tam Lao", nameAlt: "Lao Green Papaya Salad", tags: ["lao", "salad", "dish"], ingredients: ["green papaya", "padaek", "field crab", "fish sauce", "lime"] } },
     // Modern but established — expect PASS (the tricky ones).
-    { expectPass: true, dish: { name: "California Roll", nameEn: "California Roll", tags: ["japanese", "appetizer", "dish"], ingredients: ["rice", "nori", "crab stick", "avocado", "cucumber"] } },
-    { expectPass: true, dish: { name: "Buffalo Wings", nameEn: "Buffalo Wings", tags: ["american", "appetizer", "dish"], ingredients: ["chicken wing", "hot sauce", "butter", "celery"] } },
-    { expectPass: true, dish: { name: "Nachos", nameEn: "Nachos", tags: ["mexican", "appetizer", "dish"], ingredients: ["tortilla chip", "cheese", "jalapeno", "bean"] } },
+    { expectPass: true, dish: { name: "California Roll", nameAlt: "California Roll", tags: ["japanese", "appetizer", "dish"], ingredients: ["rice", "nori", "crab stick", "avocado", "cucumber"] } },
+    { expectPass: true, dish: { name: "Buffalo Wings", nameAlt: "Buffalo Wings", tags: ["american", "appetizer", "dish"], ingredients: ["chicken wing", "hot sauce", "butter", "celery"] } },
+    { expectPass: true, dish: { name: "Nachos", nameAlt: "Nachos", tags: ["mexican", "appetizer", "dish"], ingredients: ["tortilla chip", "cheese", "jalapeno", "bean"] } },
     // Inventions / hallucinations — expect DROP.
-    { expectPass: false, dish: { name: "Carbonara with Asparagus", nameEn: "Asparagus Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "asparagus"] } },
-    { expectPass: false, dish: { name: "Zorblatt Crunch", nameEn: "Zorblatt Crunch", tags: ["fusion", "snack", "dish"], ingredients: ["moon dust", "glitter", "cardboard"] } },
+    { expectPass: false, dish: { name: "Carbonara with Asparagus", nameAlt: "Asparagus Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "asparagus"] } },
+    { expectPass: false, dish: { name: "Zorblatt Crunch", nameAlt: "Zorblatt Crunch", tags: ["fusion", "snack", "dish"], ingredients: ["moon dust", "glitter", "cardboard"] } },
 ];
 
 async function main() {

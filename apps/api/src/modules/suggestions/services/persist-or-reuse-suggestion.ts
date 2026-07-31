@@ -62,14 +62,13 @@ export async function persistOrReuseSuggestion(
     request: Pick<GenerateSuggestionRequestDto, "cuisine">,
     suggestionsRepo: SuggestionsRepository = new SuggestionsRepository()
 ): Promise<SuggestionOutcome> {
-    // Embed the dish SIGNATURE (English name + tags + ingredients) once, up
+    // Embed the dish SIGNATURE (canonical name + tags + ingredients) once, up
     // front: both halves of the catalog are searched with this same vector, so
     // the same dish under different names merges (Som Tam ≡ Green Papaya Salad)
     // while genuine variations stay apart on their differing ingredients.
     const signatureEmbedding = await generateEmbedding(
         buildSuggestionSignature({
             name: suggestion.name,
-            nameEn: suggestion.name_en,
             tags: suggestion.tags,
             ingredients: suggestion.ingredients,
         })
@@ -83,7 +82,7 @@ export async function persistOrReuseSuggestion(
     const existingRecipe = await findRecipeForDish(
         {
             name: suggestion.name,
-            nameEn: suggestion.name_en,
+            nameEn: suggestion.name_alt,
             tags: suggestion.tags,
             ingredients: suggestion.ingredients,
         },
@@ -138,7 +137,7 @@ export async function persistOrReuseSuggestion(
                 (await adjudicateSameDish(
                     describeSuggestion(
                         suggestion.name,
-                        suggestion.name_en,
+                        suggestion.name_alt,
                         suggestion.tags,
                         suggestion.ingredients
                     ),
@@ -174,7 +173,7 @@ export async function persistOrReuseSuggestion(
     // Reuse the signature embedding we already computed for the dedup search.
     const persistResult = await persistSuggestion(suggestion, {
         cuisineTag: request.cuisine,
-        nameEn: suggestion.name_en,
+        nameEn: suggestion.name_alt,
         signatureEmbedding,
     });
 
@@ -199,7 +198,7 @@ export async function persistOrReuseSuggestion(
         suggestion: {
             id: persistResult.value.suggestionId,
             name: suggestion.name,
-            nameEn: suggestion.name_en,
+            nameEn: suggestion.name_alt,
             description: suggestion.description,
             difficulty: suggestion.difficulty,
             ingredients: persistResult.value.ingredients,

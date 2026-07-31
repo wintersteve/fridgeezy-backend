@@ -44,14 +44,19 @@ import { extractStableJsonFields } from "../../modules/suggestions/services/extr
  * what makes progressive reveal useful (title first, persistence-only last).
  */
 const SINGLE_SUGGESTION =
-    '{"name":"Spaghetti alla Carbonara","description":"Roman pasta with egg, pecorino and guanciale","difficulty":"medium","ingredients":["spaghetti","egg","pecorino","guanciale","black pepper"],"tags":["dish","italian","main"],"name_en":"Carbonara"}';
+    '{"name":"Carbonara","description":"Roman pasta with egg, pecorino and guanciale","difficulty":"medium","ingredients":["spaghetti","egg","pecorino","guanciale","black pepper"],"tags":["dish","italian","main"],"name_alt":"Spaghetti alla Carbonara"}';
 
-/** Four-line JSONL, as the batch suggestions prompt demands. */
+/**
+ * Four-line JSONL, as the batch suggestions prompt demands. Three of the four
+ * carry a null `name_alt` — the common case since 20260731000001, where a dish
+ * known by only one name must NOT echo it — so the parser is exercised on the
+ * null branch as well as the populated one.
+ */
 const SUGGESTIONS_JSONL = [
-    '{"name":"Spaghetti alla Carbonara","name_en":"Carbonara","description":"Roman pasta with egg and guanciale","difficulty":"medium","ingredients":["spaghetti","egg","pecorino","guanciale"],"tags":["dish","italian","main"]}',
-    '{"name":"Cacio e Pepe","name_en":"Cacio e Pepe","description":"Pecorino and black pepper pasta","difficulty":"easy","ingredients":["spaghetti","pecorino","black pepper"],"tags":["dish","italian","main"]}',
-    '{"name":"Amatriciana","name_en":"Amatriciana","description":"Tomato, guanciale and pecorino pasta","difficulty":"easy","ingredients":["bucatini","tomato","guanciale","pecorino"],"tags":["dish","italian","main"]}',
-    '{"name":"Gricia","name_en":"Gricia","description":"Guanciale and pecorino pasta, no tomato","difficulty":"medium","ingredients":["rigatoni","guanciale","pecorino","black pepper"],"tags":["dish","italian","main"]}',
+    '{"name":"Carbonara","name_alt":"Spaghetti alla Carbonara","description":"Roman pasta with egg and guanciale","difficulty":"medium","ingredients":["spaghetti","egg","pecorino","guanciale"],"tags":["dish","italian","main"]}',
+    '{"name":"Cacio e Pepe","name_alt":null,"description":"Pecorino and black pepper pasta","difficulty":"easy","ingredients":["spaghetti","pecorino","black pepper"],"tags":["dish","italian","main"]}',
+    '{"name":"Amatriciana","name_alt":null,"description":"Tomato, guanciale and pecorino pasta","difficulty":"easy","ingredients":["bucatini","tomato","guanciale","pecorino"],"tags":["dish","italian","main"]}',
+    '{"name":"Gricia","name_alt":null,"description":"Guanciale and pecorino pasta, no tomato","difficulty":"medium","ingredients":["rigatoni","guanciale","pecorino","black pepper"],"tags":["dish","italian","main"]}',
 ].join("\n");
 
 /** Recipe JSONL — mixed line types, and numbers, which are the fragile case. */

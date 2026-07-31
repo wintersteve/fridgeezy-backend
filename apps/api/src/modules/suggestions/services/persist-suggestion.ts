@@ -10,8 +10,12 @@ import { buildSuggestionSignature } from "./suggestion-signature";
 export interface PersistSuggestionContext {
     /** The cuisine from the original request - will be marked as type: "cuisine" for auto-creation */
     cuisineTag?: string;
-    /** The English name of the recipe for image generation and file naming */
-    nameEn?: string;
+    /**
+     * The dish's ALTERNATE name, stored in the `name_en` column. Null/absent for
+     * the many dishes known by only one name — the model is told not to echo
+     * `name` — so this is genuinely optional rather than "not supplied yet".
+     */
+    nameEn?: string | null;
     /**
      * Precomputed signature embedding. persist-or-reuse already embeds the
      * signature to run the dedup search — passing it here avoids re-embedding the
@@ -65,16 +69,15 @@ export async function persistSuggestion(
             return { name: tag };
         });
 
-        // The dish SIGNATURE embedding (English name + tags + ingredients) is what
-        // makes cross-name dedup work; embed it app-side so Postgres never calls
-        // OpenAI. Reuse the caller's embedding when provided (persist-or-reuse
+        // The dish SIGNATURE embedding (canonical name + tags + ingredients) is
+        // what makes cross-name dedup work; embed it app-side so Postgres never
+        // calls OpenAI. Reuse the caller's embedding when provided (persist-or-reuse
         // already computed it for the dedup search) — otherwise embed here.
         const signaturePromise = context?.signatureEmbedding
             ? Promise.resolve(context.signatureEmbedding)
             : generateEmbedding(
                   buildSuggestionSignature({
                       name: suggestion.name,
-                      nameEn: suggestion.name_en,
                       tags: suggestion.tags,
                       ingredients: suggestion.ingredients,
                   })
@@ -118,7 +121,8 @@ export async function persistSuggestion(
             ingredientMatches.map((m) => m.ingredientId),
             tagMatches.map((m) => m.tagId),
             nameEmbedding,
-            context?.nameEn
+            // Omitted rather than null, so the RPC's own default applies.
+            context?.nameEn ?? undefined
         );
 
         if (!persistResult.success) {

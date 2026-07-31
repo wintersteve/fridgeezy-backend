@@ -15,7 +15,7 @@ import {
 /**
  * The visible-first key order the model must emit so the card reveals fields in
  * a natural order: title, then description, then difficulty, then the chips.
- * `name_en` trails since it's only needed for persistence, not the card.
+ * `name_alt` trails since it's only needed for persistence, not the card.
  */
 const SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly ONE authentic, real-world recipe suggestion based on the user's request.
 
@@ -26,7 +26,7 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 
 ## Rules
 - AUTHENTICITY IS PARAMOUNT: Only suggest a real, well-documented recipe that exists in a culinary tradition.
-- The recipe MUST be a genuine dish with its authentic name (e.g., Murgh Makhani, NOT "Indian Tomato Butter Chicken"). Do NOT add alternative names in parenthesis.
+- The recipe MUST be a genuine, documented dish — never an invented or descriptive name (e.g., NOT "Indian Tomato Butter Chicken"). Do NOT add alternative names in parenthesis.
 - Include ALL essential ingredients that define the dish. Never omit core ingredients that make the recipe authentic.
 - DIETARY RESTRICTIONS (if provided) are mandatory: the dish MUST genuinely satisfy every one of them.
 - BLACKLIST (if provided): never suggest a recipe where a blacklisted item is normally present.
@@ -49,12 +49,12 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 ## Output Format
 Output EXACTLY ONE JSON object. No markdown, no code blocks, no extra text.
 Emit the keys in EXACTLY this order:
-- name
+- name (the name an English-speaking home cook would most commonly recognise the dish by — keep the NATIVE name when that is what people actually say in English: Pho, Ramen, Paella, Kimchi, Gyoza, Coq au Vin, Pad Thai, Tiramisu, Risotto; use the ENGLISH name when that is the common one: "Butter Chicken" not "Murgh Makhani", "Apple Strudel" not "Apfelstrudel". Judge the whole name, not the parts: "Kimchi" stays Kimchi, but "Kimchi Jjigae" is usually met as "Kimchi Stew")
 - description (ONE complete phrase, max 60 characters — it is shown on a single-line card, so it must not read as a cut-off sentence)
 - difficulty (easy, medium, or hard)
 - ingredients (array of strings)
 - tags (array of strings with component, cuisine, and dietary tags)
-- name_en (the English name of the dish, e.g. "Butter Chicken" for "Murgh Makhani")`;
+- name_alt (the OTHER name: the native spelling if \`name\` is English, the English translation if \`name\` is native. Use null when the dish is only ever known by one name — do NOT echo \`name\`, and do NOT invent a translation nobody uses)`;
 
 const buildUserPrompt = (request: GenerateSuggestionRequestDto): string => {
     const formatFilter = (filter: string, value?: string | string[]) => {
@@ -102,7 +102,7 @@ export interface StreamSingleSuggestionOptions {
 function mapFields(stable: Record<string, unknown>): PartialSuggestionFields {
     const fields: PartialSuggestionFields = {};
     if (typeof stable.name === "string") fields.name = stable.name;
-    if (typeof stable.name_en === "string") fields.nameEn = stable.name_en;
+    if (typeof stable.name_alt === "string") fields.nameEn = stable.name_alt;
     if (typeof stable.description === "string") {
         fields.description = stable.description;
     }

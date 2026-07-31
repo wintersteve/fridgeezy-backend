@@ -14,7 +14,7 @@ interface SuggestionRow {
 }
 
 /**
- * (Re)builds the recipe_suggestions embeddings from the dish SIGNATURE (English
+ * (Re)builds the recipe_suggestions embeddings from the dish SIGNATURE (canonical
  * name + tags + ingredients) using the shared buildSuggestionSignature — the same
  * text the app embeds on insert. Re-embeds every suggestion (not just null ones)
  * so switching from name-embeddings to signature-embeddings is a single run.
@@ -47,7 +47,6 @@ export async function generateSuggestionEmbeddings() {
         const signatures = suggestions.map((s) =>
             buildSuggestionSignature({
                 name: s.name,
-                nameEn: s.name_en,
                 tags: s.recipe_suggestion_tags
                     .map((t) => t.tags?.name)
                     .filter((n): n is string => Boolean(n)),

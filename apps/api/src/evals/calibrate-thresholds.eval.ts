@@ -10,10 +10,19 @@ config();
  * different-dish pairs, so SIGNATURE_HIGH_THRESHOLD / SIGNATURE_LOW_THRESHOLD in
  * persist-or-reuse-suggestion can be set from real score distributions instead of
  * guessed. Prints both distributions and a suggested band.
+ *
+ * Every fixture pair here is deliberately CROSS-NAME — the hard case. Since
+ * 20260731000005 the signature keys on the canonical `name` rather than a shared
+ * `name_en`, so these no longer get a free ride from an identical English key and
+ * have to match on name + tags + ingredients. Last run 2026-07-31: same-dish
+ * 0.77–0.84, different-dish 0.63–0.80, still overlapping.
+ *
+ * Do NOT read the same-dish max as the ceiling for real traffic: two suggestions
+ * for one dish normally now agree on the canonical name and score ~1.00, which is
+ * what SIGNATURE_HIGH_THRESHOLD is set for. These fixtures measure the floor.
  */
 interface DishFixture {
     name: string;
-    nameEn: string;
     tags: string[];
     ingredients: string[];
 }
@@ -21,7 +30,6 @@ interface DishFixture {
 const sig = (d: DishFixture) =>
     buildSuggestionSignature({
         name: d.name,
-        nameEn: d.nameEn,
         tags: d.tags,
         ingredients: d.ingredients,
     });
@@ -41,44 +49,44 @@ function cosine(a: number[], b: number[]): number {
 // Same dish, different names/languages — SHOULD score high (auto-merge).
 const SAME_PAIRS: Array<[DishFixture, DishFixture]> = [
     [
-        { name: "Som Tam", nameEn: "Green Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut", "tomato"] },
-        { name: "Papaya Salad", nameEn: "Green Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut"] },
+        { name: "Som Tam", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut", "tomato"] },
+        { name: "Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut"] },
     ],
     [
-        { name: "Murgh Makhani", nameEn: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "garam masala"] },
-        { name: "Butter Chicken", nameEn: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream"] },
+        { name: "Murgh Makhani", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "garam masala"] },
+        { name: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream"] },
     ],
     [
-        { name: "Phở Bò", nameEn: "Vietnamese Beef Noodle Soup", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "scallion", "cilantro"] },
-        { name: "Pho", nameEn: "Beef Pho", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "herbs"] },
+        { name: "Phở Bò", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "scallion", "cilantro"] },
+        { name: "Pho", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "herbs"] },
     ],
     [
-        { name: "Gyōza", nameEn: "Japanese Pan-Fried Dumplings", tags: ["japanese", "appetizer", "dish"], ingredients: ["pork", "cabbage", "garlic", "ginger", "dumpling wrapper"] },
-        { name: "Japanese Dumplings", nameEn: "Gyoza", tags: ["japanese", "appetizer", "dish"], ingredients: ["ground pork", "napa cabbage", "garlic", "ginger", "wrapper"] },
+        { name: "Gyōza", tags: ["japanese", "appetizer", "dish"], ingredients: ["pork", "cabbage", "garlic", "ginger", "dumpling wrapper"] },
+        { name: "Japanese Dumplings", tags: ["japanese", "appetizer", "dish"], ingredients: ["ground pork", "napa cabbage", "garlic", "ginger", "wrapper"] },
     ],
 ];
 
 // Distinct dishes (incl. hard near-miss pairs) — SHOULD stay below the merge band.
 const DIFFERENT_PAIRS: Array<[DishFixture, DishFixture]> = [
     [
-        { name: "Som Tam Thai", nameEn: "Thai Green Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "peanut", "dried shrimp", "tomato", "fish sauce", "lime"] },
-        { name: "Som Tam Lao", nameEn: "Lao Green Papaya Salad", tags: ["lao", "salad", "dish"], ingredients: ["green papaya", "padaek", "field crab", "fish sauce", "lime", "eggplant"] },
+        { name: "Som Tam Thai", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "peanut", "dried shrimp", "tomato", "fish sauce", "lime"] },
+        { name: "Som Tam Lao", tags: ["lao", "salad", "dish"], ingredients: ["green papaya", "padaek", "field crab", "fish sauce", "lime", "eggplant"] },
     ],
     [
-        { name: "Butter Chicken", nameEn: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "fenugreek"] },
-        { name: "Chicken Tikka Masala", nameEn: "Chicken Tikka Masala", tags: ["indian", "main", "dish"], ingredients: ["chicken", "yogurt", "tomato", "cream", "garam masala", "onion"] },
+        { name: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "fenugreek"] },
+        { name: "Chicken Tikka Masala", tags: ["indian", "main", "dish"], ingredients: ["chicken", "yogurt", "tomato", "cream", "garam masala", "onion"] },
     ],
     [
-        { name: "Carbonara", nameEn: "Spaghetti alla Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
-        { name: "Cacio e Pepe", nameEn: "Cacio e Pepe", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "pecorino", "black pepper"] },
+        { name: "Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
+        { name: "Cacio e Pepe", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "pecorino", "black pepper"] },
     ],
     [
-        { name: "Pad Thai", nameEn: "Pad Thai", tags: ["thai", "main", "dish"], ingredients: ["rice noodle", "shrimp", "tamarind", "peanut", "egg", "bean sprout"] },
-        { name: "Pad See Ew", nameEn: "Pad See Ew", tags: ["thai", "main", "dish"], ingredients: ["wide rice noodle", "chicken", "soy sauce", "egg", "chinese broccoli"] },
+        { name: "Pad Thai", tags: ["thai", "main", "dish"], ingredients: ["rice noodle", "shrimp", "tamarind", "peanut", "egg", "bean sprout"] },
+        { name: "Pad See Ew", tags: ["thai", "main", "dish"], ingredients: ["wide rice noodle", "chicken", "soy sauce", "egg", "chinese broccoli"] },
     ],
     [
-        { name: "Roux", nameEn: "Roux", tags: ["french", "roux", "component"], ingredients: ["flour", "butter"] },
-        { name: "Béchamel", nameEn: "Bechamel Sauce", tags: ["french", "sauce", "component"], ingredients: ["flour", "butter", "milk"] },
+        { name: "Roux", tags: ["french", "roux", "component"], ingredients: ["flour", "butter"] },
+        { name: "Béchamel", tags: ["french", "sauce", "component"], ingredients: ["flour", "butter", "milk"] },
     ],
 ];
 

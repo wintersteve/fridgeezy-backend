@@ -61,6 +61,13 @@
                     "cwd": "apps/database"
                 }
             },
+            "normalize-names": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/scripts/normalize-recipe-names.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "dedupe-ingredients": {
                 "executor": "nx:run-commands",
                 "options": {

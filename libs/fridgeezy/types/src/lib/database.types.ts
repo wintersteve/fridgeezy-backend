@@ -841,6 +841,7 @@ export type Database = {
       recipes: {
         Row: {
           base_recipe_id: string | null
+          canonical_id: string | null
           carbs: number | null
           cook_time: string | null
           created_at: string
@@ -859,11 +860,13 @@ export type Database = {
           protein: number | null
           servings: number
           short_description: string | null
+          source_suggestion_id: string | null
           tips: string[] | null
           updated_at: string
         }
         Insert: {
           base_recipe_id?: string | null
+          canonical_id?: string | null
           carbs?: number | null
           cook_time?: string | null
           created_at?: string
@@ -882,11 +885,13 @@ export type Database = {
           protein?: number | null
           servings?: number
           short_description?: string | null
+          source_suggestion_id?: string | null
           tips?: string[] | null
           updated_at?: string
         }
         Update: {
           base_recipe_id?: string | null
+          canonical_id?: string | null
           carbs?: number | null
           cook_time?: string | null
           created_at?: string
@@ -905,6 +910,7 @@ export type Database = {
           protein?: number | null
           servings?: number
           short_description?: string | null
+          source_suggestion_id?: string | null
           tips?: string[] | null
           updated_at?: string
         }
@@ -1236,7 +1242,12 @@ export type Database = {
         Args: { curlopt: string; value: string }
         Returns: boolean
       }
+      ingredient_canonical_id: { Args: { input_text: string }; Returns: string }
       merge_ingredient: {
+        Args: { p_from: string; p_into: string }
+        Returns: undefined
+      }
+      merge_recipe: {
         Args: { p_from: string; p_into: string }
         Returns: undefined
       }
@@ -1413,6 +1424,7 @@ export type Database = {
           similarity: number
         }[]
       }
+      singularize_token: { Args: { tok: string }; Returns: string }
       text_to_bytea: { Args: { data: string }; Returns: string }
       urlencode:
         | { Args: { data: Json }; Returns: string }

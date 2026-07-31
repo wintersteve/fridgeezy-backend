@@ -16,17 +16,17 @@ config();
  */
 interface DishFixture {
     name: string;
-    nameEn: string;
+    nameAlt: string;
     tags: string[];
     ingredients: string[];
 }
 
 const descriptor = (d: DishFixture): string =>
-    describeSuggestion(d.name, d.nameEn, d.tags, d.ingredients);
+    describeSuggestion(d.name, d.nameAlt, d.tags, d.ingredients);
 
 const toDto = (d: DishFixture): GenerateSuggestionResponseDto => ({
     name: d.name,
-    name_en: d.nameEn,
+    name_alt: d.nameAlt,
     description: "eval fixture",
     difficulty: "medium",
     ingredients: d.ingredients,
@@ -36,60 +36,60 @@ const toDto = (d: DishFixture): GenerateSuggestionResponseDto => ({
 // Same dish under different names / languages — should MERGE (adjudicate same).
 const SAME_PAIRS: Array<[DishFixture, DishFixture]> = [
     [
-        { name: "Som Tam", nameEn: "Green Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut", "tomato"] },
-        { name: "Papaya Salad", nameEn: "Green Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut"] },
+        { name: "Som Tam", nameAlt: "Green Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut", "tomato"] },
+        { name: "Papaya Salad", nameAlt: "Green Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut"] },
     ],
     [
-        { name: "Murgh Makhani", nameEn: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "garam masala"] },
-        { name: "Butter Chicken", nameEn: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream"] },
+        { name: "Murgh Makhani", nameAlt: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "garam masala"] },
+        { name: "Butter Chicken", nameAlt: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream"] },
     ],
     // Low-signal same-dish pairs (calibrated ~0.74–0.85) — now in the LLM gray band.
     [
-        { name: "Gyōza", nameEn: "Japanese Pan-Fried Dumplings", tags: ["japanese", "appetizer", "dish"], ingredients: ["pork", "cabbage", "garlic", "ginger", "dumpling wrapper"] },
-        { name: "Japanese Dumplings", nameEn: "Gyoza", tags: ["japanese", "appetizer", "dish"], ingredients: ["ground pork", "napa cabbage", "garlic", "ginger", "wrapper"] },
+        { name: "Gyōza", nameAlt: "Japanese Pan-Fried Dumplings", tags: ["japanese", "appetizer", "dish"], ingredients: ["pork", "cabbage", "garlic", "ginger", "dumpling wrapper"] },
+        { name: "Japanese Dumplings", nameAlt: "Gyoza", tags: ["japanese", "appetizer", "dish"], ingredients: ["ground pork", "napa cabbage", "garlic", "ginger", "wrapper"] },
     ],
     [
-        { name: "Phở Bò", nameEn: "Vietnamese Beef Noodle Soup", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "scallion", "cilantro"] },
-        { name: "Pho", nameEn: "Beef Pho", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "herbs"] },
+        { name: "Phở Bò", nameAlt: "Vietnamese Beef Noodle Soup", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "scallion", "cilantro"] },
+        { name: "Pho", nameAlt: "Beef Pho", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "herbs"] },
     ],
 ];
 
 // Genuine variations / distinct dishes — should STAY DISTINCT (adjudicate not-same).
 const DISTINCT_PAIRS: Array<[DishFixture, DishFixture]> = [
     [
-        { name: "Som Tam Thai", nameEn: "Thai Green Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "peanut", "dried shrimp", "tomato", "fish sauce", "lime"] },
-        { name: "Som Tam Lao", nameEn: "Lao Green Papaya Salad", tags: ["lao", "salad", "dish"], ingredients: ["green papaya", "padaek", "field crab", "fish sauce", "lime", "eggplant"] },
+        { name: "Som Tam Thai", nameAlt: "Thai Green Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "peanut", "dried shrimp", "tomato", "fish sauce", "lime"] },
+        { name: "Som Tam Lao", nameAlt: "Lao Green Papaya Salad", tags: ["lao", "salad", "dish"], ingredients: ["green papaya", "padaek", "field crab", "fish sauce", "lime", "eggplant"] },
     ],
     [
-        { name: "Roux", nameEn: "Roux", tags: ["french", "roux", "component"], ingredients: ["flour", "butter"] },
-        { name: "Béchamel", nameEn: "Bechamel Sauce", tags: ["french", "sauce", "component"], ingredients: ["flour", "butter", "milk"] },
+        { name: "Roux", nameAlt: "Roux", tags: ["french", "roux", "component"], ingredients: ["flour", "butter"] },
+        { name: "Béchamel", nameAlt: "Bechamel Sauce", tags: ["french", "sauce", "component"], ingredients: ["flour", "butter", "milk"] },
     ],
     // Near-miss distinct pairs (calibrated ~0.72–0.80) — in the LLM gray band; the
     // adjudicator must keep them apart.
     [
-        { name: "Butter Chicken", nameEn: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "fenugreek"] },
-        { name: "Chicken Tikka Masala", nameEn: "Chicken Tikka Masala", tags: ["indian", "main", "dish"], ingredients: ["chicken", "yogurt", "tomato", "cream", "garam masala", "onion"] },
+        { name: "Butter Chicken", nameAlt: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "fenugreek"] },
+        { name: "Chicken Tikka Masala", nameAlt: "Chicken Tikka Masala", tags: ["indian", "main", "dish"], ingredients: ["chicken", "yogurt", "tomato", "cream", "garam masala", "onion"] },
     ],
     [
-        { name: "Carbonara", nameEn: "Spaghetti alla Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
-        { name: "Cacio e Pepe", nameEn: "Cacio e Pepe", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "pecorino", "black pepper"] },
+        { name: "Carbonara", nameAlt: "Spaghetti alla Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
+        { name: "Cacio e Pepe", nameAlt: "Cacio e Pepe", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "pecorino", "black pepper"] },
     ],
     [
-        { name: "Pad Thai", nameEn: "Pad Thai", tags: ["thai", "main", "dish"], ingredients: ["rice noodle", "shrimp", "tamarind", "peanut", "egg", "bean sprout"] },
-        { name: "Pad See Ew", nameEn: "Pad See Ew", tags: ["thai", "main", "dish"], ingredients: ["wide rice noodle", "chicken", "soy sauce", "egg", "chinese broccoli"] },
+        { name: "Pad Thai", nameAlt: "Pad Thai", tags: ["thai", "main", "dish"], ingredients: ["rice noodle", "shrimp", "tamarind", "peanut", "egg", "bean sprout"] },
+        { name: "Pad See Ew", nameAlt: "Pad See Ew", tags: ["thai", "main", "dish"], ingredients: ["wide rice noodle", "chicken", "soy sauce", "egg", "chinese broccoli"] },
     ],
 ];
 
 // Attested dishes — should PASS the authenticity gate.
 const AUTHENTIC_DISHES: DishFixture[] = [
-    { name: "Spaghetti alla Carbonara", nameEn: "Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
-    { name: "Murgh Makhani", nameEn: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream"] },
+    { name: "Spaghetti alla Carbonara", nameAlt: "Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
+    { name: "Murgh Makhani", nameAlt: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream"] },
 ];
 
 // Inventions / hallucinations — should be DROPPED by the authenticity gate.
 const INVENTION_DISHES: DishFixture[] = [
-    { name: "Carbonara with Asparagus", nameEn: "Asparagus Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "asparagus"] },
-    { name: "Zorblatt Crunch", nameEn: "Zorblatt Crunch", tags: ["fusion", "snack", "dish"], ingredients: ["moon dust", "glitter", "cardboard"] },
+    { name: "Carbonara with Asparagus", nameAlt: "Asparagus Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "asparagus"] },
+    { name: "Zorblatt Crunch", nameAlt: "Zorblatt Crunch", tags: ["fusion", "snack", "dish"], ingredients: ["moon dust", "glitter", "cardboard"] },
 ];
 
 async function main() {

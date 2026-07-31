@@ -21,7 +21,7 @@ import { searchRecipes } from "./search-recipes";
  */
 const ComposeRecipeSuggestionSchema = z.object({
     name: z.string(),
-    name_en: z.string(),
+    name_alt: z.string().nullable().optional(),
     description: z.string().transform((s) => s.slice(0, 100)),
     difficulty: z.enum(["easy", "medium", "hard"]),
     course: z.string(),
@@ -60,8 +60,8 @@ const SYSTEM_PROMPT = `You are a recipe composition assistant. Generate compleme
 Output one JSON object per line (JSONL format). No markdown, no code blocks, no extra text.
 
 Each recipe object must include:
-- name
-- name_en (the English name of the dish, e.g. "Butter Chicken" for "Murgh Makhani")
+- name (the name an English-speaking home cook would most commonly recognise the dish by — keep the NATIVE name when that is what people actually say in English: Pho, Ramen, Paella, Kimchi, Gyoza, Coq au Vin, Pad Thai, Tiramisu, Risotto; use the ENGLISH name when that is the common one: "Butter Chicken" not "Murgh Makhani", "Apple Strudel" not "Apfelstrudel")
+- name_alt (the OTHER name: the native spelling if \`name\` is English, the English translation if \`name\` is native. Use null when the dish is only ever known by one name)
 - description (max 100 characters)
 - difficulty (easy, medium, or hard)
 - course (the course type)
@@ -265,13 +265,13 @@ export async function* generateComposeRecipes(
         const persistResult = await persistSuggestion(
             {
                 name: suggestion.name,
-                name_en: suggestion.name_en,
+                name_alt: suggestion.name_alt,
                 description: suggestion.description,
                 difficulty: suggestion.difficulty,
                 ingredients: suggestion.ingredients,
                 tags: suggestion.tags,
             },
-            { cuisineTag: suggestionCuisine, nameEn: suggestion.name_en }
+            { cuisineTag: suggestionCuisine, nameEn: suggestion.name_alt }
         );
 
         if (!persistResult.success) {
@@ -287,7 +287,7 @@ export async function* generateComposeRecipes(
             source: "suggestion",
             id: persistResult.value.suggestionId,
             name: suggestion.name,
-            nameEn: suggestion.name_en,
+            nameEn: suggestion.name_alt,
             description: suggestion.description,
             difficulty: suggestion.difficulty,
             ingredients: persistResult.value.ingredients,

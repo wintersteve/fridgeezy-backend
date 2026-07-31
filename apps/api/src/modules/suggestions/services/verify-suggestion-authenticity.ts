@@ -58,7 +58,7 @@ export async function classifySuggestionAuthenticity(
                 role: "user",
                 content: describeSuggestion(
                     suggestion.name,
-                    suggestion.name_en,
+                    suggestion.name_alt,
                     suggestion.tags,
                     suggestion.ingredients
                 ),

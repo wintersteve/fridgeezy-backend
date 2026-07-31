@@ -9,7 +9,8 @@ Weigh the defining ingredients and cuisine, not just the name. Respond with a si
 
 /**
  * LLM adjudication for the dedup gray zone: are dish A and dish B the same dish?
- * Each argument is a short descriptor (English name, cuisine/tags, ingredients).
+ * Each argument is a short descriptor (canonical name, any alias, cuisine/tags,
+ * ingredients).
  * Fails CLOSED (false) on any error so an LLM hiccup never merges distinct dishes.
  */
 export async function adjudicateSameDish(

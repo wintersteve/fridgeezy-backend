@@ -39,10 +39,17 @@ export const GenerateSuggestionRequestSchema = z.object({
 /**
  * Response schema for generated recipe suggestions (from LLM).
  * Used to validate LLM output with string arrays.
+ *
+ * `name` is the CANONICAL name — the one an English-speaking home cook knows the
+ * dish by, native or translated depending on the dish (see 20260731000001).
+ * `name_alt` is the other name, and is genuinely optional: a dish like Kimchi or
+ * Pad Thai has only one. Requiring it (it used to be `z.string()`, back when it
+ * meant "the English translation") forced the model to either echo `name` or
+ * invent a translation nobody uses.
  */
 export const GenerateSuggestionResponseSchema = z.object({
     name: z.string(),
-    name_en: z.string(),
+    name_alt: z.string().nullable().optional(),
     description: z.string().transform(clampToCardLength),
     difficulty: z.enum(["easy", "medium", "hard"]),
     ingredients: z.array(z.string()),
@@ -68,6 +75,10 @@ export const SuggestionTagSchema = z.object({
 /**
  * Enriched response schema with ingredient and tag IDs
  * Used by the API to stream to clients after persistence.
+ *
+ * `nameEn` mirrors the `name_en` COLUMN, which since 20260731000001 holds the
+ * alternate name rather than an English translation. Clients render `name` and
+ * ignore this.
  */
 export const EnrichedSuggestionResponseSchema = z.object({
     id: z.uuid(),

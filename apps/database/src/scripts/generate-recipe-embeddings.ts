@@ -7,9 +7,9 @@ config();
 
 /**
  * (Re)build recipes.fts from each recipe's dish SIGNATURE — the same text
- * suggestions are embedded with (English name + tags + ingredients), built by the
- * shared `buildSuggestionSignature` so a stored recipe vector and a suggestion's
- * query vector for the same dish are directly comparable.
+ * suggestions are embedded with (canonical name + tags + ingredients), built by
+ * the shared `buildSuggestionSignature` so a stored recipe vector and a
+ * suggestion's query vector for the same dish are directly comparable.
  *
  * This replaces the original name-only embedding. A bare name can't recognise its
  * own dish from a paraphrase ("apple strudel" scored 0.746 against a recipe named
@@ -71,7 +71,6 @@ export async function generateRecipeEmbeddings() {
         const signatures = recipes.map((recipe) =>
             buildSuggestionSignature({
                 name: recipe.name,
-                nameEn: recipe.name_en,
                 tags: recipe.recipe_tags.map((rt) => rt.tag.name),
                 ingredients: recipe.recipe_ingredients.map(
                     (ri) => ri.ingredient.name

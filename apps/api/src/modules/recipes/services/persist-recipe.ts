@@ -13,16 +13,17 @@ const DEFAULT_IMAGE_URL = "";
 const unitsRepository = new UnitsRepository();
 
 /**
- * Store the recipe's dish SIGNATURE embedding (English name + tags + ingredients
- * — the same text suggestions are embedded with) rather than the bare name.
+ * Store the recipe's dish SIGNATURE embedding (canonical name + tags +
+ * ingredients — the same text suggestions are embedded with) rather than the
+ * bare name.
  *
  * A name-only vector can't recognise its own dish from anything but the exact
  * native spelling: "apple strudel" scored 0.746 against a recipe literally named
  * `Apfelstrudel` / `Apple Strudel`, missing the 0.75 search threshold and letting
- * the dish be re-suggested and re-generated. The signature puts `name_en`, the
- * cuisine/course tags and the ingredient set into the vector, and — critically —
- * makes recipe and suggestion embeddings directly comparable, which is what lets
- * dedup search both tables with one query vector.
+ * the dish be re-suggested and re-generated. The signature puts the canonical
+ * name, the cuisine/course tags and the ingredient set into the vector, and —
+ * critically — makes recipe and suggestion embeddings directly comparable, which
+ * is what lets dedup search both tables with one query vector.
  *
  * Best-effort: a failure leaves `fts` stale and the row can be re-embedded by
  * the backfill, so it never fails a save.
@@ -35,7 +36,6 @@ async function storeRecipeSignature(
     const embedding = await generateEmbedding(
         buildSuggestionSignature({
             name: recipe.name,
-            nameEn: recipe.nameEn,
             tags: recipe.tags ?? [],
             ingredients: recipe.ingredients.map((ingredient) => ingredient.name),
         })

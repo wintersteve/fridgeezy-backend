@@ -2,28 +2,60 @@ import { openai } from "@fridgeezy/openai";
 
 export type IngredientDecision = "same" | "new" | "invalid";
 
-/** Controlled food-category vocabulary (mirrors the camera/recipe extraction set). */
+/**
+ * Controlled food-category vocabulary — the canonical_ids of the seeded
+ * `categories` table (see seeds/004_categories.sql). The adjudicator MUST pick
+ * from these exact ids so the value resolves directly via
+ * CategoriesRepository.findByCanonicalId (no transform). Previously this was a
+ * different, singular 17-item set that never matched the DB, so every adjudicated
+ * category silently fell back to the embedding-centroid guess.
+ */
 export const INGREDIENT_CATEGORIES = [
-    "meat",
-    "poultry",
+    "meats",
     "seafood",
+    "eggs",
     "dairy",
-    "vegetable",
-    "fruit",
-    "grain",
-    "legume",
-    "herb",
-    "spice",
-    "oil",
-    "condiment",
-    "nut",
-    "seed",
-    "sweetener",
-    "beverage",
-    "other",
+    "vegetables",
+    "fruits",
+    "grains",
+    "legumes",
+    "nuts_seeds",
+    "herbs_spices",
+    "mushrooms",
+    "noodles",
+    "breads",
+    "fats_oils",
+    "sweeteners",
+    "stocks",
+    "sauces",
+    "vinegars",
+    "beverages",
+    "baking",
 ] as const;
 
 export type IngredientCategory = (typeof INGREDIENT_CATEGORIES)[number];
+
+/** Human glosses for each category id, to steer the LLM's pick. */
+const CATEGORY_GUIDE = `- meats: red meat, poultry, game
+- seafood: fish, shellfish, crustaceans
+- eggs: eggs of any bird
+- dairy: milk, cream, yogurt, butter, cheese
+- vegetables: all vegetables including roots and greens
+- fruits: fresh and dried fruit, berries
+- grains: rice, quinoa, oats, wheat, barley, couscous
+- legumes: beans, lentils, peas, chickpeas
+- nuts_seeds: tree nuts, peanuts, seeds
+- herbs_spices: fresh/dried herbs, spices, seasonings
+- mushrooms: all fungi
+- noodles: pasta and Asian noodles
+- breads: bread, tortillas, pita, wraps, crackers
+- fats_oils: cooking oils and solid fats
+- sweeteners: sugar, honey, maple syrup, agave
+- stocks: broths, stocks, bouillon
+- sauces: sauces, condiments, dressings
+- vinegars: all vinegars
+- beverages: alcoholic and non-alcoholic drinks
+- baking: baking powder/soda, yeast, flour, extracts`;
 
 export interface IngredientAdjudication {
     decision: IngredientDecision;
@@ -40,11 +72,11 @@ decision:
 - "invalid": NAME is not a usable culinary ingredient — gibberish, a dish or recipe name, a hallucination, or an unusable fragment.
 - "new": NAME is a real, distinct culinary ingredient (different from CANDIDATE, or there is no candidate).
 
-category (only when decision is "new"): the single best-fitting food category, chosen from EXACTLY this list:
-${INGREDIENT_CATEGORIES.join(", ")}.
+category (only when decision is "new"): the single best-fitting food category. Return EXACTLY one of these ids (the id itself, not the description):
+${CATEGORY_GUIDE}
 
 Respond with a single JSON object and nothing else:
-{"decision":"same"|"new"|"invalid","category":"<one of the list, or null>"}.`;
+{"decision":"same"|"new"|"invalid","category":"<one id from the list above, or null>"}.`;
 
 /**
  * Ingredient creation gate: decide whether an unmatched ingredient name is the

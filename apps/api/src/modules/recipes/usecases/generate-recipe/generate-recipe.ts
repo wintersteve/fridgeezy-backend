@@ -255,10 +255,14 @@ export const generateRecipe = createStreamHandler({
                         );
                     }
 
-                    // Yield final completion with recipe ID
+                    // Fold the persisted id into the terminal frame under `id` —
+                    // the key the client's done-detector reads. It was `recipeId`,
+                    // which nothing consumes, so a client would have completed the
+                    // stream with no id and waited forever for a recipe that had
+                    // in fact been saved (the failure escalate-difficulty hit).
                     yield {
                         ...lastResult,
-                        recipeId: persistResult.value,
+                        id: persistResult.value,
                     };
                 } else {
                     console.error(

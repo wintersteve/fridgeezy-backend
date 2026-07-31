@@ -1,0 +1,204 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { generateBatchEmbeddings } from "@fridgeezy/openai";
+import { supabaseAdmin } from "@fridgeezy/supabase";
+import { config } from "dotenv";
+
+config();
+
+/**
+ * Load a curated ingredient seed into the catalog: ingredients (with the
+ * singular/plural-collapsing canonical_id, a resolved category, and an
+ * embedding) plus their aliases. Pre-warms the direct-match + alias path so the
+ * common case never pays the vector/LLM cold-start.
+ *
+ * Reads a JSON array of { name, category, aliases? } where `category` is a
+ * category canonical_id (one of the 20 seeded categories).
+ *
+ * DRY RUN by default — set SEED_APPLY=true to write. Idempotent: existing
+ * ingredients (by canonical_id) and existing aliases are skipped, so it is safe
+ * to re-run after extending the dataset.
+ */
+const APPLY = process.env.SEED_APPLY === "true";
+const SEED_FILE = process.env.SEED_FILE ?? "src/scripts/data/ingredient-seed.json";
+const EMBED_MODEL = "text-embedding-3-small" as const;
+const EMBED_DIMS = 1536;
+const EMBED_CHUNK = 256;
+
+interface SeedIngredient {
+    name: string;
+    category: string;
+    aliases?: string[];
+}
+
+// Singular/plural-collapsing canonical — MUST match the SQL
+// ingredient_canonical_id + singularize_token and the TS toCanonicalId in
+// match-ingredients.ts.
+const singularizeToken = (tok: string): string => {
+    if (tok.length <= 3) return tok;
+    if (/ies$/.test(tok) && tok.length > 4) return tok.slice(0, -3) + "y";
+    if (/(oes|ses|xes|zes|ches|shes)$/.test(tok)) return tok.slice(0, -2);
+    if (/s$/.test(tok) && !/(ss|us|is)$/.test(tok)) return tok.slice(0, -1);
+    return tok;
+};
+const toCanonicalId = (name: string): string => {
+    const base = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    if (!base) return base;
+    const parts = base.split("_");
+    parts[parts.length - 1] = singularizeToken(parts[parts.length - 1]);
+    return parts.join("_");
+};
+
+function chunk<T>(items: T[], size: number): T[][] {
+    const out: T[][] = [];
+    for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+    return out;
+}
+
+async function main() {
+    const path = join(process.cwd(), SEED_FILE);
+    const seeds: SeedIngredient[] = JSON.parse(readFileSync(path, "utf8"));
+    console.log(`Loaded ${seeds.length} seed rows from ${SEED_FILE}\n`);
+
+    // 1. Category canonical_id -> id.
+    const { data: cats, error: catErr } = await supabaseAdmin
+        .from("categories")
+        .select("id, canonical_id");
+    if (catErr) throw new Error(catErr.message);
+    const catByCanonical = new Map(
+        (cats ?? []).map((c) => [c.canonical_id as string, c.id as string])
+    );
+
+    const unknownCats = [
+        ...new Set(seeds.map((s) => s.category).filter((c) => !catByCanonical.has(c))),
+    ];
+    if (unknownCats.length > 0) {
+        console.error(
+            `Unknown category canonical_ids in seed (not in DB): ${unknownCats.join(", ")}`
+        );
+        process.exit(1);
+    }
+
+    // 2. Dedupe seed rows by canonical_id (first wins).
+    const byCanonical = new Map<string, SeedIngredient>();
+    for (const s of seeds) {
+        const cid = toCanonicalId(s.name);
+        if (cid && !byCanonical.has(cid)) byCanonical.set(cid, s);
+    }
+
+    // 3. Which canonicals already exist.
+    const canonicalIds = [...byCanonical.keys()];
+    const existingByCanonical = new Map<string, string>();
+    for (const ids of chunk(canonicalIds, 500)) {
+        const { data: rows, error } = await supabaseAdmin
+            .from("ingredients")
+            .select("id, canonical_id")
+            .in("canonical_id", ids);
+        if (error) throw new Error(error.message);
+        for (const r of rows ?? [])
+            existingByCanonical.set(r.canonical_id as string, r.id as string);
+    }
+
+    const toCreate = [...byCanonical.entries()].filter(
+        ([cid]) => !existingByCanonical.has(cid)
+    );
+
+    console.log(
+        `Unique: ${byCanonical.size} | already in catalog: ${existingByCanonical.size} | to create: ${toCreate.length}${APPLY ? "" : " — DRY RUN"}`
+    );
+
+    if (!APPLY) {
+        console.log("\nSample of new ingredients:");
+        for (const [cid, s] of toCreate.slice(0, 15)) {
+            console.log(
+                `  ${cid.padEnd(24)} [${s.category}]  aliases: ${(s.aliases ?? []).join(", ") || "—"}`
+            );
+        }
+        console.log("\nDRY RUN — set SEED_APPLY=true to write.");
+        return;
+    }
+
+    // 4. Batch-embed the new ingredient names.
+    console.log(`\nEmbedding ${toCreate.length} names (${EMBED_MODEL})...`);
+    const embeddingByCanonical = new Map<string, number[]>();
+    for (const batch of chunk(toCreate, EMBED_CHUNK)) {
+        const names = batch.map(([, s]) => s.name);
+        const { embeddings } = await generateBatchEmbeddings(names, {
+            model: EMBED_MODEL,
+            dimensions: EMBED_DIMS,
+        });
+        batch.forEach(([cid], i) => embeddingByCanonical.set(cid, embeddings[i]));
+    }
+
+    // 5. Insert ingredients (skip any that lost a race on canonical/name).
+    console.log(`Inserting ${toCreate.length} ingredients...`);
+    const idByCanonical = new Map<string, string>(existingByCanonical);
+    let created = 0;
+    for (const batch of chunk(toCreate, 200)) {
+        const rows = batch.map(([cid, s]) => ({
+            name: s.name,
+            canonical_id: cid,
+            category_id: catByCanonical.get(s.category),
+            embedding: JSON.stringify(embeddingByCanonical.get(cid)),
+        }));
+        const { data, error } = await supabaseAdmin
+            .from("ingredients")
+            .insert(rows)
+            .select("id, canonical_id");
+        if (error) {
+            console.error(`  insert batch failed: ${error.message}`);
+            continue;
+        }
+        for (const r of data ?? []) {
+            idByCanonical.set(r.canonical_id as string, r.id as string);
+            created++;
+        }
+    }
+    console.log(`Created ${created} ingredients.`);
+
+    // 6. Insert aliases (globally unique; skip the ingredient's own name and any
+    // collision). Covers all seed rows, not just newly created ones.
+    const aliasRows: { ingredient_id: string; alias: string }[] = [];
+    const seenAlias = new Set<string>();
+    for (const [cid, s] of byCanonical) {
+        const ingredientId = idByCanonical.get(cid);
+        if (!ingredientId) continue;
+        for (const alias of s.aliases ?? []) {
+            const a = alias.trim();
+            if (!a) continue;
+            if (toCanonicalId(a) === cid) continue; // same as the name itself
+            const key = a.toLowerCase();
+            if (seenAlias.has(key)) continue;
+            seenAlias.add(key);
+            aliasRows.push({ ingredient_id: ingredientId, alias: a });
+        }
+    }
+
+    console.log(`\nInserting ${aliasRows.length} aliases...`);
+    let aliasCreated = 0;
+    for (const batch of chunk(aliasRows, 200)) {
+        const { data, error } = await supabaseAdmin
+            .from("ingredient_aliases")
+            .upsert(batch, { onConflict: "alias", ignoreDuplicates: true })
+            .select("id");
+        if (error) {
+            console.error(`  alias batch failed: ${error.message}`);
+            continue;
+        }
+        aliasCreated += (data ?? []).length;
+    }
+    console.log(`Created ${aliasCreated} aliases (existing ones skipped).`);
+
+    console.log("\nDone.");
+}
+
+main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+        console.error("\nSeed failed:", err);
+        process.exit(1);
+    });

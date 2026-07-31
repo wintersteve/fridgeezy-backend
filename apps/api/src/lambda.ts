@@ -1,6 +1,5 @@
 // No `dotenv/config` here on purpose — configuration arrives as Lambda
 // environment variables, and there is no .env file in the deployment package.
-import "reflect-metadata";
 
 import http from "node:http";
 import type { AddressInfo } from "node:net";

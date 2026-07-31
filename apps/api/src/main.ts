@@ -1,5 +1,4 @@
 import "dotenv/config";
-import "reflect-metadata";
 
 import { createApp } from "./create-app";
 import { startupBanner } from "./startup-banner";

@@ -147,7 +147,8 @@ IMPORTANT CONSTRAINTS:
 - Modify techniques, optional ingredients, and instruction complexity to match ${targetDifficulty} difficulty`;
 };
 
-// Store existing image URL + source recipe for reuse in onComplete
+// Existing image URL + source recipe, carried from the handler into the persist
+// step at the tail of the stream.
 let existingImageUrl: string | undefined;
 let sourceRecipeId: string | undefined;
 

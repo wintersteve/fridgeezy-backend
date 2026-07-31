@@ -206,48 +206,72 @@ export const escalateDifficulty = createStreamHandler({
             stream: true,
         });
 
-        // 5. Return stream (initialState sets the base recipe properties)
-        return {
-            type: "stream" as const,
-            stream: createRecipeStream(stream, {
-                schemas: [
-                    HeaderSchema,
-                    NutritionSchema,
-                    IngredientSchema,
-                    InstructionSchema,
-                    TipSchema,
-                ],
-                initialState: {
-                    name: existingRecipe.name, // MUST remain constant
-                    nameEn: existingRecipe.nameEn,
-                    difficulty: body.difficulty, // TARGET difficulty
-                    servings: existingRecipe.servings,
-                    tags: existingRecipe.tags, // MUST remain constant
-                },
-                // No image generation here — escalate reuses the existing
-                // recipe's image (passed to persistRecipe as existingImageUrl).
-            }),
-        };
-    },
+        // 5. Build the recipe stream (initialState sets the base recipe properties)
+        const recipeStream = createRecipeStream(stream, {
+            schemas: [
+                HeaderSchema,
+                NutritionSchema,
+                IngredientSchema,
+                InstructionSchema,
+                TipSchema,
+            ],
+            initialState: {
+                name: existingRecipe.name, // MUST remain constant
+                nameEn: existingRecipe.nameEn,
+                difficulty: body.difficulty, // TARGET difficulty
+                servings: existingRecipe.servings,
+                tags: existingRecipe.tags, // MUST remain constant
+            },
+            // No image generation here — escalate reuses the existing
+            // recipe's image (passed to persistRecipe as existingImageUrl).
+        });
 
-    onComplete: async ({ result }) => {
-        if (result?.recipe) {
-            // Same reasoning as modify-recipe: an escalated recipe keeps the
-            // base's name (the prompt forbids changing it), so an untagged row
-            // shows up in discovery as a second, indistinguishable "Apfelstrudel".
-            //
-            // The lineage is resolved BEFORE persisting and handed to the INSERT.
-            // Inserting as a base and re-parenting afterwards left a second base
-            // recipe under the base's name in the table for the width of that
-            // gap, which the partial unique index rejects — escalation failed at
-            // the INSERT and never reached the re-parenting step.
+        // 6. Persist INSIDE the stream so the new recipe's id reaches the client.
+        //
+        // Same reasoning as modify-recipe: the client's done-detector fires on
+        // the `complete` frame and then fetches by `recipe.id`, but the recipe
+        // stream's own `complete` carries an empty id (the row does not exist
+        // yet). Persisting from the generic `onComplete` hook cannot fix that —
+        // it runs only after the connection has closed — so the escalated recipe
+        // was saved correctly and the client sat there waiting for an id that
+        // never came. Hold the id-less frame back, persist, and re-emit
+        // `complete` with the real id.
+        async function* streamWithPersist() {
+            let finalRecipe: GenerateRecipeResponseDto | undefined;
+
+            for await (const frame of recipeStream) {
+                if (
+                    frame &&
+                    typeof frame === "object" &&
+                    (frame as { type?: string }).type === "complete"
+                ) {
+                    finalRecipe = (
+                        frame as { recipe: GenerateRecipeResponseDto }
+                    ).recipe;
+                    // Suppressed; re-emitted below once the row exists.
+                    continue;
+                }
+                yield frame;
+            }
+
+            if (!finalRecipe) {
+                yield { type: "complete", saved: false };
+                return;
+            }
+
+            // An escalated recipe keeps the base's name (the prompt forbids
+            // changing it), so an untagged row shows up in discovery as a second,
+            // indistinguishable "Apfelstrudel". The lineage is resolved BEFORE
+            // persisting and handed to the INSERT: inserting as a base and
+            // re-parenting afterwards leaves a second base recipe under the
+            // base's name in the table for the width of that gap, which the
+            // partial unique index rejects outright.
             let baseRecipeId: string | null = null;
 
             if (sourceRecipeId) {
-                const base =
-                    await new RecipesRepository().resolveVariantBase(
-                        sourceRecipeId
-                    );
+                const base = await new RecipesRepository().resolveVariantBase(
+                    sourceRecipeId
+                );
 
                 if (base.success) {
                     baseRecipeId = base.value;
@@ -261,7 +285,7 @@ export const escalateDifficulty = createStreamHandler({
 
             // Reuse existing image URL instead of generating a new one
             const persistResult = await persistRecipe(
-                result.recipe,
+                finalRecipe,
                 existingImageUrl,
                 baseRecipeId
             );
@@ -270,12 +294,22 @@ export const escalateDifficulty = createStreamHandler({
                 console.log(
                     `Escalated recipe persisted with ID: ${persistResult.value}`
                 );
+
+                yield {
+                    type: "complete",
+                    saved: true,
+                    recipe: { ...finalRecipe, id: persistResult.value },
+                };
             } else {
                 console.error(
                     "Failed to persist escalated recipe:",
                     persistResult.error.message
                 );
+                // Still emit a terminal frame so the client stops streaming.
+                yield { type: "complete", saved: false };
             }
         }
+
+        return { type: "stream" as const, stream: streamWithPersist() };
     },
 });

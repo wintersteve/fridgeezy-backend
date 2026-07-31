@@ -149,11 +149,16 @@ function dedupeIngredientsById(
  *
  * @param recipe The recipe data to persist
  * @param existingImageUrl Optional existing image URL to reuse instead of generating a new one
+ * @param baseRecipeId The family base, when this recipe is a variant. Set at
+ *   INSERT time rather than patched on afterwards — a variant that exists even
+ *   briefly with a null base is a duplicate base recipe under the base's name,
+ *   and the partial unique index rejects it.
  * @returns Result containing the recipe UUID or error
  */
 export async function persistRecipe(
     recipe: GenerateRecipeResponseDto,
-    existingImageUrl?: string
+    existingImageUrl?: string,
+    baseRecipeId?: string | null
 ): Promise<Result<string, PersistenceError>> {
     try {
         // Use existing image URL if provided, otherwise generate new one
@@ -194,7 +199,7 @@ export async function persistRecipe(
         // Persist to database via repository
         const repository = new RecipesRepository();
 
-        const result = await repository.persist(recipe, imageUrl);
+        const result = await repository.persist(recipe, imageUrl, baseRecipeId);
 
         if (result.success) {
             await storeRecipeSignature(repository, result.value, recipe);

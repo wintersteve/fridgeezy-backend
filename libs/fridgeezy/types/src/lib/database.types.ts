@@ -1255,48 +1255,28 @@ export type Database = {
         Args: { input_text: string }
         Returns: string
       }
-      persist_recipe:
-        | {
-            Args: {
-              p_carbs: number
-              p_cook_time: string
-              p_description: string
-              p_difficulty: Database["public"]["Enums"]["difficulty_type"]
-              p_fat: number
-              p_image: string
-              p_ingredients: Json
-              p_instructions: Json
-              p_kcal: number
-              p_name: string
-              p_prep_time: string
-              p_protein: number
-              p_servings: number
-              p_tags: string[]
-              p_tips: string[]
-            }
-            Returns: string
-          }
-        | {
-            Args: {
-              p_carbs: number
-              p_cook_time: string
-              p_description: string
-              p_difficulty: Database["public"]["Enums"]["difficulty_type"]
-              p_fat: number
-              p_image: string
-              p_ingredients: Json
-              p_instructions: Json
-              p_kcal: number
-              p_name: string
-              p_name_en?: string
-              p_prep_time: string
-              p_protein: number
-              p_servings: number
-              p_tags: string[]
-              p_tips: string[]
-            }
-            Returns: string
-          }
+      persist_recipe: {
+        Args: {
+          p_base_recipe_id?: string
+          p_carbs: number
+          p_cook_time: string
+          p_description: string
+          p_difficulty: Database["public"]["Enums"]["difficulty_type"]
+          p_fat: number
+          p_image: string
+          p_ingredients: Json
+          p_instructions: Json
+          p_kcal: number
+          p_name: string
+          p_name_en?: string
+          p_prep_time: string
+          p_protein: number
+          p_servings: number
+          p_tags: string[]
+          p_tips: string[]
+        }
+        Returns: string
+      }
       persist_recipe_with_ingredient_ids:
         | {
             Args: {

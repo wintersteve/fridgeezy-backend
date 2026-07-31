@@ -242,28 +242,30 @@ export const modifyRecipe = createStreamHandler({
                 return;
             }
 
+            // Tag the lineage in the INSERT itself. The variant keeps the base's
+            // name, so an untagged row shows up in search as an indistinguishable
+            // duplicate — that has to be true from the moment it exists, not from
+            // when the user saves it, and not one statement later either: the
+            // partial unique index treats a momentarily-unparented variant as a
+            // duplicate base recipe and rejects the insert.
+            const base = await new RecipesRepository().resolveVariantBase(
+                body.id
+            );
+
+            if (!base.success) {
+                console.error(
+                    "Failed to resolve the modified recipe's base:",
+                    base.error.message
+                );
+            }
+
             const persistResult = await persistRecipe(
                 finalRecipe,
-                existingImageUrl
+                existingImageUrl,
+                base.success ? base.value : null
             );
 
             if (persistResult.success) {
-                // Tag the lineage before handing the id over. The variant keeps
-                // the base's name, so an untagged row shows up in search as an
-                // indistinguishable duplicate — that has to be true from the
-                // moment it exists, not from when the user saves it.
-                const variantResult = await new RecipesRepository().markAsVariant(
-                    persistResult.value,
-                    body.id
-                );
-
-                if (!variantResult.success) {
-                    console.error(
-                        "Failed to mark modified recipe as a variant:",
-                        variantResult.error.message
-                    );
-                }
-
                 yield {
                     type: "complete",
                     saved: true,

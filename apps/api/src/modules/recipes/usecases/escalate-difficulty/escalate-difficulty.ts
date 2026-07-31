@@ -232,31 +232,44 @@ export const escalateDifficulty = createStreamHandler({
 
     onComplete: async ({ result }) => {
         if (result?.recipe) {
+            // Same reasoning as modify-recipe: an escalated recipe keeps the
+            // base's name (the prompt forbids changing it), so an untagged row
+            // shows up in discovery as a second, indistinguishable "Apfelstrudel".
+            //
+            // The lineage is resolved BEFORE persisting and handed to the INSERT.
+            // Inserting as a base and re-parenting afterwards left a second base
+            // recipe under the base's name in the table for the width of that
+            // gap, which the partial unique index rejects — escalation failed at
+            // the INSERT and never reached the re-parenting step.
+            let baseRecipeId: string | null = null;
+
+            if (sourceRecipeId) {
+                const base =
+                    await new RecipesRepository().resolveVariantBase(
+                        sourceRecipeId
+                    );
+
+                if (base.success) {
+                    baseRecipeId = base.value;
+                } else {
+                    console.error(
+                        "Failed to resolve the escalated recipe's base:",
+                        base.error.message
+                    );
+                }
+            }
+
             // Reuse existing image URL instead of generating a new one
-            const persistResult = await persistRecipe(result.recipe, existingImageUrl);
+            const persistResult = await persistRecipe(
+                result.recipe,
+                existingImageUrl,
+                baseRecipeId
+            );
 
             if (persistResult.success) {
                 console.log(
                     `Escalated recipe persisted with ID: ${persistResult.value}`
                 );
-
-                // Same reasoning as modify-recipe: an escalated recipe keeps the
-                // base's name (the prompt forbids changing it), so an untagged
-                // row shows up in discovery as a second, indistinguishable
-                // "Apfelstrudel". Tag the lineage so search filters it out.
-                if (sourceRecipeId) {
-                    const variantResult = await new RecipesRepository().markAsVariant(
-                        persistResult.value,
-                        sourceRecipeId
-                    );
-
-                    if (!variantResult.success) {
-                        console.error(
-                            "Failed to mark escalated recipe as a variant:",
-                            variantResult.error.message
-                        );
-                    }
-                }
             } else {
                 console.error(
                     "Failed to persist escalated recipe:",

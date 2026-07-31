@@ -4,10 +4,13 @@
     "include": ["vite.config.mts"],
     "references": [
         {
-            "path": "../fridgeezy/schemas"
+            "path": "../fridgeezy/types"
         },
         {
-            "path": "../fridgeezy/types"
+            "path": "../toolkit"
+        },
+        {
+            "path": "../fridgeezy/schemas"
         },
         {
             "path": "../fridgeezy/domain"

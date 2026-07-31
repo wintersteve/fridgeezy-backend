@@ -131,6 +131,13 @@
                     "cwd": "apps/api",
                     "forwardAllArgs": true
                 }
+            },
+            "check-streaming-conformance": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/model-migration/streaming-conformance.check.ts",
+                    "cwd": "apps/api"
+                }
             }
         }
     },
@@ -148,6 +155,7 @@
         "@fridgeezy/schemas": "0.0.1",
         "@fridgeezy/streaming-server": "0.0.1",
         "@fridgeezy/supabase": "0.0.1",
-        "@fridgeezy/toolkit": "0.0.1"
+        "@fridgeezy/toolkit": "0.0.1",
+        "@fridgeezy/bedrock": "0.0.1"
     }
 }

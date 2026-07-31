@@ -173,10 +173,30 @@ change is validated in isolation before touching hosting.
       `OPENAI_API_KEY`, so the facade imports each client lazily — otherwise a
       Bedrock-only Lambda would still need an OpenAI key to boot. Watch for the
       same trap in any other module that imports the OpenAI client at top level.
-- [ ] Port the streaming shape: OpenAI `chat.completions.create({stream:true})`
-      → Bedrock/Anthropic Messages streaming. Feed the text deltas
-      (`content_block_delta` / `text_delta`) into the existing JSONL parser.
-      Verify `extractStableJsonFields` still reveals fields incrementally.
+- [x] Port the streaming shape: OpenAI `chat.completions.create({stream:true})`
+      → Bedrock/Anthropic Messages streaming. The translation is
+      `toCompletionChunks` (`libs/bedrock`), split out of `streamCompletion` so it
+      can be driven from recorded events instead of a live model — which is what
+      makes it verifiable while account access is still gated.
+      Verified by `apps/api/src/evals/model-migration/streaming-conformance.check.ts`
+      (`npx nx run @fridgeezy/api:check-streaming-conformance`) — **offline,
+      deterministic, no keys, no spend**, so it can gate CI later. 20 checks
+      across five chunking regimes (1 char → whole payload) assert: thinking
+      deltas never reach visible text; JSONL parses byte-identically to the
+      OpenAI baseline; and revealed fields are monotonic, never revised after
+      being shown, complete, and in prompt order.
+      Confirmed to fail when it should: inverting the thinking filter turns 18 of
+      20 red, including a key corrupted to
+      `"ingr<thinking>reconsidering</thinking>edients"`.
+      **Finding — reveal granularity is coarser on Bedrock.** Anthropic's larger
+      deltas produce **3 reveal frames where OpenAI produces 6** for the same
+      object. Still correct (monotonic, stable, ordered), but the single-suggestion
+      card will animate in fewer, bigger jumps. A product call, not a bug —
+      decide it when porting `streamSingleSuggestion`, not after.
+      **Blocker for the next checkbox:** `streamSingleSuggestion` takes
+      `client?: OpenAI` and calls `client.chat.completions.create` directly, so it
+      cannot accept a provider-agnostic stream. Its reveal loop is duplicated in
+      the conformance check for now; porting it must collapse the two.
 - [ ] Swap each text call site (table above) behind the flag. Keep system/user
       prompts **byte-identical** at first — change only the transport — so the
       eval isolates model behavior from prompt changes.

@@ -12,10 +12,13 @@
     "include": ["src/**/*.ts"],
     "references": [
         {
-            "path": "../fridgeezy/schemas/tsconfig.lib.json"
+            "path": "../fridgeezy/types/tsconfig.lib.json"
         },
         {
-            "path": "../fridgeezy/types/tsconfig.lib.json"
+            "path": "../toolkit/tsconfig.lib.json"
+        },
+        {
+            "path": "../fridgeezy/schemas/tsconfig.lib.json"
         },
         {
             "path": "../fridgeezy/domain/tsconfig.lib.json"

@@ -1,7 +1,7 @@
 import { failure, PersistenceError, Result, success } from "@fridgeezy/domain";
 import { generateBatchEmbeddings } from "@fridgeezy/openai";
 import { CategoriesRepository, IngredientsRepository } from "@fridgeezy/supabase";
-import { splitIngredientName } from "@fridgeezy/toolkit";
+import { ingredientCanonicalId, splitIngredientName } from "@fridgeezy/toolkit";
 
 import { adjudicateIngredient } from "./adjudicate-ingredient";
 
@@ -47,27 +47,10 @@ export async function matchIngredients(
     const categoriesRepo = new CategoriesRepository();
     const matches: IngredientMatch[] = [];
 
-    // Convert a name to its ingredient canonical id. MUST match the SQL
-    // ingredient_canonical_id + singularize_token (migration 20260730000001) so
-    // app-side matches and the stored canonical_id agree. Normalizes, then
-    // singularizes the LAST token so singular/plural collapse (apple ≡ apples).
-    const singularizeToken = (tok: string): string => {
-        if (tok.length <= 3) return tok;
-        if (/ies$/.test(tok) && tok.length > 4) return tok.slice(0, -3) + "y";
-        if (/(oes|ses|xes|zes|ches|shes)$/.test(tok)) return tok.slice(0, -2);
-        if (/s$/.test(tok) && !/(ss|us|is)$/.test(tok)) return tok.slice(0, -1);
-        return tok;
-    };
-    const toCanonicalId = (name: string): string => {
-        const base = name
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "_")
-            .replace(/^_+|_+$/g, "");
-        if (!base) return base;
-        const parts = base.split("_");
-        parts[parts.length - 1] = singularizeToken(parts[parts.length - 1]);
-        return parts.join("_");
-    };
+    // Ingredient identity — must match the SQL ingredient_canonical_id, which is
+    // what produced the stored canonical_id this matches against. Shared with the
+    // seed scripts via toolkit so the rule exists once.
+    const toCanonicalId = ingredientCanonicalId;
 
     // Two names are only safe to AUTO-accept (merge without asking the LLM) when
     // they are the same words in a different order/spacing — i.e. identical

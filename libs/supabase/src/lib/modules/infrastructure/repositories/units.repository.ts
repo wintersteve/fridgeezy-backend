@@ -14,7 +14,19 @@ import { supabase } from "../../client";
 
 /**
  * Normalizes a string to canonical_id format.
- * Must match the PostgreSQL normalize_to_canonical_id function.
+ * ⚠️ The comment this replaces claimed to match the PostgreSQL
+ * `normalize_to_canonical_id` function. It does not: this trims whitespace and
+ * strips leading/trailing underscores, and the SQL function does neither. Since
+ * the result is looked up against the SQL-generated `units.canonical_id`, a unit
+ * string with edge whitespace or punctuation resolves differently on each side
+ * — `" g "` is `g` here and `_g_` in the column.
+ *
+ * Left as-is rather than "fixed": every real unit string is a bare token
+ * (`g`, `ml`, `tbsp`) so the divergence has no live effect, `resolveUnit` falls
+ * through to abbreviation and embedding lookups anyway, and tightening it would
+ * change unit resolution without a test to catch the fallout. Decide it
+ * deliberately — see `sqlCanonicalId` in recipes.repository.ts for the rule this
+ * would need to adopt.
  */
 function normalizeToCanonicalId(str: string): string {
     return str

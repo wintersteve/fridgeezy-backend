@@ -154,6 +154,7 @@
         }
     },
     "dependencies": {
-        "ts-case-convert": "*"
+        "ts-case-convert": "*",
+        "@fridgeezy/toolkit": "0.0.1"
     }
 }

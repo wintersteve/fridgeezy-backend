@@ -1,6 +1,7 @@
 import { failure, PersistenceError, Result, success } from "@fridgeezy/domain";
 import { generateEmbedding } from "@fridgeezy/openai";
 import { TagsRepository } from "@fridgeezy/supabase";
+import { canonicalizeName } from "@fridgeezy/toolkit";
 
 export type TagType = "dietary" | "cuisine" | "component" | "course";
 
@@ -32,12 +33,10 @@ export async function matchTags(
     const tagsRepo = new TagsRepository();
     const matches: TagMatch[] = [];
 
-    // Helper function to convert name to canonical ID
-    const toCanonicalId = (name: string): string =>
-        name
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "_")
-            .replace(/^_+|_+$/g, "");
+    // Tag identity. Same rule as canonicalizeName; the `?? ""` keeps this
+    // function's original contract (empty string, not null, for a name that
+    // normalizes to nothing) so callers below are unaffected.
+    const toCanonicalId = (name: string): string => canonicalizeName(name) ?? "";
 
     // Normalize inputs to TagInput format
     const normalizedInputs: TagInput[] = inputs.map((input) =>

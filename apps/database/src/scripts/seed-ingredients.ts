@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { generateBatchEmbeddings } from "@fridgeezy/openai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
+import { ingredientCanonicalId } from "@fridgeezy/toolkit";
 import { config } from "dotenv";
 
 config();
@@ -32,26 +33,9 @@ interface SeedIngredient {
     aliases?: string[];
 }
 
-// Singular/plural-collapsing canonical — MUST match the SQL
-// ingredient_canonical_id + singularize_token and the TS toCanonicalId in
-// match-ingredients.ts.
-const singularizeToken = (tok: string): string => {
-    if (tok.length <= 3) return tok;
-    if (/ies$/.test(tok) && tok.length > 4) return tok.slice(0, -3) + "y";
-    if (/(oes|ses|xes|zes|ches|shes)$/.test(tok)) return tok.slice(0, -2);
-    if (/s$/.test(tok) && !/(ss|us|is)$/.test(tok)) return tok.slice(0, -1);
-    return tok;
-};
-const toCanonicalId = (name: string): string => {
-    const base = name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_+|_+$/g, "");
-    if (!base) return base;
-    const parts = base.split("_");
-    parts[parts.length - 1] = singularizeToken(parts[parts.length - 1]);
-    return parts.join("_");
-};
+// Ingredient identity — shared with match-ingredients.ts and mirrored by the
+// SQL ingredient_canonical_id, which produced the stored canonical_id.
+const toCanonicalId = ingredientCanonicalId;
 
 function chunk<T>(items: T[], size: number): T[][] {
     const out: T[][] = [];

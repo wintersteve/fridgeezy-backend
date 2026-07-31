@@ -16,11 +16,21 @@ function quoteFilterValue(value: string): string {
 }
 
 /**
- * Deterministic slug — MUST stay identical to the Postgres
- * `normalize_to_canonical_id(text)` function so this matches the generated
- * `recipes.canonical_id` column exactly (no leading/trailing underscore trim).
+ * Deterministic slug — MUST stay byte-identical to the Postgres
+ * `normalize_to_canonical_id(text)` function, because it is compared against the
+ * generated `recipes.canonical_id` column that function produces.
+ *
+ * ⚠️ Do NOT "simplify" this to `canonicalizeName` from `@fridgeezy/toolkit`,
+ * which is imported into this very file. They look interchangeable and are not:
+ * `canonicalizeName` trims leading/trailing underscores, and this deliberately
+ * does not. For a name like `"Crème Brûlée "` the column holds `creme_brulee_`
+ * while `canonicalizeName` yields `creme_brulee`, so swapping them makes
+ * `findByCanonicalName` miss and create the duplicate it exists to prevent.
+ *
+ * Rule of thumb: comparing against a DB-generated column -> use this;
+ * comparing two JS-normalized names -> use `canonicalizeName`.
  */
-const normalizeToCanonicalId = (input: string): string =>
+const sqlCanonicalId = (input: string): string =>
     input
         .replace(/[^a-zA-Z0-9]+/g, "_")
         .replace(/_+/g, "_")
@@ -424,7 +434,7 @@ export class RecipesRepository implements IRecipesRepository {
         name: string
     ): Promise<Result<string | null, PersistenceError>> {
         try {
-            const canonicalId = normalizeToCanonicalId(name);
+            const canonicalId = sqlCanonicalId(name);
             // Type assertion needed until database types are regenerated after
             // the canonical_id migration.
             const { data, error } = await (supabaseAdmin as any)

@@ -40,6 +40,8 @@ decision:
 - "invalid": NAME is not a usable culinary ingredient — gibberish, a dish or recipe name, a hallucination, or an unusable fragment.
 - "new": NAME is a real, distinct culinary ingredient (different from CANDIDATE, or there is no candidate).
 
+A qualifier that changes VARIETY/TYPE (e.g. "Thai basil" vs "basil", "cherry tomato" vs "tomato") or STATE (e.g. "dried oregano" vs "fresh oregano" vs "oregano", "frozen peas" vs "peas") makes NAME a DISTINCT ingredient → "new", NOT "same", even though it is closely related to CANDIDATE. Only rule "same" for a true synonym of the identical item. Ignore pure preparation words (chopped, minced, sliced) — those do not by themselves make it distinct.
+
 category (only when decision is "new"): the single best-fitting food category, chosen from EXACTLY this list:
 ${INGREDIENT_CATEGORIES.join(", ")}.
 

@@ -7,6 +7,9 @@
             "path": "../fridgeezy/types"
         },
         {
+            "path": "../toolkit"
+        },
+        {
             "path": "../fridgeezy/schemas"
         },
         {

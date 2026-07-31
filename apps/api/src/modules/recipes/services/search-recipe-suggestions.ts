@@ -1,11 +1,28 @@
 import { randomUUID } from "node:crypto";
 
+import { RecipesRepository } from "@fridgeezy/supabase";
+import { canonicalizeName } from "@fridgeezy/toolkit";
+
 import { findSuggestionByName } from "../../suggestions/services/find-suggestion-by-name";
 import { generateSuggestionsStream } from "../../suggestions/services/generate-suggestions-stream";
 import { streamSingleSuggestion } from "../../suggestions/services/stream-single-suggestion";
 
 import { fetchRecipeSummary } from "./fetch-recipe-summary";
 import { searchRecipes } from "./search-recipes";
+
+/**
+ * Recalibrated (2026-07-30) for signature-embedded recipes, measured over the
+ * live catalog: unrelated dishes top out at 0.607 ("kimchi pancake" against
+ * Kimchi Bokkeumbap) while genuine descriptive matches run 0.58–0.85. 0.70 sits
+ * above every observed false positive with margin.
+ *
+ * Deliberately biased HIGH, because the two failure modes are not symmetric: too
+ * low returns the WRONG recipe and suppresses generation entirely, while too high
+ * merely spends a generation that `persistOrReuseSuggestion` then resolves back
+ * to the existing recipe. Exact-name matches don't depend on this number at all
+ * (see stage 1a).
+ */
+const DEFAULT_MATCH_THRESHOLD = 0.7;
 
 export interface RecipeSuggestionInput {
     query: string;
@@ -86,7 +103,7 @@ export async function searchRecipeSuggestions(
 ): Promise<RecipeSuggestionResult> {
     const {
         query,
-        matchThreshold = 0.75,
+        matchThreshold = DEFAULT_MATCH_THRESHOLD,
         maxResults = 5,
         dietaryRestrictions,
         blacklist,
@@ -100,12 +117,40 @@ export async function searchRecipeSuggestions(
         newSuggestionsCreated: 0,
     };
 
-    // Stage 1: Vector search on recipes
-    const vectorResults = await searchRecipes(
-        query,
-        matchThreshold,
-        maxResults
-    );
+    // Stage 1a: exact name match. Recipes are embedded by dish SIGNATURE
+    // (English name + tags + ingredients), which reads nothing like a short
+    // foreign proper noun — "Toum" scores 0.239 against its own recipe, "Palak
+    // Paneer" 0.524. Vector search cannot be the only way to find a recipe the
+    // user named outright, so ask for it by name first.
+    const namedRecipe = await new RecipesRepository().findBaseRecipe([query]);
+
+    if (!namedRecipe.success) {
+        console.error(
+            `[SearchRecipeSuggestions] Name lookup failed for "${query}":`,
+            namedRecipe.error.message
+        );
+    } else if (namedRecipe.value) {
+        const summary = await fetchRecipeSummary(namedRecipe.value.id);
+
+        if (summary) {
+            suggestions.push({
+                id: summary.id,
+                name: summary.name,
+                description: summary.description,
+                difficulty: summary.difficulty,
+                source: "existing_recipe",
+                matchScore: 1,
+                ingredients: summary.ingredients,
+                tags: summary.tags,
+            });
+            metadata.vectorSearchHits++;
+        }
+    }
+
+    // Stage 1b: Vector search on recipes
+    const vectorResults = (
+        await searchRecipes(query, matchThreshold, maxResults)
+    ).filter((result) => !suggestions.some((item) => item.id === result.id));
 
     // Fetch each hit's summary in parallel (independent reads) rather than one
     // round-trip per result, then assemble in the original ranked order.
@@ -145,10 +190,24 @@ export async function searchRecipeSuggestions(
         };
     }
 
-    // Stage 2: Canonical search on suggestions table
+    // Stage 2: Canonical search on suggestions table.
+    //
+    // Skipped when stage 1 already returned this dish: a suggestion row can
+    // outlive its promotion (nothing deletes it if the user reached the recipe
+    // another way), and surfacing both would show the same dish twice — once as
+    // a recipe and once as a card offering to generate it again.
     const existingSuggestion = await findSuggestionByName(query);
+    const alreadyListed =
+        !!existingSuggestion &&
+        suggestions.some(
+            (item) =>
+                canonicalizeName(item.name) ===
+                    canonicalizeName(existingSuggestion.name) ||
+                canonicalizeName(item.name) ===
+                    canonicalizeName(existingSuggestion.nameEn)
+        );
 
-    if (existingSuggestion) {
+    if (existingSuggestion && !alreadyListed) {
         suggestions.push({
             id: existingSuggestion.id,
             name: existingSuggestion.name,
@@ -188,7 +247,7 @@ export async function searchRecipeSuggestions(
                 // a tempId so the enriched item below upgrades the same card.
                 const tempId = randomUUID();
 
-                const enriched = await streamSingleSuggestion(
+                const outcome = await streamSingleSuggestion(
                     { ingredients: [query], dietaryRestrictions, blacklist },
                     {
                         onField: (fields) => {
@@ -208,7 +267,8 @@ export async function searchRecipeSuggestions(
                     }
                 );
 
-                if (enriched) {
+                if (outcome.kind === "suggestion") {
+                    const enriched = outcome.suggestion;
                     suggestions.push({
                         id: enriched.id,
                         name: enriched.name,
@@ -226,6 +286,24 @@ export async function searchRecipeSuggestions(
                         })),
                     });
                     metadata.newSuggestionsCreated++;
+                } else if (outcome.kind === "existing_recipe") {
+                    // The dish the model landed on is already a full recipe —
+                    // stage 1's vector search just didn't recall it from this
+                    // phrasing. Hand back the recipe (same tempId, so the card
+                    // that streamed in upgrades in place) rather than minting a
+                    // duplicate suggestion for something the user already has.
+                    const recipe = outcome.recipe;
+                    suggestions.push({
+                        id: recipe.id,
+                        name: recipe.name,
+                        description: recipe.description,
+                        difficulty: recipe.difficulty,
+                        source: "existing_recipe",
+                        tempId,
+                        ingredients: recipe.ingredients,
+                        tags: recipe.tags,
+                    });
+                    metadata.vectorSearchHits++;
                 }
             } else {
                 // Non-streaming caller: keep the multi-suggestion JSONL generator.

@@ -26,9 +26,10 @@ export const RecipeSuggestionInputSchema = z.object({
         .number()
         .min(0)
         .max(1)
-        .default(0.75)
         .optional()
-        .describe("Minimum similarity score for vector search (0-1)"),
+        .describe(
+            "Minimum similarity score for vector search (0-1). Omit to use the calibrated default — set it only to deliberately widen or narrow a search."
+        ),
     maxResults: z
         .number()
         .int()

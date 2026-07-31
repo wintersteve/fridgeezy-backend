@@ -301,6 +301,61 @@ export type Database = {
           },
         ]
       }
+      pantry_items: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          ingredient_id: string
+          profile_id: string
+          quantity: number | null
+          unit_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          ingredient_id: string
+          profile_id: string
+          quantity?: number | null
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          ingredient_id?: string
+          profile_id?: string
+          quantity?: number | null
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pantry_items_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pantry_items_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pantry_items_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profile_blacklisted_ingredients: {
         Row: {
           created_at: string
@@ -792,6 +847,7 @@ export type Database = {
           description: string | null
           difficulty: Database["public"]["Enums"]["difficulty_type"] | null
           fat: number | null
+          favourite_count: number
           fts: string | null
           id: string
           image: string | null
@@ -802,6 +858,7 @@ export type Database = {
           prep_time: string | null
           protein: number | null
           servings: number
+          short_description: string | null
           tips: string[] | null
           updated_at: string
         }
@@ -813,6 +870,7 @@ export type Database = {
           description?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           fat?: number | null
+          favourite_count?: number
           fts?: string | null
           id?: string
           image?: string | null
@@ -823,6 +881,7 @@ export type Database = {
           prep_time?: string | null
           protein?: number | null
           servings?: number
+          short_description?: string | null
           tips?: string[] | null
           updated_at?: string
         }
@@ -834,6 +893,7 @@ export type Database = {
           description?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           fat?: number | null
+          favourite_count?: number
           fts?: string | null
           id?: string
           image?: string | null
@@ -844,6 +904,7 @@ export type Database = {
           prep_time?: string | null
           protein?: number | null
           servings?: number
+          short_description?: string | null
           tips?: string[] | null
           updated_at?: string
         }
@@ -1031,9 +1092,11 @@ export type Database = {
     }
     Functions: {
       bytea_to_text: { Args: { data: string }; Returns: string }
+      delete_expired_pantry_items: { Args: never; Returns: number }
       delete_orphan_generated_recipes: { Args: never; Returns: number }
       find_recipes: {
         Args: {
+          blacklist?: string[]
           ingredients?: string[]
           limit_count?: number
           p_difficulty?: string
@@ -1046,11 +1109,6 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
-      }
-      generate_embedding: { Args: { input_text: string }; Returns: string }
-      generate_embedding_small: {
-        Args: { input_text: string }
-        Returns: string
       }
       has_user: { Args: { email: string }; Returns: boolean }
       http: {
@@ -1177,6 +1235,10 @@ export type Database = {
       http_set_curlopt: {
         Args: { curlopt: string; value: string }
         Returns: boolean
+      }
+      merge_ingredient: {
+        Args: { p_from: string; p_into: string }
+        Returns: undefined
       }
       normalize_to_canonical_id: {
         Args: { input_text: string }
@@ -1379,8 +1441,10 @@ export type Database = {
         id: string | null
         name: string | null
         description: string | null
+        short_description: string | null
         image: string | null
         difficulty: string | null
+        favourite_count: number | null
         ingredients: Json | null
         tags: Json | null
         source: string | null

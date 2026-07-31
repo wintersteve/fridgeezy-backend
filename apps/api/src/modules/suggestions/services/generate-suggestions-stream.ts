@@ -9,7 +9,14 @@ import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { castArray } from "@fridgeezy/toolkit";
 import type OpenAI from "openai";
 
-import { persistOrReuseSuggestion } from "./persist-or-reuse-suggestion";
+import {
+    buildExistingDishesBlock,
+    listCatalogDishes,
+} from "./list-catalog-dishes";
+import {
+    persistOrReuseSuggestion,
+    SuggestionOutcome,
+} from "./persist-or-reuse-suggestion";
 
 // Exported for the model-migration eval harness, which must send byte-identical
 // prompts to every candidate — a copy in the eval would drift and invalidate the
@@ -27,6 +34,7 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 - Include ALL essential ingredients that define the dish. Never omit core ingredients that make the recipe authentic.
 - Only return an empty array when the request genuinely cannot be satisfied authentically — a truly incompatible INGREDIENT combination (e.g., rosemary in Thai cuisine) or nonsensical input. A real dish name, cuisine, or meal/course concept is ALWAYS satisfiable, so NEVER return an empty array for those.
 - Do NOT include recipes where a blacklisted item is normally present.
+- If an "Already in the catalog" list is given, NEVER suggest a dish on it, nor a translation or spelling variant of one — the user already has those. Suggest a different authentic dish that still fits the request.
 
 ## Difficulty Levels
 - "easy": The standard, most authentic version of the dish with all traditional techniques and essential ingredients.
@@ -50,7 +58,7 @@ Output EXACTLY 4 recipes, one JSON object per line (JSONL format). No markdown, 
 Each recipe object must include:
 - name
 - name_en (the English name of the dish, e.g. "Butter Chicken" for "Murgh Makhani")
-- description (max 50 characters)
+- description (ONE complete phrase, max 60 characters — it is shown on a single-line card, so it must not read as a cut-off sentence)
 - difficulty (easy, medium, or hard)
 - ingredients (array of strings)
 - tags (array of strings with component, cuisine, and dietary tags)`;
@@ -80,11 +88,19 @@ export async function* generateSuggestionsStream(
     request: GenerateSuggestionRequestDto,
     client: OpenAI = openai
 ): AsyncGenerator<EnrichedSuggestionResponseDto> {
+    const userPrompt = buildSuggestionsUserPrompt(request);
+    const existingDishes = buildExistingDishesBlock(
+        await listCatalogDishes(userPrompt)
+    );
+
     const stream = await client.chat.completions.create({
         model: "gpt-4.1",
         messages: [
             { role: "system", content: SUGGESTIONS_SYSTEM_PROMPT },
-            { role: "user", content: buildSuggestionsUserPrompt(request) },
+            {
+                role: "user",
+                content: [userPrompt, existingDishes].filter(Boolean).join("\n"),
+            },
         ],
         stream: true,
     });
@@ -95,7 +111,7 @@ export async function* generateSuggestionsStream(
     // dedup + authenticity + ingredient/tag matching is independent; the only
     // shared writes are new ingredient/tag rows, and their creates are
     // conflict-safe (reuse the row that wins a duplicate-key race).
-    const pending: Promise<EnrichedSuggestionResponseDto | null>[] = [];
+    const pending: Promise<SuggestionOutcome>[] = [];
     for await (const { parsed } of processJsonlStream(stream, [
         GenerateSuggestionResponseSchema,
     ])) {
@@ -104,7 +120,21 @@ export async function* generateSuggestionsStream(
     }
 
     for (const persist of pending) {
-        const enriched = await persist;
-        if (enriched) yield enriched;
+        const outcome = await persist;
+
+        // A dish the user already has as a recipe is dropped, not surfaced:
+        // this endpoint returns suggestion cards, and re-offering something
+        // already in the catalog is exactly the duplication being guarded
+        // against. The prompt exclusion above makes this a rare fallback.
+        if (outcome.kind === "existing_recipe") {
+            console.log(
+                `[Suggestions] Skipping "${outcome.recipe.name}" — already in the catalog as a recipe`
+            );
+            continue;
+        }
+
+        if (outcome.kind === "suggestion") {
+            yield outcome.suggestion;
+        }
     }
 }

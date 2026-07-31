@@ -72,7 +72,11 @@ ${tags}
 Output the recipe as multiple JSON lines in this exact order:
 
 Line 1 - Header with basic info:
-{"type":"header","name":"Recipe Name","description":"Brief description","difficulty":"easy","servings":4,"prepTime":15,"cookTime":30,"tags":["tag1","tag2"]}
+{"type":"header","name":"Recipe Name","description":"Brief description","shortDescription":"One-line card description","difficulty":"easy","servings":4,"prepTime":15,"cookTime":30,"tags":["tag1","tag2"]}
+The two description fields are different lengths and both are required:
+- "description": 2-3 sentences for the recipe detail screen.
+- "shortDescription": ONE short sentence (max 60 characters) for recipe cards, which show a single line. Must read as a complete phrase, never a truncation of "description".
+
 
 Line 2 - Nutrition information (per serving):
 {"type":"nutrition","kcal":450,"carbs":35,"protein":25,"fat":15}
@@ -85,7 +89,7 @@ Note: The "comment" field is optional but should be included when the ingredient
 Lines N+1-M - One line per instruction step (include ingredients array with names of ingredients used in this step):
 {"type":"instruction","text":"Step description without number prefix","ingredients":["ingredient1","ingredient2"]}
 
-Optional tip lines:
+Optional tip lines (MAXIMUM 3 — output the 3 most useful and stop; extra tips are discarded):
 {"type":"tip","text":"Cooking tip"}
 
 No markdown, no code blocks, just JSONL.`;

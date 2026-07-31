@@ -1,6 +1,5 @@
 import { openai } from "@fridgeezy/openai";
 import {
-    EnrichedSuggestionResponseDto,
     GenerateSuggestionRequestDto,
     GenerateSuggestionResponseSchema,
 } from "@fridgeezy/schemas";
@@ -8,7 +7,10 @@ import { castArray } from "@fridgeezy/toolkit";
 import type OpenAI from "openai";
 
 import { extractStableJsonFields } from "./extract-stable-json-fields";
-import { persistOrReuseSuggestion } from "./persist-or-reuse-suggestion";
+import {
+    persistOrReuseSuggestion,
+    SuggestionOutcome,
+} from "./persist-or-reuse-suggestion";
 
 /**
  * The visible-first key order the model must emit so the card reveals fields in
@@ -48,7 +50,7 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 Output EXACTLY ONE JSON object. No markdown, no code blocks, no extra text.
 Emit the keys in EXACTLY this order:
 - name
-- description (max 50 characters)
+- description (ONE complete phrase, max 60 characters — it is shown on a single-line card, so it must not read as a cut-off sentence)
 - difficulty (easy, medium, or hard)
 - ingredients (array of strings)
 - tags (array of strings with component, cuisine, and dietary tags)
@@ -128,14 +130,18 @@ function mapFields(stable: Record<string, unknown>): PartialSuggestionFields {
  * Generate a SINGLE recipe suggestion, streaming its fields out as the LLM
  * writes them: `onField` fires with the title first, then the description, and
  * so on. Once the object is complete it is validated and persisted (reusing a
- * near-duplicate if one exists), and the enriched suggestion is returned.
+ * near-duplicate if one exists).
  *
- * Returns `null` if the model produced nothing usable or persistence failed.
+ * Unlike the batch generator this one answers a SPECIFIC question, so the
+ * catalog is never used to steer generation away from dishes the user already
+ * has — asking about a dish you own should get you that dish. Dedup instead
+ * resolves it to the existing recipe (`existing_recipe`), which the caller
+ * surfaces in place of the streamed card.
  */
 export async function streamSingleSuggestion(
     request: GenerateSuggestionRequestDto,
     options: StreamSingleSuggestionOptions = {}
-): Promise<EnrichedSuggestionResponseDto | null> {
+): Promise<SuggestionOutcome> {
     const { client = openai, onField } = options;
 
     const stream = await client.chat.completions.create({
@@ -179,7 +185,7 @@ export async function streamSingleSuggestion(
             "[StreamSingleSuggestion] No JSON object in output:",
             buffer.slice(0, 200)
         );
-        return null;
+        return { kind: "dropped", reason: "invalid" };
     }
     const cleaned = buffer.slice(objStart, objEnd + 1);
 
@@ -191,7 +197,7 @@ export async function streamSingleSuggestion(
             "[StreamSingleSuggestion] Failed to parse suggestion JSON:",
             cleaned.slice(0, 200)
         );
-        return null;
+        return { kind: "dropped", reason: "invalid" };
     }
 
     const validated = GenerateSuggestionResponseSchema.safeParse(parsed);
@@ -200,7 +206,7 @@ export async function streamSingleSuggestion(
             "[StreamSingleSuggestion] Suggestion failed validation:",
             validated.error.message
         );
-        return null;
+        return { kind: "dropped", reason: "invalid" };
     }
 
     return persistOrReuseSuggestion(validated.data, request);

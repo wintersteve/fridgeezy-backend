@@ -1,3 +1,4 @@
+export * from "./lib/utils/canonicalize-name";
 export * from "./lib/utils/cast-array";
 export * from "./lib/utils/from-persistence";
 export * from "./lib/utils/suggestion-signature";

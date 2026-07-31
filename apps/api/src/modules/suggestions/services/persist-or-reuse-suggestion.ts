@@ -6,61 +6,66 @@ import {
 } from "@fridgeezy/schemas";
 import { SuggestionsRepository } from "@fridgeezy/supabase";
 
+import { RecipeSummary } from "../../recipes/services/fetch-recipe-summary";
+
 import { adjudicateSameDish } from "./adjudicate-suggestion";
 import { fetchEnrichedSuggestion } from "./fetch-enriched-suggestion";
+import { findRecipeForDish } from "./find-recipe-for-dish";
 import { findSuggestionByName } from "./find-suggestion-by-name";
 import { persistSuggestion } from "./persist-suggestion";
 import {
     buildSuggestionSignature,
     describeSuggestion,
+    SIGNATURE_HIGH_THRESHOLD,
+    SIGNATURE_LOW_THRESHOLD,
 } from "./suggestion-signature";
 import { verifySuggestionAuthenticity } from "./verify-suggestion-authenticity";
 
-// Thresholds calibrated from real signature-similarity distributions (see
-// evals/calibrate-thresholds): same-dish pairs range ~0.74–1.00, different-dish
-// pairs top out ~0.80 (they overlap — a low-signal same-dish pair like
-// "Gyoza"/"Japanese Dumplings" scores ~0.74, below a near-miss distinct pair like
-// Thai/Lao papaya salad ~0.80). So auto-merge only well above the distinct max,
-// and send everything down to ~0.72 to the LLM rather than a hard cutoff.
-/** Signature cosine similarity at/above which two dishes auto-merge (no LLM). */
-const SIGNATURE_HIGH_THRESHOLD = 0.92;
-/** Below this, candidates are treated as distinct dishes (no adjudication). */
-const SIGNATURE_LOW_THRESHOLD = 0.72;
+/**
+ * What became of one generated suggestion.
+ *
+ * `existing_recipe` is not a failure — it means the dish the model proposed is
+ * already in the catalog as a full recipe, so no suggestion was (or should be)
+ * created for it. Callers decide what to show: the chat search surfaces the
+ * recipe, the batch generator drops the card so the user is never re-offered a
+ * dish they already have.
+ */
+export type SuggestionOutcome =
+    | { kind: "suggestion"; suggestion: EnrichedSuggestionResponseDto }
+    | { kind: "existing_recipe"; recipe: RecipeSummary }
+    | { kind: "dropped"; reason: "unauthentic" | "persist_failed" | "invalid" };
 
 /**
  * Turn one validated LLM suggestion into an enriched (id + {id,name} chips)
  * suggestion, reusing an existing row instead of inserting a duplicate.
  *
- * Dedupe happens in two layers because the DB enforces uniqueness on
- * `canonical_id` (a deterministic slug of the name) while the vector search is
- * fuzzy: (1) an EXACT canonical-name lookup — the same key the unique constraint
- * uses, so it never lets a same-name duplicate through — then (2) a >=0.95
- * similarity search to fold in near-duplicate spellings. A persist that still
- * collides (a concurrent insert of the same name) falls back to reusing the row
- * that won the race rather than failing the turn.
+ * Dedup runs against BOTH halves of the catalog, because a dish lives in
+ * `recipe_suggestions` only until it is promoted — at which point the suggestion
+ * row is deleted and the dish exists solely as a recipe:
+ *
+ * 1. `recipes` first, by exact name then signature similarity (see
+ *    `findRecipeForDish`) — the catalog is authoritative, and a promoted dish is
+ *    otherwise invisible to dedup and gets regenerated forever.
+ * 2. Exact canonical-name lookup in `recipe_suggestions` — the same key the DB's
+ *    unique constraint uses, so it never lets a same-name duplicate through.
+ * 3. Signature similarity over `recipe_suggestions`, folding in near-duplicate
+ *    spellings via the calibrated band + LLM adjudication.
+ *
+ * A persist that still collides (a concurrent insert of the same name) falls
+ * back to reusing the row that won the race rather than failing the turn.
  *
  * Shared by the multi-suggestion JSONL stream and the single-suggestion field
- * stream so both dedupe/persist identically. Returns `null` only if persistence
- * genuinely failed.
+ * stream so both dedup/persist identically.
  */
 export async function persistOrReuseSuggestion(
     suggestion: GenerateSuggestionResponseDto,
     request: Pick<GenerateSuggestionRequestDto, "cuisine">,
     suggestionsRepo: SuggestionsRepository = new SuggestionsRepository()
-): Promise<EnrichedSuggestionResponseDto | null> {
-    // Layer 1: exact canonical-name match (deterministic — mirrors the DB's
-    // canonical_id unique constraint, so an already-persisted dish is always
-    // reused instead of triggering a duplicate-key error on insert).
-    const exactMatch = await findSuggestionByName(suggestion.name);
-    if (exactMatch) {
-        return exactMatch;
-    }
-
-    // Layer 2: signature-based semantic dedup. Embed the dish SIGNATURE (English
-    // name + tags + ingredients) so the same dish under different names merges
-    // (Som Tam ≡ Green Papaya Salad) while genuine variations stay distinct.
-    // Recall nearest candidates, auto-merge the high-confidence ones, keep the
-    // far ones distinct, and let the LLM adjudicate the gray band in between.
+): Promise<SuggestionOutcome> {
+    // Embed the dish SIGNATURE (English name + tags + ingredients) once, up
+    // front: both halves of the catalog are searched with this same vector, so
+    // the same dish under different names merges (Som Tam ≡ Green Papaya Salad)
+    // while genuine variations stay apart on their differing ingredients.
     const signatureEmbedding = await generateEmbedding(
         buildSuggestionSignature({
             name: suggestion.name,
@@ -69,6 +74,37 @@ export async function persistOrReuseSuggestion(
             ingredients: suggestion.ingredients,
         })
     );
+
+    // Layer 1: the RECIPES table wins, and is therefore checked FIRST. A dish
+    // that has been promoted exists as a recipe while a stale suggestion row for
+    // it may ALSO still be lying around; checking suggestions first would keep
+    // handing that stale row back forever and the user would keep being offered
+    // a dish they already have.
+    const existingRecipe = await findRecipeForDish(
+        {
+            name: suggestion.name,
+            nameEn: suggestion.name_en,
+            tags: suggestion.tags,
+            ingredients: suggestion.ingredients,
+        },
+        signatureEmbedding
+    );
+
+    if (existingRecipe) {
+        return { kind: "existing_recipe", recipe: existingRecipe };
+    }
+
+    // Layer 2: exact canonical-name match among suggestions (deterministic —
+    // mirrors the DB's canonical_id unique constraint, so an already-persisted
+    // dish is always reused instead of triggering a duplicate-key error).
+    const exactMatch = await findSuggestionByName(suggestion.name);
+    if (exactMatch) {
+        return { kind: "suggestion", suggestion: exactMatch };
+    }
+
+    // Layer 3: signature-based semantic dedup over suggestions. Recall nearest
+    // candidates, auto-merge the high-confidence ones, keep the far ones
+    // distinct, and let the LLM adjudicate the gray band in between.
     const searchResult = await suggestionsRepo.searchSimilar(
         signatureEmbedding,
         SIGNATURE_LOW_THRESHOLD,
@@ -118,7 +154,7 @@ export async function persistOrReuseSuggestion(
                 console.log(
                     `[Suggestions] Reusing "${existing.name}" for "${suggestion.name}" (score ${candidate.score.toFixed(3)}${autoMerge ? "" : ", adjudicated"})`
                 );
-                return existing;
+                return { kind: "suggestion", suggestion: existing };
             }
         }
     }
@@ -131,7 +167,7 @@ export async function persistOrReuseSuggestion(
         console.warn(
             `[Suggestions] Dropping unauthentic dish "${suggestion.name}" (not attested for discovery)`
         );
-        return null;
+        return { kind: "dropped", reason: "unauthentic" };
     }
 
     // No similar suggestion found or fetch failed, persist new suggestion.
@@ -148,23 +184,26 @@ export async function persistOrReuseSuggestion(
         // won the race rather than failing the turn.
         const raced = await findSuggestionByName(suggestion.name);
         if (raced) {
-            return raced;
+            return { kind: "suggestion", suggestion: raced };
         }
 
         console.error(
             `[Suggestions] Failed to persist: ${suggestion.name}`,
             persistResult.error
         );
-        return null;
+        return { kind: "dropped", reason: "persist_failed" };
     }
 
     return {
-        id: persistResult.value.suggestionId,
-        name: suggestion.name,
-        nameEn: suggestion.name_en,
-        description: suggestion.description,
-        difficulty: suggestion.difficulty,
-        ingredients: persistResult.value.ingredients,
-        tags: persistResult.value.tags,
+        kind: "suggestion",
+        suggestion: {
+            id: persistResult.value.suggestionId,
+            name: suggestion.name,
+            nameEn: suggestion.name_en,
+            description: suggestion.description,
+            difficulty: suggestion.difficulty,
+            ingredients: persistResult.value.ingredients,
+            tags: persistResult.value.tags,
+        },
     };
 }

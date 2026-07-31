@@ -9,6 +9,7 @@ import {
     TipSchema,
 } from "@fridgeezy/schemas";
 import { createStreamHandler } from "@fridgeezy/streaming-server";
+import { RecipesRepository } from "@fridgeezy/supabase";
 
 import {
     createRecipeStream,
@@ -78,7 +79,11 @@ ${tags}
 Output the recipe as multiple JSON lines in this exact order:
 
 Line 1 - Header with basic info (adjust prepTime and cookTime for target difficulty):
-{"type":"header","description":"Brief description","prepTime":15,"cookTime":30}
+{"type":"header","description":"Brief description","shortDescription":"One-line card description","prepTime":15,"cookTime":30}
+The two description fields are different lengths and both are required:
+- "description": 2-3 sentences for the recipe detail screen.
+- "shortDescription": ONE short sentence (max 60 characters) for recipe cards, which show a single line. Must read as a complete phrase, never a truncation of "description".
+
 
 Line 2 - Nutrition information (per serving, adjust based on ingredient changes):
 {"type":"nutrition","kcal":450,"carbs":35,"protein":25,"fat":15}
@@ -89,7 +94,7 @@ Lines 3-N - One line per ingredient (use approved unit abbreviations only):
 Lines N+1-M - One line per instruction step (include ingredients array with names of ingredients used in this step):
 {"type":"instruction","text":"Step description without number prefix","ingredients":["ingredient1","ingredient2"]}
 
-Optional tip lines:
+Optional tip lines (MAXIMUM 3 — output the 3 most useful and stop; extra tips are discarded):
 {"type":"tip","text":"Cooking tip"}
 
 No markdown, no code blocks, just JSONL.`;
@@ -140,8 +145,9 @@ IMPORTANT CONSTRAINTS:
 - Modify techniques, optional ingredients, and instruction complexity to match ${targetDifficulty} difficulty`;
 };
 
-// Store existing image URL for reuse in onComplete
+// Store existing image URL + source recipe for reuse in onComplete
 let existingImageUrl: string | undefined;
+let sourceRecipeId: string | undefined;
 
 export const escalateDifficulty = createStreamHandler({
     requestSchema: EscalateDifficultyRequestSchema,
@@ -163,6 +169,7 @@ export const escalateDifficulty = createStreamHandler({
 
         // Store the existing image URL to reuse it (avoid regenerating)
         existingImageUrl = (existingRecipe as any).imageUrl;
+        sourceRecipeId = body.id;
 
         // 2. Validate difficulty transition
         if (existingRecipe.difficulty === body.difficulty) {
@@ -230,6 +237,24 @@ export const escalateDifficulty = createStreamHandler({
                 console.log(
                     `Escalated recipe persisted with ID: ${persistResult.value}`
                 );
+
+                // Same reasoning as modify-recipe: an escalated recipe keeps the
+                // base's name (the prompt forbids changing it), so an untagged
+                // row shows up in discovery as a second, indistinguishable
+                // "Apfelstrudel". Tag the lineage so search filters it out.
+                if (sourceRecipeId) {
+                    const variantResult = await new RecipesRepository().markAsVariant(
+                        persistResult.value,
+                        sourceRecipeId
+                    );
+
+                    if (!variantResult.success) {
+                        console.error(
+                            "Failed to mark escalated recipe as a variant:",
+                            variantResult.error.message
+                        );
+                    }
+                }
             } else {
                 console.error(
                     "Failed to persist escalated recipe:",

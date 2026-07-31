@@ -6,8 +6,14 @@ import {
     success,
 } from "@fridgeezy/domain";
 import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
+import { canonicalizeName } from "@fridgeezy/toolkit";
 
 import { supabaseAdmin } from "../../client";
+
+/** Escape a value for use inside a double-quoted PostgREST `or(...)` filter. */
+function quoteFilterValue(value: string): string {
+    return value.replace(/([\\"])/g, "\\$1");
+}
 
 export class RecipesRepository implements IRecipesRepository {
     /**
@@ -63,12 +69,44 @@ export class RecipesRepository implements IRecipesRepository {
                 );
             }
 
-            return success(data as string);
+            const recipeId = data as string;
+
+            await this.writeShortDescription(recipeId, recipe.shortDescription);
+
+            return success(recipeId);
         } catch (error) {
             return failure(
                 new PersistenceError(
                     `Failed to persist recipe: ${error instanceof Error ? error.message : "Unknown error"}`
                 )
+            );
+        }
+    }
+
+    /**
+     * Write the card-sized description once the recipe row exists.
+     *
+     * Not a `persist_recipe*` parameter: adding one to those creates a second
+     * overload and makes the RPC ambiguous unless the whole body is re-declared.
+     * Best-effort, like `updateEmbedding` — a failure leaves the column null and
+     * the card falls back to `description`, so it never fails a generation.
+     */
+    private async writeShortDescription(
+        recipeId: string,
+        shortDescription?: string | null
+    ): Promise<void> {
+        if (!shortDescription) {
+            return;
+        }
+
+        const { error } = await supabaseAdmin
+            .from("recipes")
+            .update({ short_description: shortDescription })
+            .eq("id", recipeId);
+
+        if (error) {
+            console.warn(
+                `[RecipesRepository] Failed to write short_description for ${recipeId}: ${error.message}`
             );
         }
     }
@@ -98,6 +136,73 @@ export class RecipesRepository implements IRecipesRepository {
             return failure(
                 new PersistenceError(
                     `Failed to update recipe embedding: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
+
+    /**
+     * Find a BASE recipe (never a variant) already in the catalog under any of
+     * `names`, optionally pinned to one difficulty.
+     *
+     * `recipes` has no canonical_id column and no unique key on the name, so
+     * identity is decided the same way the rest of the schema decides it — via
+     * `normalize_to_canonical_id`'s rule (lowercase, non-alphanumerics collapsed
+     * to `_`), applied here in JS. The ilike filter only narrows the rows the DB
+     * returns; the normalized comparison below is what actually decides a match,
+     * so a stray LIKE wildcard in a dish name can over-fetch but never
+     * mis-identify. Both `name` and `name_en` are checked so a native name and
+     * its English translation resolve to the same dish.
+     */
+    async findBaseRecipe(
+        names: Array<string | null | undefined>,
+        difficulty?: GenerateRecipeResponseDto["difficulty"]
+    ): Promise<Result<{ id: string; name: string } | null, PersistenceError>> {
+        const wanted = names
+            .map((name) => canonicalizeName(name))
+            .filter((name): name is string => !!name);
+
+        if (wanted.length === 0) {
+            return success(null);
+        }
+
+        try {
+            const filter = names
+                .map((name) => name?.trim())
+                .filter((name): name is string => !!name)
+                .flatMap((name) => [
+                    `name.ilike."${quoteFilterValue(name)}"`,
+                    `name_en.ilike."${quoteFilterValue(name)}"`,
+                ])
+                .join(",");
+
+            let query = supabaseAdmin
+                .from("recipes")
+                .select("id, name, name_en")
+                .is("base_recipe_id", null)
+                .or(filter);
+
+            if (difficulty) {
+                query = query.eq("difficulty", difficulty);
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+                return failure(new PersistenceError(error.message));
+            }
+
+            const match = (data ?? []).find(
+                (row) =>
+                    wanted.includes(canonicalizeName(row.name) ?? "") ||
+                    wanted.includes(canonicalizeName(row.name_en) ?? "")
+            );
+
+            return success(match ? { id: match.id, name: match.name } : null);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to look up existing recipe: ${error instanceof Error ? error.message : "Unknown error"}`
                 )
             );
         }
@@ -163,7 +268,11 @@ export class RecipesRepository implements IRecipesRepository {
                 );
             }
 
-            return success(data as string);
+            const recipeId = data as string;
+
+            await this.writeShortDescription(recipeId, recipe.shortDescription);
+
+            return success(recipeId);
         } catch (error) {
             return failure(
                 new PersistenceError(

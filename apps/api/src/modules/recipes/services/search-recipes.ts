@@ -24,6 +24,24 @@ export async function searchRecipes(
     // Embed the query app-side (text-embedding-3-small) and pass the vector to
     // search_recipes — no OpenAI call from Postgres.
     const embedding = await generateEmbedding(query);
+
+    return searchRecipesByEmbedding(embedding, threshold, limit);
+}
+
+/**
+ * Same search against a PRECOMPUTED query embedding. Used by dedup, which has
+ * already embedded the dish signature and must not pay for a second embedding
+ * (and must compare against the exact same vector it deduped suggestions with).
+ *
+ * @param embedding - A 1536-dim text-embedding-3-small vector
+ * @param threshold - Minimum similarity score (0-1)
+ * @param limit - Maximum number of results
+ */
+export async function searchRecipesByEmbedding(
+    embedding: number[],
+    threshold = 0.75,
+    limit = 3
+): Promise<SearchRecipeResult[]> {
     const { data, error } = await supabaseAdmin.rpc("search_recipes", {
         query_embedding: JSON.stringify(embedding),
         match_threshold: threshold,

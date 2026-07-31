@@ -1,33 +1,65 @@
 import { generateBatchEmbeddings } from "@fridgeezy/openai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
+import { buildSuggestionSignature } from "@fridgeezy/toolkit";
 import { config } from "dotenv";
 
 config();
 
 /**
- * Backfill embeddings for recipes.fts after the 3072 -> 1536 migration.
- * Uses the recipe name as the embedding text (text-embedding-3-small, 1536),
- * matching what the application now stores via RecipesRepository.updateEmbedding.
+ * (Re)build recipes.fts from each recipe's dish SIGNATURE — the same text
+ * suggestions are embedded with (English name + tags + ingredients), built by the
+ * shared `buildSuggestionSignature` so a stored recipe vector and a suggestion's
+ * query vector for the same dish are directly comparable.
+ *
+ * This replaces the original name-only embedding. A bare name can't recognise its
+ * own dish from a paraphrase ("apple strudel" scored 0.746 against a recipe named
+ * `Apfelstrudel`, under the 0.75 search threshold), which let dishes the user
+ * already owns be re-suggested and re-generated.
+ *
+ * Re-embeds EVERY recipe by default, because the embedding TEXT changed rather
+ * than merely being absent — a row still holding a name-only vector is not
+ * comparable with a freshly written signature one. Pass `--missing-only` to embed
+ * just the rows that have no vector at all.
  */
 export async function generateRecipeEmbeddings() {
-    console.log("Starting recipes.fts embedding backfill...\n");
+    const missingOnly = process.argv.includes("--missing-only");
+
+    console.log(
+        `Starting recipes.fts signature backfill${missingOnly ? " (missing only)" : " (all recipes)"}...\n`
+    );
 
     try {
-        // 1. Fetch recipes missing an embedding (all of them, post-migration)
         console.log("Fetching recipes from database...");
 
-        const { data: recipes, error: fetchError } = await supabaseAdmin
+        let query = supabaseAdmin
             .from("recipes")
-            .select("id, name")
-            .is("fts", null)
+            .select(
+                `
+                id,
+                name,
+                name_en,
+                recipe_ingredients (
+                    ingredient:ingredients ( name )
+                ),
+                recipe_tags (
+                    tag:tags ( name )
+                )
+            `
+            )
             .order("name");
+
+        if (missingOnly) {
+            query = query.is("fts", null);
+        }
+
+        const { data: recipes, error: fetchError } = await query;
 
         if (fetchError) {
             throw new Error(`Failed to fetch recipes: ${fetchError.message}`);
         }
 
         if (!recipes || recipes.length === 0) {
-            console.log("No recipes found without embeddings. Nothing to do!");
+            console.log("No recipes to embed. Nothing to do!");
             return;
         }
 
@@ -36,9 +68,18 @@ export async function generateRecipeEmbeddings() {
         // 2. Generate embeddings in batch (small model, 1536 dims)
         console.log("Generating embeddings via OpenAI API...");
 
-        const names = recipes.map((r) => r.name);
+        const signatures = recipes.map((recipe) =>
+            buildSuggestionSignature({
+                name: recipe.name,
+                nameEn: recipe.name_en,
+                tags: recipe.recipe_tags.map((rt) => rt.tag.name),
+                ingredients: recipe.recipe_ingredients.map(
+                    (ri) => ri.ingredient.name
+                ),
+            })
+        );
 
-        const result = await generateBatchEmbeddings(names, {
+        const result = await generateBatchEmbeddings(signatures, {
             model: "text-embedding-3-small",
             dimensions: 1536,
         });

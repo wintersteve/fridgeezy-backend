@@ -2,6 +2,7 @@ import { failure, PersistenceError, Result, success } from "@fridgeezy/domain";
 import { generateEmbedding } from "@fridgeezy/openai";
 import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
 import { RecipesRepository, UnitsRepository } from "@fridgeezy/supabase";
+import { buildSuggestionSignature } from "@fridgeezy/toolkit";
 
 import {
     generateAndUploadRecipeImage,
@@ -10,6 +11,45 @@ import {
 
 const DEFAULT_IMAGE_URL = "";
 const unitsRepository = new UnitsRepository();
+
+/**
+ * Store the recipe's dish SIGNATURE embedding (English name + tags + ingredients
+ * — the same text suggestions are embedded with) rather than the bare name.
+ *
+ * A name-only vector can't recognise its own dish from anything but the exact
+ * native spelling: "apple strudel" scored 0.746 against a recipe literally named
+ * `Apfelstrudel` / `Apple Strudel`, missing the 0.75 search threshold and letting
+ * the dish be re-suggested and re-generated. The signature puts `name_en`, the
+ * cuisine/course tags and the ingredient set into the vector, and — critically —
+ * makes recipe and suggestion embeddings directly comparable, which is what lets
+ * dedup search both tables with one query vector.
+ *
+ * Best-effort: a failure leaves `fts` stale and the row can be re-embedded by
+ * the backfill, so it never fails a save.
+ */
+async function storeRecipeSignature(
+    repository: RecipesRepository,
+    recipeId: string,
+    recipe: GenerateRecipeResponseDto
+): Promise<void> {
+    const embedding = await generateEmbedding(
+        buildSuggestionSignature({
+            name: recipe.name,
+            nameEn: recipe.nameEn,
+            tags: recipe.tags ?? [],
+            ingredients: recipe.ingredients.map((ingredient) => ingredient.name),
+        })
+    );
+
+    const result = await repository.updateEmbedding(recipeId, embedding);
+
+    if (!result.success) {
+        console.error(
+            `Failed to store embedding for recipe "${recipe.name}":`,
+            result.error
+        );
+    }
+}
 
 /**
  * Resolve every ingredient's free-text unit to a valid abbreviation, mutating
@@ -156,20 +196,8 @@ export async function persistRecipe(
 
         const result = await repository.persist(recipe, imageUrl);
 
-        // Store the name embedding app-side (text-embedding-3-small) so Postgres
-        // never calls OpenAI. Best-effort — don't fail the save if this fails.
         if (result.success) {
-            const embedding = await generateEmbedding(recipe.name);
-            const embeddingResult = await repository.updateEmbedding(
-                result.value,
-                embedding
-            );
-            if (!embeddingResult.success) {
-                console.error(
-                    `Failed to store embedding for recipe "${recipe.name}":`,
-                    embeddingResult.error
-                );
-            }
+            await storeRecipeSignature(repository, result.value, recipe);
         }
 
         return result;
@@ -193,6 +221,34 @@ export async function persistRecipeWithIngredientIds(
     recipe: GenerateRecipeResponseDto
 ): Promise<Result<string, PersistenceError>> {
     try {
+        const repository = new RecipesRepository();
+
+        // Promotion is not naturally idempotent: the suggestion row is deleted
+        // once the recipe exists, so a repeated (or concurrent, or retried)
+        // generation of the same dish has nothing to collide with and `recipes`
+        // enforces no uniqueness on the name — every attempt used to insert
+        // another base row under the same name. Reuse the recipe already there.
+        //
+        // Keyed on difficulty as well: easy/medium/hard are genuinely different
+        // recipes for the same dish, and only BASE rows are considered, so AI
+        // variants (which deliberately keep the base's name) are never returned.
+        const existing = await repository.findBaseRecipe(
+            [recipe.name, recipe.nameEn],
+            recipe.difficulty
+        );
+
+        if (!existing.success) {
+            console.error(
+                `Existing-recipe lookup failed for "${recipe.name}":`,
+                existing.error.message
+            );
+        } else if (existing.value) {
+            console.log(
+                `Recipe "${recipe.name}" (${recipe.difficulty}) already exists — reusing ${existing.value.id}`
+            );
+            return success(existing.value.id);
+        }
+
         // Collapse ingredients that map to the same DB ingredient so the insert
         // doesn't violate recipe_ingredients' (recipe_id, ingredient_id) unique key.
         recipe.ingredients = dedupeIngredientsById(recipe.ingredients);
@@ -210,23 +266,10 @@ export async function persistRecipeWithIngredientIds(
         }
 
         // Persist using ingredient IDs
-        const repository = new RecipesRepository();
         const result = await repository.persistWithIngredientIds(recipe, imageUrl);
 
-        // Store the name embedding app-side (text-embedding-3-small) so Postgres
-        // never calls OpenAI. Best-effort — don't fail the save if this fails.
         if (result.success) {
-            const embedding = await generateEmbedding(recipe.name);
-            const embeddingResult = await repository.updateEmbedding(
-                result.value,
-                embedding
-            );
-            if (!embeddingResult.success) {
-                console.error(
-                    `Failed to store embedding for recipe "${recipe.name}":`,
-                    embeddingResult.error
-                );
-            }
+            await storeRecipeSignature(repository, result.value, recipe);
         }
 
         return result;

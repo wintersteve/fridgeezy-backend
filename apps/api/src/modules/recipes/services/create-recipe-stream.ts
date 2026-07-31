@@ -5,6 +5,13 @@ import { ChatCompletionChunk } from "openai/resources/index.mjs";
 import { z } from "zod/v4";
 
 /**
+ * The recipe screen shows tips in a small carousel, so the prompts ask for at
+ * most this many. Enforced here as well — the instruction alone isn't something
+ * the UI can rely on.
+ */
+const MAX_TIPS = 3;
+
+/**
  * Initial state passed to the recipe stream, containing data from the suggestion.
  */
 export interface RecipeStreamInitialState {
@@ -37,6 +44,7 @@ export async function* createRecipeStream(
         servings: config.initialState.servings,
         tags: config.initialState.tags,
         description: "",
+        shortDescription: null,
         prepTime: 0,
         cookTime: 0,
         kcal: 0,
@@ -60,6 +68,7 @@ export async function* createRecipeStream(
         // Schema 0: Header
         if (schemaIndex === 0) {
             recipe.description = parsed.description;
+            recipe.shortDescription = parsed.shortDescription ?? null;
             recipe.prepTime = parsed.prepTime;
             recipe.cookTime = parsed.cookTime;
             // NB: image generation is kicked off by the usecase BEFORE this
@@ -130,6 +139,12 @@ export async function* createRecipeStream(
         }
         // Schema 4: Tip
         else if (schemaIndex === 4) {
+            // Drop anything past the cap without yielding it, so the client
+            // never renders a tip the saved recipe won't have.
+            if ((recipe.tips?.length ?? 0) >= MAX_TIPS) {
+                continue;
+            }
+
             recipe.tips?.push({ text: parsed.text });
         }
 

@@ -9,6 +9,9 @@ import { z } from "zod/v4";
 export const HeaderSchema = z.object({
     type: z.literal("header"),
     description: z.string(),
+    // One-sentence version for recipe cards. Optional: the client falls back to
+    // `description`.
+    shortDescription: z.string().optional(),
     prepTime: z.number(),
     cookTime: z.number(),
 });

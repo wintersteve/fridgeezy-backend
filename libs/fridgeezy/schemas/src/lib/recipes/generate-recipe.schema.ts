@@ -30,6 +30,7 @@ export const GenerateRecipeResponseDtoSchema = z.object({
     name: z.string(),
     nameEn: z.string().nullable().optional(),
     description: z.string(),
+    shortDescription: z.string().nullable().optional(),
     difficulty: z.enum(["easy", "medium", "hard"]),
     servings: z.number(),
     prepTime: z.number(),

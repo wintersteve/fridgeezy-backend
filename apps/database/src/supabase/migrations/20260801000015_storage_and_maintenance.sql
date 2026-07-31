@@ -29,7 +29,19 @@ create policy public_read_cooking_actions_images on storage.objects for select
 
 -- Reaps generated recipes nobody kept: older than 30 days, not saved to a
 -- collection or shopping list, never interacted with, and not the base of a
--- variant. Generation is cheap to redo and these accumulate fast.
+-- variant.
+--
+-- DEFINED BUT NOT SCHEDULED. Both persist_recipe and
+-- persist_recipe_with_ingredient_ids hardcode is_generated = true, so every
+-- recipe in the system carries the flag and it distinguishes nothing. That
+-- turns this from "reap throwaway drafts" into a blanket 30-day TTL on the
+-- shared discovery catalog. Worse, suggestions are suppressed while a matching
+-- recipe exists, so deleting one lets the suggestion resurface and be
+-- regenerated — paying for the same dish twice — and the recipe's generated
+-- image is left orphaned in storage.
+--
+-- Schedule it again only once is_generated actually separates drafts from
+-- catalog entries, and once image cleanup is handled.
 create or replace function public.delete_orphan_generated_recipes()
     returns integer
     language plpgsql
@@ -54,5 +66,5 @@ begin
 end;
 $function$;
 
-select cron.schedule('delete-orphan-generated-recipes', '0 3 * * *',
-                     'SELECT delete_orphan_generated_recipes();');
+-- No cron.schedule() here on purpose — see the note above. pg_cron stays
+-- enabled so a job can be added without another extension migration.

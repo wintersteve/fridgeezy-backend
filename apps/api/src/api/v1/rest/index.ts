@@ -3,6 +3,7 @@ import { Router } from "express";
 import { ChatRoutes } from "../../../modules/chat";
 import { IngredientsRoutes } from "../../../modules/ingredients";
 import { RecipesRoutes } from "../../../modules/recipes";
+import { SubstitutesRoutes } from "../../../modules/substitutes";
 import { SuggestionsRoutes } from "../../../modules/suggestions";
 import { collectRoutes, RouteInfo } from "../../../utils/collect-routes";
 
@@ -19,6 +20,7 @@ const MOUNTS: { prefix: string; router: Router }[] = [
     { prefix: "/ingredients", router: IngredientsRoutes },
     { prefix: "/suggestions", router: SuggestionsRoutes },
     { prefix: "/recipes", router: RecipesRoutes },
+    { prefix: "/substitutes", router: SubstitutesRoutes },
     { prefix: "/chat", router: ChatRoutes },
 ];
 

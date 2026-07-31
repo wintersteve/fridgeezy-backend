@@ -47,11 +47,27 @@ export async function matchIngredients(
     const categoriesRepo = new CategoriesRepository();
     const matches: IngredientMatch[] = [];
 
-    // Helper function to convert name to canonical ID
-    const toCanonicalId = (name: string): string =>
-        name.toLowerCase()
+    // Convert a name to its ingredient canonical id. MUST match the SQL
+    // ingredient_canonical_id + singularize_token (migration 20260730000001) so
+    // app-side matches and the stored canonical_id agree. Normalizes, then
+    // singularizes the LAST token so singular/plural collapse (apple ≡ apples).
+    const singularizeToken = (tok: string): string => {
+        if (tok.length <= 3) return tok;
+        if (/ies$/.test(tok) && tok.length > 4) return tok.slice(0, -3) + "y";
+        if (/(oes|ses|xes|zes|ches|shes)$/.test(tok)) return tok.slice(0, -2);
+        if (/s$/.test(tok) && !/(ss|us|is)$/.test(tok)) return tok.slice(0, -1);
+        return tok;
+    };
+    const toCanonicalId = (name: string): string => {
+        const base = name
+            .toLowerCase()
             .replace(/[^a-z0-9]+/g, "_")
             .replace(/^_+|_+$/g, "");
+        if (!base) return base;
+        const parts = base.split("_");
+        parts[parts.length - 1] = singularizeToken(parts[parts.length - 1]);
+        return parts.join("_");
+    };
 
     // Ingredient names must not carry parenthetical qualifiers — strip any
     // "(...)" before matching so they never enter the catalog (there is no

@@ -8,7 +8,7 @@ import {
     TipSchema,
 } from "@fridgeezy/schemas";
 import { createStreamHandler } from "@fridgeezy/streaming-server";
-import { SuggestionsRepository } from "@fridgeezy/supabase";
+import { RecipesRepository, SuggestionsRepository } from "@fridgeezy/supabase";
 import { Request } from "express";
 
 import { trackBackgroundTask } from "../../../../background-tasks";
@@ -81,16 +81,18 @@ The two description fields are different lengths and both are required:
 Line 2 - Nutrition information (per serving):
 {"type":"nutrition","kcal":450,"carbs":35,"protein":25,"fat":15}
 
-Lines 3-N - One line per ingredient (use approved unit abbreviations only):
+Line 3-N - Optional tip lines (MAXIMUM 3 — output the 3 most useful and stop;
+extra tips are discarded). Write these HERE, straight after the nutrition line
+and before the first ingredient — never at the end:
+{"type":"tip","text":"Cooking tip"}
+
+Then one line per ingredient (use approved unit abbreviations only):
 {"type":"ingredient","name":"ingredient_name","category":"meat","parent":"lamb","quantity":100,"unit":"g","comment":"peeled and diced"}
 
 Note: The "comment" field is optional but should be included when the ingredient requires preparation (e.g., "peeled", "deveined", "crushed", "finely chopped", "at room temperature"). Omit if no special preparation is needed.
 
-Lines N+1-M - One line per instruction step (include ingredients array with names of ingredients used in this step):
+Then one line per instruction step (include ingredients array with names of ingredients used in this step):
 {"type":"instruction","text":"Step description without number prefix","ingredients":["ingredient1","ingredient2"]}
-
-Optional tip lines (MAXIMUM 3 — output the 3 most useful and stop; extra tips are discarded):
-{"type":"tip","text":"Cooking tip"}
 
 No markdown, no code blocks, just JSONL.`;
 
@@ -123,6 +125,29 @@ export const promoteSuggestion = createStreamHandler({
 
         if (!id) {
             throw new Error("Suggestion ID is required");
+        }
+
+        // 0. Promotion is one-way: the suggestion is deleted once its recipe
+        // exists. So if this id has already been promoted, hand back that recipe
+        // straight away rather than regenerating it — a client that dropped out
+        // mid-stream and came back would otherwise pay for the whole recipe a
+        // second time (and, since the suggestion is gone, 404 instead).
+        const recipesRepository = new RecipesRepository();
+        const promotedResult = await recipesRepository.findBySuggestionId(id);
+
+        if (promotedResult.success && promotedResult.value) {
+            const promotedId = promotedResult.value;
+
+            console.log(
+                `Suggestion ${id} was already promoted to recipe ${promotedId}`
+            );
+
+            return {
+                type: "stream" as const,
+                stream: (async function* () {
+                    yield { type: "complete", id: promotedId };
+                })(),
+            };
         }
 
         // 1. Fetch enriched suggestion with ingredients and tags
@@ -236,6 +261,21 @@ export const promoteSuggestion = createStreamHandler({
                     console.log(
                         `Recipe persisted successfully with ID: ${persistResult.value}`
                     );
+
+                    // Point the recipe back at the suggestion it came from
+                    // BEFORE the suggestion is deleted — that id is the only
+                    // handle a returning client still has on this recipe.
+                    const markResult = await recipesRepository.markPromotedFrom(
+                        persistResult.value,
+                        id
+                    );
+
+                    if (!markResult.success) {
+                        console.error(
+                            "Failed to record promoted suggestion:",
+                            markResult.error.message
+                        );
+                    }
 
                     // Delete the suggestion after successful recipe creation
                     const suggestionsRepo = new SuggestionsRepository();

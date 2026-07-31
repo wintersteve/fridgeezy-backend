@@ -66,6 +66,86 @@ $$ language plpgsql immutable;
 comment on function ingredient_canonical_id is
 'Ingredient-specific canonical_id: normalize_to_canonical_id with the last token singularized so singular/plural collapse. Kept in sync with the TS toIngredientCanonicalId in match-ingredients.ts.';
 
+-- Repair merge_ingredient before the backfill below calls it for the first time.
+-- 20260728000005 declared `recipe_instructions.ingredient_refs` to be "a JSONB id
+-- array" and used jsonb operators on it, but the column has been UUID[] since
+-- 20251231000008 — so the function has been broken since it was written and blew
+-- up here with `operator does not exist: uuid[] @> jsonb` the first time anything
+-- actually merged an ingredient. Only that one statement was wrong; the rest of
+-- the function is unchanged. It lives here rather than in its own migration
+-- because it has to land BEFORE the DO block below, and 20260728000005 is already
+-- applied (editing it in place would leave local history lying about the DB).
+create or replace function merge_ingredient(p_from uuid, p_into uuid)
+returns void
+language plpgsql
+as $$
+begin
+    if p_from is null or p_into is null or p_from = p_into then
+        return;
+    end if;
+
+    -- recipe_ingredients: repoint, skipping rows that would collide with an
+    -- existing (recipe_id, p_into) pair, then drop the leftover from-rows.
+    update recipe_ingredients ri
+       set ingredient_id = p_into
+     where ri.ingredient_id = p_from
+       and not exists (
+           select 1 from recipe_ingredients ri2
+            where ri2.recipe_id = ri.recipe_id
+              and ri2.ingredient_id = p_into
+       );
+    delete from recipe_ingredients where ingredient_id = p_from;
+
+    -- recipe_suggestion_ingredients: same conflict-safe repoint.
+    update recipe_suggestion_ingredients rsi
+       set ingredient_id = p_into
+     where rsi.ingredient_id = p_from
+       and not exists (
+           select 1 from recipe_suggestion_ingredients rsi2
+            where rsi2.recipe_suggestion_id = rsi.recipe_suggestion_id
+              and rsi2.ingredient_id = p_into
+       );
+    delete from recipe_suggestion_ingredients where ingredient_id = p_from;
+
+    -- Self-reference: children whose parent was p_from now point at p_into.
+    update ingredients set parent_id = p_into where parent_id = p_from;
+
+    -- recipe_instructions.ingredient_refs: replace p_from with p_into inside the
+    -- UUID[] id array (de-duped; order is not significant for ingredient refs).
+    update recipe_instructions
+       set ingredient_refs = (
+           select array_agg(distinct
+               case when elem = p_from then p_into else elem end)
+             from unnest(ingredient_refs) as elem
+       )
+     where p_from = any (ingredient_refs);
+
+    -- ingredient_aliases: move p_from's aliases to p_into (dropping any that would
+    -- collide on the unique alias), then record p_from's own name as an alias.
+    update ingredient_aliases a
+       set ingredient_id = p_into
+     where a.ingredient_id = p_from
+       and not exists (
+           select 1 from ingredient_aliases a2
+            where a2.alias = a.alias and a2.ingredient_id = p_into
+       );
+    delete from ingredient_aliases where ingredient_id = p_from;
+    insert into ingredient_aliases (ingredient_id, alias)
+        select p_into, i.name from ingredients i where i.id = p_from
+        on conflict (alias) do nothing;
+
+    -- Remove the merged-away ingredient.
+    delete from ingredients where id = p_from;
+end;
+$$;
+
+comment on function merge_ingredient(uuid, uuid) is
+'Fold ingredient p_from into p_into: atomically repoint recipe_ingredients,
+recipe_suggestion_ingredients, ingredients.parent_id, recipe_instructions
+.ingredient_refs (UUID[]), and ingredient_aliases; record p_from''s name as an
+alias of p_into; then delete p_from. No-op when p_from = p_into or either is
+null.';
+
 -- Backfill: collapse existing singular/plural duplicates, then recanonicalize.
 -- Merge colliding rows into the oldest via merge_ingredient (repoints every
 -- reference + records the merged name as an alias), THEN rewrite canonical_id to

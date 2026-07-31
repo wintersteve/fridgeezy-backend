@@ -37,16 +37,3 @@ interface BaseParams {
 }
 
 export type GenerateStreamParams = BaseParams;
-
-export interface GenerateCompletionParams extends BaseParams {
-    /**
-     * Ask for a JSON object back.
-     *
-     * **Not equivalent across providers.** On OpenAI this sets
-     * `response_format: { type: "json_object" }`, which the API enforces. Bedrock
-     * has no such field, so there it is a no-op and the *prompt* has to ask for
-     * JSON. Callers that rely on enforcement must keep the instruction in their
-     * prompt, not in this flag.
-     */
-    json?: boolean;
-}

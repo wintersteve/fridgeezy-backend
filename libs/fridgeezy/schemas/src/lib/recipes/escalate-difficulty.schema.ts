@@ -11,6 +11,8 @@ export const EscalateDifficultyRequestSchema = z.object({
         .describe("Target difficulty level"),
 });
 
+/** Consumed by the client app (`useEscalateDifficulty`) via the published tarball. */
 export type EscalateDifficultyRequestDto = z.infer<
     typeof EscalateDifficultyRequestSchema
 >;
+

@@ -17,19 +17,3 @@ export const ModifyRecipeRequestSchema = z.object({
         .optional()
         .describe("Dietary tags to respect, e.g. ['vegan', 'gluten_free']"),
 });
-
-export type ModifyRecipeRequestDto = z.infer<typeof ModifyRecipeRequestSchema>;
-
-/**
- * Terminal frame emitted after the modified recipe has been persisted, carrying
- * the new row's id and a short human-readable label describing the change. The
- * client uses the id to navigate to / save the variant and the label as the
- * default variant name.
- */
-export const ModifyRecipeVariantSchema = z.object({
-    type: z.literal("variant"),
-    id: z.uuid(),
-    label: z.string(),
-});
-
-export type ModifyRecipeVariant = z.infer<typeof ModifyRecipeVariantSchema>;

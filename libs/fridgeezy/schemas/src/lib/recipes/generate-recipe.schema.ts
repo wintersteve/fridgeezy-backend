@@ -16,9 +16,6 @@ export const GenerateRecipeRequestSchema = z.object({
     servings: z.number().int().positive().default(4),
 });
 
-export type GenerateRecipeRequestDto = z.infer<
-    typeof GenerateRecipeRequestSchema
->;
 
 /**
  * Full recipe schema for persistence.

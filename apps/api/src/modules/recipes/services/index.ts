@@ -3,8 +3,6 @@ export * from "./ingredient-categories";
 export * from "./fetch-recipe-metadata";
 export * from "./fetch-recipe";
 export * from "./fetch-recipe-summary";
-export * from "./adjust-ingredient-quantities";
-export * from "./normalize-quantity-display";
 export * from "./search-recipes";
 export * from "./search-recipe-suggestions";
 export * from "./generate-compose-suggestions";

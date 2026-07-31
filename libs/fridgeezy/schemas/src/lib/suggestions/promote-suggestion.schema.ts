@@ -7,4 +7,3 @@ export const PromoteSuggestionRequestSchema = z.object({
   servings: z.number().int().positive().default(4),
 });
 
-export type PromoteSuggestionRequestDto = z.infer<typeof PromoteSuggestionRequestSchema>;

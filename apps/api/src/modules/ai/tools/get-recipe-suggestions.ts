@@ -85,9 +85,6 @@ export const RecipeSuggestionOutputSchema = z.object({
 });
 
 export type RecipeSuggestionInput = z.infer<typeof RecipeSuggestionInputSchema>;
-export type RecipeSuggestionOutput = z.infer<
-    typeof RecipeSuggestionOutputSchema
->;
 
 /**
  * Tool handler for getting recipe suggestions.

@@ -54,21 +54,6 @@ export class NotFoundError extends DomainError {
 }
 
 /**
- * Error thrown when domain validation fails
- *
- * @example
- * ```typescript
- * throw new ValidationError('Name must be at least 3 characters', 'name');
- * throw new ValidationError('Invalid difficulty level');
- * ```
- */
-export class ValidationError extends DomainError {
-  constructor(message: string, field?: string) {
-    super(message, 'VALIDATION_ERROR', { field });
-  }
-}
-
-/**
  * Error thrown when a database or persistence operation fails
  *
  * @example
@@ -97,47 +82,5 @@ export class PersistenceError extends DomainError {
 export class ConflictError extends DomainError {
   constructor(message: string, field?: string) {
     super(message, 'CONFLICT_ERROR', { field });
-  }
-}
-
-/**
- * Error thrown when an operation is not authorized
- *
- * @example
- * ```typescript
- * throw new UnauthorizedError('User does not have permission to delete this recipe');
- * ```
- */
-export class UnauthorizedError extends DomainError {
-  constructor(message: string) {
-    super(message, 'UNAUTHORIZED', {});
-  }
-}
-
-/**
- * Error thrown when a business rule is violated
- *
- * @example
- * ```typescript
- * throw new BusinessRuleError('Cannot promote an already promoted suggestion');
- * ```
- */
-export class BusinessRuleError extends DomainError {
-  constructor(message: string, rule?: string) {
-    super(message, 'BUSINESS_RULE_VIOLATION', { rule });
-  }
-}
-
-/**
- * Error thrown for invalid operations
- *
- * @example
- * ```typescript
- * throw new InvalidOperationError('Cannot update a deleted entity');
- * ```
- */
-export class InvalidOperationError extends DomainError {
-  constructor(message: string) {
-    super(message, 'INVALID_OPERATION', {});
   }
 }

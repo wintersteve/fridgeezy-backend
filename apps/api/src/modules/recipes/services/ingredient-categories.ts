@@ -3,31 +3,9 @@
  * seeded `categories` table. Recipe-generation prompts constrain the LLM's
  * ingredient `category` field to these ids so persist_recipe resolves them
  * directly (it no longer creates categories on the fly).
+ *
+ * Prompt-ready list of the category ids with short glosses.
  */
-export const INGREDIENT_CATEGORY_IDS = [
-    "meats",
-    "seafood",
-    "eggs",
-    "dairy",
-    "vegetables",
-    "fruits",
-    "grains",
-    "legumes",
-    "nuts_seeds",
-    "herbs_spices",
-    "mushrooms",
-    "noodles",
-    "breads",
-    "fats_oils",
-    "sweeteners",
-    "stocks",
-    "sauces",
-    "vinegars",
-    "beverages",
-    "baking",
-] as const;
-
-/** Prompt-ready list of the category ids with short glosses. */
 export const INGREDIENT_CATEGORY_GUIDE = `- meats: red meat, poultry, game, cured meats
 - seafood: fish, shellfish, crustaceans
 - eggs: eggs of any bird

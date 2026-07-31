@@ -6,7 +6,6 @@
  */
 
 export * from "./lib/modules/categories";
-export * from "./lib/modules/difficulty";
 export * from "./lib/modules/ingredients";
 export * from "./lib/modules/recipes";
 export * from "./lib/modules/shared";

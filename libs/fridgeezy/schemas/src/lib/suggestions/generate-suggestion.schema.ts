@@ -98,11 +98,7 @@ export type GenerateSuggestionResponseDto = z.infer<
     typeof GenerateSuggestionResponseSchema
 >;
 
-export type SuggestionIngredientDto = z.infer<
-    typeof SuggestionIngredientSchema
->;
 
-export type SuggestionTagDto = z.infer<typeof SuggestionTagSchema>;
 
 export type EnrichedSuggestionResponseDto = z.infer<
     typeof EnrichedSuggestionResponseSchema

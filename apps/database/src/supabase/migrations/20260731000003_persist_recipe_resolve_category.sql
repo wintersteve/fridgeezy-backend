@@ -109,7 +109,7 @@ begin
                 -- Find ingredient ID by canonical_id
                 SELECT id INTO v_ingredient_id
                 FROM ingredients
-                WHERE canonical_id = v_canonical_id
+            WHERE canonical_id = v_canonical_id
                 LIMIT 1;
 
                 IF v_ingredient_id IS NOT NULL THEN
@@ -130,21 +130,32 @@ begin
         v_step_number := v_step_number + 1;
     END LOOP;
 
-    -- Process tags
+    -- Process tags: resolve to an existing tag of ANY type, keeping the type
+    -- the curated vocabulary assigned. Falls back to tag_aliases so alternate
+    -- spellings ("gluten-free", "no dairy") still land on the canonical tag.
     FOREACH v_tag_name IN ARRAY p_tags
     LOOP
-        v_canonical_id := normalize_to_canonical_id(v_tag_name);
+        v_canonical_id := normalize_to_canonical_id(trim(v_tag_name));
 
-        -- Get or create tag (default to cuisine type)
-        INSERT INTO tags (canonical_id, name, type)
-        VALUES (v_canonical_id, v_tag_name, 'cuisine')
-        ON CONFLICT (name, type) DO UPDATE SET canonical_id = EXCLUDED.canonical_id
-        RETURNING id INTO v_tag_id;
+        SELECT id INTO v_tag_id
+        FROM tags
+        WHERE canonical_id = v_canonical_id;
 
-        -- Insert recipe_tag
-        INSERT INTO recipe_tags (recipe_id, tag_id)
-        VALUES (v_recipe_id, v_tag_id)
-        ON CONFLICT (recipe_id, tag_id) DO NOTHING;
+        IF v_tag_id IS NULL THEN
+            SELECT tag_id INTO v_tag_id
+            FROM tag_aliases
+            WHERE canonical_id = v_canonical_id
+            LIMIT 1;
+        END IF;
+
+        IF v_tag_id IS NULL THEN
+            RAISE WARNING 'persist_recipe: no tag matches "%" (recipe "%") - skipped',
+                v_tag_name, p_name;
+        ELSE
+            INSERT INTO recipe_tags (recipe_id, tag_id)
+            VALUES (v_recipe_id, v_tag_id)
+            ON CONFLICT (recipe_id, tag_id) DO NOTHING;
+        END IF;
     END LOOP;
 
     RETURN v_recipe_id;

@@ -1,14 +1,11 @@
 import "dotenv/config";
 import "reflect-metadata";
 
-import { createRestRouter } from "./api/v1";
-import { createExpressApp } from "./express-app";
+import { createApp } from "./create-app";
 
 const PORT = parseInt(process.env.PORT ?? "8000", 10);
 
-const app = createExpressApp();
-
-app.use("/rest", createRestRouter());
+const app = createApp();
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

@@ -1,0 +1,14 @@
+.terraform/
+.terraform-artifacts/
+
+# .terraform.lock.hcl is intentionally NOT ignored — it pins provider versions
+# and must be committed.
+
+# Local state — remove once the S3 backend is configured (see versions.tf).
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Never commit real values; environments/*.tfvars hold non-secret config only.
+*.auto.tfvars
+secrets.tfvars

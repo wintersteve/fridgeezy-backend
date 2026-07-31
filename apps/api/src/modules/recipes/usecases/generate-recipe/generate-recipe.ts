@@ -10,6 +10,7 @@ import {
 import { createStreamHandler } from "@fridgeezy/streaming-server";
 import { SuggestionsRepository } from "@fridgeezy/supabase";
 
+import { trackBackgroundTask } from "../../../../background-tasks";
 import { fetchEnrichedSuggestion } from "../../../suggestions/services";
 import {
     createRecipeStream,
@@ -166,7 +167,8 @@ export const generateRecipe = createStreamHandler({
         // Kick off image generation now (name is known), so it runs in parallel
         // with the entire recipe generation instead of waiting for the header.
         // Fire-and-forget: persistence reads the deterministic URL either way.
-        generateAndUploadRecipeImage(suggestion.name).catch((error) => {
+        // Tracked so Lambda can let it finish before freezing the environment.
+        trackBackgroundTask(generateAndUploadRecipeImage(suggestion.name)).catch((error) => {
             console.error("Image generation failed:", error);
         });
 

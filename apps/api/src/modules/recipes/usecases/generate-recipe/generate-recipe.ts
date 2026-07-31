@@ -87,7 +87,7 @@ Line 2 - Nutrition information (per serving):
 Lines 3-N - One line per ingredient (use approved unit abbreviations only):
 {"type":"ingredient","name":"ingredient_name","category":"meat","parent":"lamb","quantity":100,"unit":"g","comment":"peeled and diced"}
 
-Note: The "comment" field is optional but should be included when the ingredient requires preparation (e.g., "peeled", "deveined", "crushed", "finely chopped", "at room temperature"). Omit if no special preparation is needed.
+Note: The "name" must be the plain ingredient only — NEVER include parentheses or qualifiers in the name (write "chicken breast", NOT "chicken breast (boneless)"). Any qualifier, preparation, or note MUST go in the "comment" field instead. The "comment" field is optional but should be included when the ingredient requires preparation or has a qualifier (e.g., "boneless", "peeled", "deveined", "crushed", "finely chopped", "at room temperature"). Omit if none is needed.
 
 Lines N+1-M - One line per instruction step (include ingredients array with names of ingredients used in this step):
 {"type":"instruction","text":"Step description without number prefix","ingredients":["ingredient1","ingredient2"]}

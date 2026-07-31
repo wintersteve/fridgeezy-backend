@@ -8,26 +8,46 @@ import { generateSuggestionsStream } from "../../suggestions/services/generate-s
 import { streamSingleSuggestion } from "../../suggestions/services/stream-single-suggestion";
 
 import { fetchRecipeSummary } from "./fetch-recipe-summary";
+import { findCatalogueRecipes } from "./find-catalogue-recipes";
 import { searchRecipes } from "./search-recipes";
 
 /**
- * Recalibrated (2026-07-30) for signature-embedded recipes, measured over the
- * live catalog: unrelated dishes top out at 0.607 ("kimchi pancake" against
- * Kimchi Bokkeumbap) while genuine descriptive matches run 0.58–0.85. 0.70 sits
- * above every observed false positive with margin.
+ * Recalibrated 2026-07-31 against the queries chat actually sends. 0.70 was
+ * measured on dish-name-like inputs, but the only caller passes the user's own
+ * phrasing, and a natural-language QUESTION scores far lower against a dish
+ * signature than another dish name does. Measured over the live catalog:
  *
- * Deliberately biased HIGH, because the two failure modes are not symmetric: too
- * low returns the WRONG recipe and suppresses generation entirely, while too high
- * merely spends a generation that `persistOrReuseSuggestion` then resolves back
- * to the existing recipe. Exact-name matches don't depend on this number at all
- * (see stage 1a).
+ *   "how do I make palak paneer?"           -> Palak Paneer      0.641
+ *   "I fancy something with spinach+paneer" -> Palak Paneer      0.620
+ *   "something with kimchi"                 -> Kimchi Fried Rice 0.606
+ *   "show me an apple dessert"              -> Apple Strudel     0.515
+ *   noise across those same queries         -> 0.30–0.46
+ *
+ * At 0.70 every one of those was rejected and chat generated a fresh suggestion
+ * for a dish it already had. 0.50 clears the highest observed false positive
+ * (0.461) and accepts all of them.
+ *
+ * Still biased high relative to the noise floor, because the failure modes are
+ * not symmetric: too low returns the WRONG recipe and suppresses generation
+ * entirely, while too high merely spends a generation that
+ * `persistOrReuseSuggestion` then resolves back to the existing recipe. Exact
+ * names don't depend on this number at all (stage 1a), and ingredient questions
+ * are answered by stage 1c rather than by similarity.
  */
-const DEFAULT_MATCH_THRESHOLD = 0.7;
+const DEFAULT_MATCH_THRESHOLD = 0.5;
 
 export interface RecipeSuggestionInput {
     query: string;
     matchThreshold?: number;
     maxResults?: number;
+    /**
+     * Concrete ingredients the user named ("chicken", "rice"), extracted by the
+     * model from its own query. Drives stage 1c's `find_recipes` lookup, which
+     * is the only stage that can answer an ingredient question — similarity
+     * search cannot (see DEFAULT_MATCH_THRESHOLD). Absent for queries that name
+     * a dish or a concept rather than ingredients.
+     */
+    ingredients?: string[];
     /** Dietary tags any generated suggestion must satisfy. */
     dietaryRestrictions?: string[];
     /** Ingredients to never suggest (allergies/dislikes). */
@@ -40,6 +60,13 @@ export interface RecipeSuggestionItem {
     description: string;
     difficulty: "easy" | "medium" | "hard";
     source: "existing_recipe" | "suggestion" | "new_suggestion";
+    /**
+     * Hero image, present only for `existing_recipe`. The chat card falls back
+     * to its "NEW" panel without one, so omitting it made a recipe the catalogue
+     * already has render exactly like a dish that had just been invented — the
+     * card was wrong even though its id, and so the tap-through, was right.
+     */
+    image?: string | null;
     matchScore?: number;
     ingredients: Array<{ id: string; name: string }>;
     tags: Array<{ id: string; name: string }>;
@@ -105,6 +132,7 @@ export async function searchRecipeSuggestions(
         query,
         matchThreshold = DEFAULT_MATCH_THRESHOLD,
         maxResults = 5,
+        ingredients,
         dietaryRestrictions,
         blacklist,
     } = input;
@@ -136,7 +164,8 @@ export async function searchRecipeSuggestions(
             suggestions.push({
                 id: summary.id,
                 name: summary.name,
-                description: summary.description,
+                description: summary.shortDescription || summary.description,
+                image: summary.image,
                 difficulty: summary.difficulty,
                 source: "existing_recipe",
                 matchScore: 1,
@@ -165,7 +194,9 @@ export async function searchRecipeSuggestions(
             suggestions.push({
                 id: recipeSummary.id,
                 name: recipeSummary.name,
-                description: recipeSummary.description,
+                description:
+                    recipeSummary.shortDescription || recipeSummary.description,
+                image: recipeSummary.image,
                 difficulty: recipeSummary.difficulty,
                 source: "existing_recipe",
                 matchScore: result.score,
@@ -182,7 +213,51 @@ export async function searchRecipeSuggestions(
         }
     });
 
-    // If we have enough results from vector search, return early
+    // Stage 1c: the catalogue lookup the SEARCH SCREEN uses — filter by
+    // ingredient id via `find_recipes`, no similarity involved.
+    //
+    // Stages 1a and 1b between them only find a dish the user all but named:
+    // measured, "what can I make with chicken and rice?" scores 0.429 against
+    // even the right recipe, so no similarity gate can accept it without
+    // accepting noise too. That question is a filter, not a search, and it is
+    // the one the search screen answers well while chat did not answer at all —
+    // it generated a new dish over a catalogue that already had one.
+    //
+    // Only runs when the model actually extracted ingredients, and its rows are
+    // deduped against stages 1a/1b by id.
+    if (ingredients?.length && suggestions.length < maxResults) {
+        const catalogue = await findCatalogueRecipes({
+            ingredients,
+            blacklist,
+            limit: maxResults,
+        });
+
+        for (const row of catalogue) {
+            if (suggestions.some((item) => item.id === row.id)) continue;
+
+            suggestions.push({
+                id: row.id,
+                name: row.name,
+                description: row.description,
+                image: row.image,
+                difficulty: row.difficulty,
+                // A `recipe` row is already generated, so the card opens it; a
+                // `suggestion` row still routes to the generate screen.
+                source:
+                    row.source === "recipe" ? "existing_recipe" : "suggestion",
+                ingredients: row.ingredients,
+                tags: row.tags,
+            });
+
+            if (row.source === "recipe") {
+                metadata.vectorSearchHits++;
+            } else {
+                metadata.canonicalSearchHits++;
+            }
+        }
+    }
+
+    // If we have enough results from the catalogue, return early
     if (suggestions.length >= maxResults) {
         return {
             suggestions: suggestions.slice(0, maxResults),
@@ -201,6 +276,10 @@ export async function searchRecipeSuggestions(
         !!existingSuggestion &&
         suggestions.some(
             (item) =>
+                // By id as well as by name: stage 1c can surface this very
+                // suggestion row via find_recipes, and a name comparison alone
+                // would miss it if the two spellings ever diverge.
+                item.id === existingSuggestion.id ||
                 canonicalizeName(item.name) ===
                     canonicalizeName(existingSuggestion.name) ||
                 canonicalizeName(item.name) ===
@@ -296,7 +375,9 @@ export async function searchRecipeSuggestions(
                     suggestions.push({
                         id: recipe.id,
                         name: recipe.name,
-                        description: recipe.description,
+                        description:
+                            recipe.shortDescription || recipe.description,
+                        image: recipe.image,
                         difficulty: recipe.difficulty,
                         source: "existing_recipe",
                         tempId,

@@ -37,6 +37,12 @@ export const RecipeSuggestionInputSchema = z.object({
         .default(3)
         .optional()
         .describe("Maximum number of results to return"),
+    ingredients: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "The concrete ingredients the user says they have, one per entry, singular and unqualified (e.g. ['chicken', 'rice'] for 'what can I make with chicken and rice?'). Set this whenever the user asks what to cook FROM ingredients — it is the only way an existing recipe is matched by ingredient rather than by name. Omit it when they name a dish, a cuisine or a concept instead."
+        ),
     dietaryRestrictions: z
         .array(z.string())
         .optional()

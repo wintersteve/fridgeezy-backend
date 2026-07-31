@@ -5,6 +5,17 @@ export interface RecipeSummary {
     name: string;
     nameEn?: string | null;
     description: string;
+    /**
+     * The one-line card form. Card callers must prefer this over `description`,
+     * which is the detail-screen paragraph and truncates mid-sentence on a card.
+     */
+    shortDescription?: string | null;
+    /**
+     * Hero image. Without it a chat suggestion card falls back to its "NEW"
+     * panel, which makes a recipe the catalogue already has look identical to a
+     * dish that was just invented.
+     */
+    image?: string | null;
     difficulty: "easy" | "medium" | "hard";
     ingredients: Array<{ id: string; name: string }>;
     tags: Array<{ id: string; name: string }>;
@@ -28,6 +39,8 @@ export async function fetchRecipeSummary(
             name,
             name_en,
             description,
+            short_description,
+            image,
             difficulty,
             recipe_ingredients (
                 ingredient:ingredients (
@@ -55,6 +68,8 @@ export async function fetchRecipeSummary(
         name: recipe.name,
         nameEn: recipe.name_en ?? null,
         description: recipe.description || "",
+        shortDescription: recipe.short_description ?? null,
+        image: recipe.image ?? null,
         difficulty: recipe.difficulty as "easy" | "medium" | "hard",
         ingredients: recipe.recipe_ingredients.map((ri) => ({
             id: ri.ingredient.id,

@@ -18,6 +18,7 @@ import {
     fetchRecipeMetadata,
     formatUnitsForPrompt,
     formatTagsForPrompt,
+    INGREDIENT_CATEGORY_GUIDE,
 } from "../../services";
 import { generateAndUploadRecipeImage } from "../../services/create-recipe-image";
 import { persistRecipeWithIngredientIds } from "../../services/persist-recipe";
@@ -60,6 +61,10 @@ Use ONLY these tags when tagging recipes. Tags must accurately represent the rec
 
 ${tags}
 
+## Valid Ingredient Categories
+Set each ingredient's "category" to EXACTLY one of these ids (the id, not the description):
+${INGREDIENT_CATEGORY_GUIDE}
+
 ## Tagging Rules
 - EXACTLY 1 component tag per recipe (use "dish" for regular finished dishes/meals)
 - EXACTLY 1 cuisine tag per recipe (the most accurate cuisine origin)
@@ -90,7 +95,7 @@ and before the first ingredient — never at the end:
 {"type":"tip","text":"Cooking tip"}
 
 Then one line per ingredient (use approved unit abbreviations only):
-{"type":"ingredient","name":"ingredient_name","category":"meat","parent":"lamb","quantity":100,"unit":"g","comment":"peeled and diced"}
+{"type":"ingredient","name":"ingredient_name","category":"meats","parent":"lamb","quantity":100,"unit":"g","comment":"peeled and diced"}
 
 Note: The "name" must be the plain ingredient only — NEVER include parentheses or qualifiers in the name (write "chicken breast", NOT "chicken breast (boneless)"). Any qualifier, preparation, or note MUST go in the "comment" field instead. The "comment" field is optional but should be included when the ingredient requires preparation or has a qualifier (e.g., "boneless", "peeled", "deveined", "crushed", "finely chopped", "at room temperature"). Omit if none is needed.
 

@@ -10,7 +10,6 @@ export * from './cooking-action-categories';
 export * from './cooking-actions';
 export * from './ingredient-aliases';
 export * from './ingredients';
-export * from './pantry-items';
 export * from './profile-blacklisted-ingredients';
 export * from './profile-dietary-preferences';
 export * from './profile-recipe-interactions';

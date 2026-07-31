@@ -301,61 +301,6 @@ export type Database = {
           },
         ]
       }
-      pantry_items: {
-        Row: {
-          created_at: string
-          expires_at: string | null
-          id: string
-          ingredient_id: string
-          profile_id: string
-          quantity: number | null
-          unit_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          expires_at?: string | null
-          id?: string
-          ingredient_id: string
-          profile_id: string
-          quantity?: number | null
-          unit_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          expires_at?: string | null
-          id?: string
-          ingredient_id?: string
-          profile_id?: string
-          quantity?: number | null
-          unit_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pantry_items_ingredient_id_fkey"
-            columns: ["ingredient_id"]
-            isOneToOne: false
-            referencedRelation: "ingredients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pantry_items_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pantry_items_unit_id_fkey"
-            columns: ["unit_id"]
-            isOneToOne: false
-            referencedRelation: "units"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profile_blacklisted_ingredients: {
         Row: {
           created_at: string
@@ -1098,7 +1043,6 @@ export type Database = {
     }
     Functions: {
       bytea_to_text: { Args: { data: string }; Returns: string }
-      delete_expired_pantry_items: { Args: never; Returns: number }
       delete_orphan_generated_recipes: { Args: never; Returns: number }
       find_recipes: {
         Args: {

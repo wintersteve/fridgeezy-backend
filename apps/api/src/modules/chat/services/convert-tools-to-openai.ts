@@ -1,7 +1,7 @@
 import type OpenAI from "openai";
 import { z } from "zod/v4";
 
-interface McpToolDefinition {
+export interface ToolDefinition {
     title: string;
     description: string;
     inputSchema: z.ZodTypeAny;
@@ -24,11 +24,11 @@ function zodToJsonSchema(schema: z.ZodTypeAny): any {
 }
 
 /**
- * Convert MCP tool definition to OpenAI function calling format
+ * Convert a tool definition to OpenAI function calling format
  */
-export function convertMcpToolToOpenAiFunction(
+export function convertToolToOpenAiFunction(
     name: string,
-    definition: McpToolDefinition
+    definition: ToolDefinition
 ): OpenAI.ChatCompletionTool {
     const parameters = zodToJsonSchema(definition.inputSchema);
 
@@ -43,12 +43,12 @@ export function convertMcpToolToOpenAiFunction(
 }
 
 /**
- * Convert multiple MCP tools to OpenAI tools array
+ * Convert multiple tools to an OpenAI tools array
  */
-export function convertMcpToolsToOpenAiTools(
-    mcpTools: Record<string, { definition: McpToolDefinition }>
+export function convertToolsToOpenAiTools(
+    tools: Record<string, { definition: ToolDefinition }>
 ): OpenAI.ChatCompletionTool[] {
-    return Object.entries(mcpTools).map(([name, tool]) =>
-        convertMcpToolToOpenAiFunction(name, tool.definition)
+    return Object.entries(tools).map(([name, tool]) =>
+        convertToolToOpenAiFunction(name, tool.definition)
     );
 }

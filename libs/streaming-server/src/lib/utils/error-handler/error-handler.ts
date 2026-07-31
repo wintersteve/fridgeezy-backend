@@ -10,7 +10,7 @@ export interface ErrorHandlerConfig {
 }
 
 /**
- * Handle errors in MCP endpoints with awareness of streaming state.
+ * Handle errors in API endpoints with awareness of streaming state.
  *
  * For streaming responses:
  * - If headers already sent: write error as SSE event and end stream

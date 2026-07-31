@@ -7,8 +7,7 @@ import {
 
 /**
  * Optional per-call context threaded through the chat tool-execution path so
- * the tool can stream partial suggestions out as it generates them. Ignored by
- * the plain MCP SDK invocation, which calls the handler with args only.
+ * the tool can stream partial suggestions out as it generates them.
  */
 export interface RecipeSuggestionToolContext {
     onPartialSuggestion?: SearchRecipeSuggestionsOptions["onPartialSuggestion"];
@@ -90,8 +89,8 @@ export type RecipeSuggestionOutput = z.infer<
 >;
 
 /**
- * MCP tool handler for getting recipe suggestions
- * Returns MCP-compliant response with content array
+ * Tool handler for getting recipe suggestions.
+ * Returns the tool-call content array the chat pipeline expects.
  */
 export async function getRecipeSuggestionsHandler(
     input: RecipeSuggestionInput,
@@ -101,7 +100,6 @@ export async function getRecipeSuggestionsHandler(
         onPartialSuggestion: context.onPartialSuggestion,
     });
 
-    // MCP SDK requires content array format
     return {
         content: [
             {
@@ -113,7 +111,7 @@ export async function getRecipeSuggestionsHandler(
 }
 
 /**
- * MCP tool definition for GET_RECIPE_SUGGESTIONS
+ * Tool definition for GET_RECIPE_SUGGESTIONS
  */
 export const getRecipeSuggestionsTool = {
     name: "GET_RECIPE_SUGGESTIONS",

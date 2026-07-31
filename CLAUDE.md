@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a TypeScript-based backend service called "fridgeezy-backend" that uses the OpenAI Agents SDK to create an AI agent that interacts with a Model Context Protocol (MCP) server for recipe generation. The agent uses a locally hosted MCP server at `http://localhost:8000` to generate recipes based on ingredients.
+This is a TypeScript-based backend service called "fridgeezy-backend": an Nx monorepo serving an Express API on port 8000 that powers the Fridgeezy React Native app's AI features — recipe suggestions, generation, composition, modification, difficulty escalation, chat, and ingredient extraction. Routes live under `/rest` and most stream their responses over SSE.
 
 ## Build Commands
 
@@ -18,18 +18,23 @@ npm run build
 ## Architecture
 
 ### Core Dependencies
-- `@openai/agents` (actually `@modelcontextprotocol/sdk` in package.json): Agent framework
-- `openai`: OpenAI API client
+- `express`: HTTP server
+- `openai`: OpenAI API client (chat + recipe generation)
+- `@google/genai`: image generation
 - `zod`: Schema validation
 
 ### Project Structure
 - **apps/**: Entry points for apps
 - **libs/**: Entry points for shared libraries
 
-### Agent Configuration
-The main agent (`Recipe Assistant`) is configured to:
-- Use the `hostedMcpTool` with server label "recipe-generator-mcp"
-- Connect to a local MCP server at `http://localhost:8000`
-- Execute recipe generation through the `recipe/generate` tool
+### Routing
+`apps/api/src/main.ts` mounts a single router: `app.use("/rest", createRestRouter())`.
+`createRestRouter` (`apps/api/src/api/v1/rest`) wires the feature modules —
+`/ingredients`, `/suggestions`, `/recipes`, `/chat`, plus `/health`. Each module
+under `apps/api/src/modules/<name>/` owns its own routes/controller/usecases.
 
-The current implementation expects an MCP server to be running locally on port 8000 before the agent can function properly.
+### Chat tool calling
+`apps/api/src/modules/ai/tools` holds tool definitions (zod input/output schemas +
+handler). `modules/chat` converts them to OpenAI function-calling schemas
+(`convert-tools-to-openai.ts`) and executes the handlers directly — there is no
+MCP server or transport in this repo.

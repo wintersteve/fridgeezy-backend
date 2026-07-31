@@ -1,10 +1,10 @@
 import { ChatRequestSchema } from "@fridgeezy/schemas";
 import type { Request, Response } from "express";
 
-import { getRecipeSuggestionsTool } from "../../../mcp/tools";
+import { getRecipeSuggestionsTool } from "../../../ai/tools";
 import type { PartialRecipeSuggestion } from "../../../recipes/services/search-recipe-suggestions";
 import {
-    convertMcpToolsToOpenAiTools,
+    convertToolsToOpenAiTools,
     createChatCompletion,
     endSseStream,
     handleToolCalls,
@@ -26,13 +26,12 @@ export async function processChat(req: Request, res: Response): Promise<void> {
         // Initialize SSE stream
         initSseStream(res);
 
-        // Get MCP tools (in the future this could be dynamic)
-        const mcpTools = {
+        // Tools available to the model (in the future this could be dynamic)
+        const tools = {
             GET_RECIPE_SUGGESTIONS: getRecipeSuggestionsTool,
         };
 
-        // Convert MCP tools to OpenAI format
-        const openaiTools = convertMcpToolsToOpenAiTools(mcpTools);
+        const openaiTools = convertToolsToOpenAiTools(tools);
 
         // Add system message if not present
         let messages = [...request.messages];
@@ -119,7 +118,7 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                         // Run tool execution in background while we stream content
                         const toolResultsPromise = handleToolCalls(
                             currentToolCalls,
-                            mcpTools,
+                            tools,
                             // Chat only surfaces a single suggestion; other
                             // callers keep the service default of 5. Forward the
                             // user's diet/allergies so generated suggestions

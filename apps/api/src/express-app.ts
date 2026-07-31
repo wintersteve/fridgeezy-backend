@@ -9,14 +9,14 @@ export function createExpressApp() {
         cors({
             origin: "*",
             methods: ["GET", "POST", "OPTIONS"],
-            allowedHeaders: ["Content-Type", "mcp-session-id"],
+            allowedHeaders: ["Content-Type"],
         })
     );
 
     // Note: We don't use express.json() middleware here because the handlers
-    // (created with createMcpHandler) have their own body parsing logic that
-    // reads from the raw request stream. Express's json() middleware would
-    // consume the stream before the handlers can read it, causing requests to hang.
+    // have their own body parsing logic that reads from the raw request stream.
+    // Express's json() middleware would consume the stream before the handlers
+    // can read it, causing requests to hang.
 
     // Request logging
     app.use((req, _, next) => {

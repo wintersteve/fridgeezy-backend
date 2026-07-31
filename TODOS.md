@@ -25,10 +25,6 @@ be owned deliberately, not discovered in prod.
   models. Recipe authenticity + structure adherence must be re-validated against
   the new model family before cutover. Accuracy is the #1 product priority — treat
   the eval harness (Phase 0) as a prerequisite, not a nicety.
-- **Stateful MCP sessions don't fit Lambda.** `/mcp` uses `mcp-session-id`
-  (`apps/api/src/express-app.ts` allows the header; the MCP SDK transport holds
-  session state in-process). Lambda invocations are stateless — session state
-  needs an external store or a stateless transport. See Phase 2.
 - **SSE + Lambda needs Function URLs, not API Gateway.** The entire app streams
   (recipes, suggestions, chat). API Gateway REST/HTTP APIs buffer the response
   and break SSE. Streaming requires Lambda **response streaming** via a Function
@@ -192,16 +188,15 @@ change is validated in isolation before touching hosting.
 
 ---
 
-## Phase 2 — MCP session state (unblock Lambda)
+## Phase 2 — MCP session state (unblock Lambda) — RESOLVED BY REMOVAL
 
-- [ ] Audit whether `/mcp` genuinely needs cross-request session state or can run
-      **stateless** per request. Prefer stateless if the client flow allows it —
-      it removes this whole problem.
-- [ ] If sessions are required: externalize `mcp-session-id` state to DynamoDB
-      (or ElastiCache) so any Lambda invocation can rehydrate it.
-- [ ] Confirm the MCP SDK transport (`@modelcontextprotocol/sdk`) supports the
-      stateless / external-store mode you pick; adapt `mcp.controller.ts` /
-      `mcp.routes.ts` accordingly.
+- [x] Deleted 2026-07-31. The `/mcp` endpoint, its `StreamableHTTPServerTransport`
+      session map, and the `@modelcontextprotocol/sdk` dependency are gone. The
+      endpoint had no caller (the RN client only ever hit `/rest`) and was in fact
+      unreachable — `app.all("/mcp", …)` doesn't strip the mount path, so its
+      router's `POST /chat` never matched. Chat keeps using the tool *definitions*
+      (`modules/ai/tools`) converted to OpenAI function schemas. No session state
+      is left to externalize, so nothing blocks Lambda here.
 
 ---
 
@@ -209,7 +204,7 @@ change is validated in isolation before touching hosting.
 
 - [ ] Wrap the app for Lambda. Two options:
       (a) keep Express behind an adapter, or (b) split the SSE endpoints
-      (`/suggestions`, `/recipes`, `/chat`, `/mcp`) into dedicated streaming
+      (`/suggestions`, `/recipes`, `/chat`) into dedicated streaming
       handlers. Note `express-app.ts` deliberately skips `express.json()` and
       reads the raw stream — preserve that raw-body handling.
 - [ ] Use **Lambda response streaming** (`awslambda.streamifyResponse`) via a
@@ -222,8 +217,8 @@ change is validated in isolation before touching hosting.
       promise may not complete). May need to `await` it or move image gen to a
       separate async invocation / queue.
 - [ ] IAM role for the function: `bedrock:InvokeModel` /
-      `bedrock:InvokeModelWithResponseStream`, Supabase access (via env), the MCP
-      session store, and S3/Supabase storage for images.
+      `bedrock:InvokeModelWithResponseStream`, Supabase access (via env), and
+      S3/Supabase storage for images.
 - [ ] Port env/config: `GOOGLE_API_KEY` (if keeping Gemini), Supabase keys,
       `GENAI_IMAGE_MODEL`, region, Bedrock model IDs. Move secrets to SSM
       Parameter Store / Secrets Manager (no `dotenv` in Lambda).
@@ -259,8 +254,9 @@ data migration, not just a code edit.
 - [ ] Roll out behind the provider flag: shadow / percentage cutover, watch eval
       scores and error rates, keep OpenAI as instant rollback.
 - [ ] Decommission OpenAI paths once Bedrock is stable and validated.
-- [ ] Update `CLAUDE.md` (backend) — the Overview still describes the OpenAI
-      Agents SDK + local MCP server; document the Bedrock + Lambda architecture.
+- [ ] Update `CLAUDE.md` (backend) — the Overview/Routing sections now describe the
+      current Express + OpenAI setup; document the Bedrock + Lambda architecture
+      once it lands.
 
 ---
 

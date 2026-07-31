@@ -1,11 +1,11 @@
 import type { ChatMessage, ToolCall } from "@fridgeezy/schemas";
 
-interface McpToolHandler {
+interface ToolHandler {
     handler: (input: any, context?: any) => Promise<any>;
 }
 
-interface McpTools {
-    [name: string]: McpToolHandler;
+export interface ToolRegistry {
+    [name: string]: ToolHandler;
 }
 
 /**
@@ -20,11 +20,11 @@ export type ToolCallContext = Record<string, unknown>;
  */
 async function handleSingleToolCall(
     toolCall: ToolCall,
-    mcpTools: McpTools,
+    tools: ToolRegistry,
     argOverrides: Record<string, Record<string, unknown>> = {},
     toolContext: Record<string, ToolCallContext> = {}
 ): Promise<ChatMessage> {
-    const tool = mcpTools[toolCall.function.name];
+    const tool = tools[toolCall.function.name];
 
     if (!tool) {
         return {
@@ -41,16 +41,16 @@ async function handleSingleToolCall(
             ...JSON.parse(toolCall.function.arguments),
             ...argOverrides[toolCall.function.name],
         };
-        const mcpResult = await tool.handler(
+        const result = await tool.handler(
             args,
             toolContext[toolCall.function.name]
         );
 
-        // MCP tools return { content: [{ type: "text", text: "..." }] }
+        // Handlers return { content: [{ type: "text", text: "..." }] }
         // Extract the text content
         let resultText = "";
-        if (mcpResult.content && Array.isArray(mcpResult.content)) {
-            for (const item of mcpResult.content) {
+        if (result.content && Array.isArray(result.content)) {
+            for (const item of result.content) {
                 if (item.type === "text" && item.text) {
                     resultText += item.text;
                 }
@@ -60,7 +60,7 @@ async function handleSingleToolCall(
         return {
             role: "tool",
             tool_call_id: toolCall.id,
-            content: resultText || JSON.stringify(mcpResult),
+            content: resultText || JSON.stringify(result),
         };
     } catch (error) {
         console.error(
@@ -84,18 +84,13 @@ async function handleSingleToolCall(
  */
 export async function handleToolCalls(
     toolCalls: ToolCall[],
-    mcpTools: McpTools,
+    tools: ToolRegistry,
     argOverrides: Record<string, Record<string, unknown>> = {},
     toolContext: Record<string, ToolCallContext> = {}
 ): Promise<ChatMessage[]> {
     const results = await Promise.all(
         toolCalls.map((toolCall) =>
-            handleSingleToolCall(
-                toolCall,
-                mcpTools,
-                argOverrides,
-                toolContext
-            )
+            handleSingleToolCall(toolCall, tools, argOverrides, toolContext)
         )
     );
 

@@ -25,13 +25,13 @@
             "path": "./libs/toolkit"
         },
         {
-            "path": "./libs/fridgeezy/domain"
+            "path": "./libs/domain"
         },
         {
-            "path": "./libs/fridgeezy/schemas"
+            "path": "./libs/schemas"
         },
         {
-            "path": "./libs/fridgeezy/types"
+            "path": "./libs/types"
         },
         {
             "path": "./libs/bedrock"

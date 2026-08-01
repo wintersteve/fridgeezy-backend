@@ -99,9 +99,9 @@ Evals (`npx nx run @fridgeezy/api:<target>`): `eval`, `calibrate`,
 apps/api          Express API (@fridgeezy/api)
 apps/database     Supabase migrations, seeds, embedding + maintenance scripts
 infra             Terraform for the Lambda deployment
-libs/fridgeezy/schemas   Zod v4 request/response schemas — shared with the client
-libs/fridgeezy/types     Generated database.types.ts + derived entity types — shared with the client
-libs/fridgeezy/domain    Platform-agnostic domain types, repo interfaces, Result/base-error
+libs/schemas      Zod v4 request/response schemas — packed for the client
+libs/types        Generated database.types.ts + derived entity types — packed for the client
+libs/domain       Platform-agnostic domain types, repo interfaces, Result/base-error
 libs/supabase     Supabase client + repositories (categories, ingredients, recipes, suggestions, tags, units)
 libs/openai       OpenAI client + embeddings
 libs/bedrock      Anthropic-on-Bedrock streaming completions
@@ -112,8 +112,16 @@ libs/toolkit      Canonicalisation helpers (names, ingredient canonical ids, sig
 ```
 
 Nx projects are package.json-based (no `project.json`); workspaces are
-`apps/*`, `libs/*`, `libs/fridgeezy/*`. Libs are tagged `scope:shared`, apps
-`scope:app`.
+`apps/*` and `libs/*`. Libs are tagged `scope:shared`, apps `scope:app`.
+
+`libs/` is **flat**. `schemas`, `types` and `domain` used to sit under
+`libs/fridgeezy/`, which looked like it marked the client-facing contracts but
+did not: all three carry the same `scope:shared` tag, the boundary rules treat
+them identically, and `domain` is not shipped to the client at all — only
+`schemas` and `types` are. The nesting cost an extra workspaces glob and enforced
+nothing, so it went. If that distinction is ever worth enforcing, use a tag
+(`scope:published`) and a boundary rule — a directory is a convention people
+drift from, a tag is checkable.
 
 ### Entry points
 
@@ -211,7 +219,7 @@ platform-agnostic types and repository interfaces those implement.
   take a `p_` prefix. **LLM output fields are `snake_case`** so they line up with
   the DB and parse straight through the Zod schemas.
 - Schemas import from `zod/v4`.
-- `libs/fridgeezy/types/src/lib/database.types.ts` is generated — regenerate with
+- `libs/types/src/lib/database.types.ts` is generated — regenerate with
   the `types` target rather than hand-editing (a manual edit is fine mid-change,
   but it will be overwritten).
 

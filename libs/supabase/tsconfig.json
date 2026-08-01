@@ -4,16 +4,16 @@
     "include": ["vite.config.mts"],
     "references": [
         {
-            "path": "../fridgeezy/types"
+            "path": "../types"
         },
         {
             "path": "../toolkit"
         },
         {
-            "path": "../fridgeezy/schemas"
+            "path": "../schemas"
         },
         {
-            "path": "../fridgeezy/domain"
+            "path": "../domain"
         },
         {
             "path": "./tsconfig.lib.json"

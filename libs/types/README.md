@@ -32,12 +32,12 @@ When the database schema changes:
 
 1. Update `database.types.ts` from Supabase CLI:
    ```bash
-   supabase gen types typescript --project-id YOUR_PROJECT_ID > libs/fridgeezy/types/src/database.types.ts
+   supabase gen types typescript --project-id YOUR_PROJECT_ID > libs/types/src/database.types.ts
    ```
 
 2. Regenerate entity exports:
    ```bash
-   cd libs/fridgeezy/types
+   cd libs/types
    npm run generate:types
    ```
 

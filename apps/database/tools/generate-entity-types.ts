@@ -9,7 +9,7 @@ import { toPascal } from "ts-case-convert";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const LIBRARY_PATH = "libs/fridgeezy/types/src/lib";
+const LIBRARY_PATH = "libs/types/src/lib";
 const INPUT_PATH = `${LIBRARY_PATH}/database.types.ts`;
 const OUTPUT_PATH = `${LIBRARY_PATH}/entities`;
 

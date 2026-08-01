@@ -15,7 +15,7 @@ if (!projectId) {
 
 const outputPath = resolve(
     process.cwd(),
-    "../../libs/fridgeezy/types/src/lib/database.types.ts"
+    "../../libs/types/src/lib/database.types.ts"
 );
 
 try {

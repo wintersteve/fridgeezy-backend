@@ -5,7 +5,7 @@ import * as path from "path";
 
 export default defineConfig(() => ({
     root: import.meta.dirname,
-    cacheDir: "../../../node_modules/.vite/libs/fridgeezy/types",
+    cacheDir: "../../node_modules/.vite/libs/schemas",
     plugins: [
         dts({
             entryRoot: "src",
@@ -22,7 +22,7 @@ export default defineConfig(() => ({
         },
         lib: {
             entry: "src/index.ts",
-            name: "@fridgeezy/types",
+            name: "@fridgeezy/schemas",
             fileName: "index",
             formats: ["es" as const],
         },

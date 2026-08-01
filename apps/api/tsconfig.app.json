@@ -25,7 +25,7 @@
             "path": "../../libs/streaming-server/tsconfig.lib.json"
         },
         {
-            "path": "../../libs/fridgeezy/schemas/tsconfig.lib.json"
+            "path": "../../libs/schemas/tsconfig.lib.json"
         },
         {
             "path": "../../libs/openai/tsconfig.lib.json"
@@ -34,7 +34,7 @@
             "path": "../../libs/genai/tsconfig.lib.json"
         },
         {
-            "path": "../../libs/fridgeezy/domain/tsconfig.lib.json"
+            "path": "../../libs/domain/tsconfig.lib.json"
         }
     ]
 }

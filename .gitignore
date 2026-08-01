@@ -13,7 +13,10 @@ yarn-error.log*
 /dist
 **/dist/*
 
-tsconfig.lib.tsbuildinfo
+# Incremental build state. Machine-specific and rewritten on every build; the
+# `tsconfig.lib.` one was already ignored but the plain one was not, so nine of
+# them were tracked and churned on each commit.
+*.tsbuildinfo
 
 /.idea
 

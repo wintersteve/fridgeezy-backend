@@ -5,7 +5,7 @@ import * as path from "path";
 
 export default defineConfig(() => ({
     root: import.meta.dirname,
-    cacheDir: "../../../node_modules/.vite/libs/streaming/server",
+    cacheDir: "../../node_modules/.vite/libs/streaming-server",
     plugins: [
         dts({
             entryRoot: "src",

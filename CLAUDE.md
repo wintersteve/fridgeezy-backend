@@ -70,6 +70,14 @@ Scripts sit in two directories, split by what they touch:
 Keep that line intact when adding a script — it is the difference between "safe
 to run any time" and "this writes to prod".
 
+The `supabase` CLI is pinned to an **exact** version (2.72.2), not a caret range,
+because its destructive commands differ across versions. On 2.72.2 `db reset`
+seeds by default and offers `--no-seed` to opt out; on 2.111 the docs describe
+`--include-seed`, i.e. the opposite default. Under `^2.67.3` a fresh install
+picked up whichever was current, so the same `db reset --linked` either seeded or
+did not depending on the day. Before upgrading, re-read `db reset --help` and
+adjust the `reset` target to match — do not assume the flags carried over.
+
 The Supabase project root is **`apps/database/`**, not `apps/database/src/` —
 that is where `config.toml`, `migrations/` and `seeds/` live, and where the CLI
 resolves it. They must not diverge: when they did, `db dump`, `migration repair`

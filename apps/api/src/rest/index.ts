@@ -1,11 +1,11 @@
 import { Router } from "express";
 
-import { ChatRoutes } from "../../../modules/chat";
-import { IngredientsRoutes } from "../../../modules/ingredients";
-import { RecipesRoutes } from "../../../modules/recipes";
-import { SubstitutesRoutes } from "../../../modules/substitutes";
-import { SuggestionsRoutes } from "../../../modules/suggestions";
-import { collectRoutes, RouteInfo } from "../../../utils/collect-routes";
+import { ChatRoutes } from "../modules/chat";
+import { IngredientsRoutes } from "../modules/ingredients";
+import { RecipesRoutes } from "../modules/recipes";
+import { SubstitutesRoutes } from "../modules/substitutes";
+import { SuggestionsRoutes } from "../modules/suggestions";
+import { collectRoutes, RouteInfo } from "../utils/collect-routes";
 
 /**
  * Feature routers and the prefix each is mounted under.

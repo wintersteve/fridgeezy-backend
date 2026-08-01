@@ -1,7 +1,7 @@
 import type { Express } from "express";
 
-import { createRestRouter } from "./api/v1";
 import { createExpressApp } from "./express-app";
+import { createRestRouter } from "./rest";
 
 /**
  * Assembles the fully-routed app.

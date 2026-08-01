@@ -1,4 +1,4 @@
-import { describeRestEndpoints } from "./api/v1";
+import { describeRestEndpoints } from "./rest";
 import type { RouteInfo } from "./utils/collect-routes";
 
 /**

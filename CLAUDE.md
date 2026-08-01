@@ -141,9 +141,14 @@ frozen mid-flight.
 
 ### Routing
 
-`createRestRouter` (`apps/api/src/api/v1/rest`) mounts the feature modules from a
+`createRestRouter` (`apps/api/src/rest`) mounts the feature modules from a
 `MOUNTS` array; the startup banner is *derived* from that same array, so adding a
 route needs no second edit.
+
+It used to live at `apps/api/src/api/v1/rest` — three directories holding two
+files, one of which only re-exported the other, with a `v1` that appeared in no
+URL. The mount is `app.use("/rest", …)`, so a real v2 would have to change the
+mount path anyway; the nesting only made every import inside it `../../../`.
 
 | Endpoint | Module |
 | --- | --- |

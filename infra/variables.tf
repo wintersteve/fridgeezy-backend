@@ -56,8 +56,10 @@ variable "lambda_runtime" {
 
 variable "lambda_architecture" {
   description = <<-EOT
-    Instruction set for the function. `sharp` ships native binaries, so the
-    artifact must be installed for this architecture — see README.md ("sharp").
+    Instruction set for the function. arm64 is cheaper per GB-second and the
+    artifact is pure JavaScript, so nothing constrains the choice — `sharp` used
+    to, via its native binaries, but it was unused and has been removed. Adding
+    any native dependency reintroduces the cross-platform install step.
   EOT
   type        = string
   default     = "arm64"
@@ -69,9 +71,24 @@ variable "lambda_architecture" {
 }
 
 variable "lambda_memory_size" {
-  description = "Memory (MB). Also scales CPU, which matters for sharp image work."
+  description = <<-EOT
+    Memory (MB). Also scales CPU.
+
+    Was 2048, justified by local image processing with `sharp`. That dependency
+    was unused and has been removed: images are produced by a @google/genai call
+    and uploaded straight to Supabase storage, so nothing here is CPU-bound. The
+    work is almost entirely waiting on a model over the network, and Lambda bills
+    GB-seconds against that wall-clock time — on 15-30s streams, memory is the
+    largest cost lever in this stack.
+
+    1024 keeps cold starts comfortable for a Node runtime without paying for
+    headroom nothing uses. This is a reasoned starting point, NOT a measurement:
+    validate with AWS Lambda Power Tuning against a real recipe stream before
+    treating it as settled, since the loopback proxy in lambda.ts and the JSONL
+    accumulation do use some CPU.
+  EOT
   type        = number
-  default     = 2048
+  default     = 1024
 }
 
 variable "lambda_timeout" {
@@ -137,6 +154,41 @@ variable "genai_image_model" {
   description = "Value for the GENAI_IMAGE_MODEL env var (recipe image generation)."
   type        = string
   default     = "gemini-2.5-flash-image"
+}
+
+variable "llm_provider" {
+  description = <<-EOT
+    Which inference provider every call site resolves to (LLM_PROVIDER).
+
+    Defaults to openai, matching resolveProvider() in @fridgeezy/llm — the whole
+    point of the flag is that hosting can migrate without touching inference.
+    Flip to bedrock only after the Phase 2 eval gate in TODOS.md.
+
+    resolveProvider() throws on an unrecognised value rather than falling back,
+    so a typo fails loudly instead of silently serving OpenAI; the validation
+    below catches it at plan time instead.
+  EOT
+  type        = string
+  default     = "openai"
+
+  validation {
+    condition     = contains(["openai", "bedrock"], var.llm_provider)
+    error_message = "llm_provider must be openai or bedrock."
+  }
+}
+
+variable "bedrock_model_id" {
+  description = <<-EOT
+    Value for BEDROCK_MODEL_ID. Unused while llm_provider is openai, but set so
+    that flipping the provider is a one-variable change rather than a code
+    deploy.
+
+    Matches the default baked into @fridgeezy/bedrock's client. The `eu.` prefix
+    is the cross-region inference profile for eu-central-1, the region TODOS.md
+    settles on.
+  EOT
+  type        = string
+  default     = "eu.anthropic.claude-sonnet-4-6"
 }
 
 variable "ssm_parameter_prefix" {

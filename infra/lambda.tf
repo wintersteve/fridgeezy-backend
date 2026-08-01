@@ -25,6 +25,11 @@ resource "aws_lambda_function" "api" {
 
       GENAI_IMAGE_MODEL = var.genai_image_model
 
+      # Inference provider selection. Defaults to openai, so deploying to Lambda
+      # changes hosting only — the model swap is a separate, gated phase.
+      LLM_PROVIDER     = var.llm_provider
+      BEDROCK_MODEL_ID = var.bedrock_model_id
+
       OPENAI_API_KEY = data.aws_ssm_parameter.openai_api_key.value
       GOOGLE_API_KEY = data.aws_ssm_parameter.google_api_key.value
 
@@ -57,7 +62,9 @@ resource "aws_lambda_function_url" "api" {
     content {
       allow_origins = var.function_url_cors_allow_origins
       allow_methods = ["GET", "POST", "OPTIONS"]
-      allow_headers = ["content-type", "mcp-session-id"]
+      # `mcp-session-id` was dropped with the MCP transport — the app serves
+      # /rest only, and nothing sends that header any more.
+      allow_headers = ["content-type"]
       max_age       = 86400
     }
   }

@@ -97,6 +97,17 @@ for KEY in OPENAI_API_KEY GOOGLE_API_KEY SUPABASE_URL SUPABASE_ANON_KEY SUPABASE
 done
 ```
 
+**Do this before the first `terraform apply`.** `ssm.tf` reads these as `data`
+sources, so Terraform will not create them — and a missing one fails at plan
+time, before anything is provisioned:
+
+```
+Error: reading SSM Parameter (/fridgeezy/dev/OPENAI_API_KEY): couldn't find resource
+```
+
+All five must exist for the environment you are targeting. The error names the
+parameter, so work through them until plan gets past the data lookups.
+
 > **State sensitivity:** these values are read at apply time and injected as
 > Lambda env vars, so they end up in Terraform state. That is why the S3 backend
 > must be encrypted and access-controlled. The follow-up is to have the app read
@@ -131,17 +142,11 @@ npx nx run @fridgeezy/api:prune          # build + package.json + lockfile + wor
 npm ci --omit=dev --prefix apps/api/dist
 ```
 
-### sharp
-
-`sharp` ships platform-native binaries. Installing on macOS produces
-darwin-arm64 binaries, which fail on Lambda. Install it for the target platform
-explicitly (defaults are `arm64` / glibc):
-
-```bash
-npm install --prefix apps/api/dist --os=linux --libc=glibc --cpu=arm64 sharp
-```
-
-If `lambda_architecture` is set to `x86_64`, use `--cpu=x64`.
+There are no native binaries in the artifact. `sharp` used to require a
+cross-platform install step here (macOS produces darwin-arm64 binaries, which
+fail on Lambda), but it was never actually imported and has been removed —
+recipe images come from a `@google/genai` call and are uploaded straight to
+Supabase storage. If a native dependency is ever added back, that step returns.
 
 ## Deploy
 

@@ -49,6 +49,7 @@ npm run api            # nx run api:serve — Express on http://localhost:8000
 npm run build:all      # nx run-many -t build --all
 npm run build:shared   # build only tag:scope:shared libs
 npm run lint:all
+npm run knip           # dead files, exports and dependencies
 
 npx nx run @fridgeezy/api:build
 npx tsc --noEmit -p apps/api/tsconfig.app.json    # type check the API
@@ -111,6 +112,22 @@ precedes `'_'`. Ingredients are **not** seeded by `db reset`; run
 Evals (`npx nx run @fridgeezy/api:<target>`): `eval`, `calibrate`,
 `calibrate-ingredients`, `calibrate-authenticity`, `eval-model-migration`,
 `check-streaming-conformance`.
+
+### knip
+
+`npm run knip` finds dead files, exports and dependencies. Config in
+`knip.json`. Two things it cannot infer on its own, so they are declared there:
+
+- **Entry points Nx knows about but knip does not.** `apps/database`'s scripts
+  are invoked by `nx:run-commands` through `jiti`, and the evals by their own
+  targets — nothing imports either, so without listing them every one reads as
+  dead code.
+- **`eslint.base.config.mjs`.** knip's eslint plugin looks for
+  `eslint.config.*`; the shared base here has a different name, so every lint
+  plugin looked unused until it was added as a root entry.
+
+It reports `apps/api/src/types/*.d.ts` as unused — ambient declarations are
+consumed via the global scope, not by import — hence the `ignore` there.
 
 ## Layout
 

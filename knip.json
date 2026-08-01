@@ -1,0 +1,42 @@
+{
+    "$schema": "https://unpkg.com/knip@5/schema.json",
+    "ignoreExportsUsedInFile": {
+        "interface": true,
+        "type": true
+    },
+    "workspaces": {
+        ".": {
+            "entry": [
+                "eslint.base.config.mjs"
+            ]
+        },
+        "apps/api": {
+            "entry": [
+                "src/main.ts",
+                "src/lambda.ts",
+                "src/evals/**/*.eval.ts",
+                "src/evals/**/*.check.ts"
+            ],
+            "project": [
+                "src/**/*.ts"
+            ],
+            "ignore": [
+                "src/types/*.d.ts"
+            ]
+        },
+        "apps/database": {
+            "entry": [
+                "operations/**/*.ts",
+                "codegen/**/*.ts"
+            ],
+            "project": [
+                "{operations,codegen}/**/*.ts"
+            ]
+        },
+        "libs/*": {
+            "project": [
+                "src/**/*.ts"
+            ]
+        }
+    }
+}

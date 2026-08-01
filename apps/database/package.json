@@ -107,7 +107,10 @@
         }
     },
     "dependencies": {
-        "ts-case-convert": "*",
-        "@fridgeezy/toolkit": "0.0.1"
+        "@fridgeezy/genai": "0.0.1",
+        "@fridgeezy/openai": "0.0.1",
+        "@fridgeezy/supabase": "0.0.1",
+        "@fridgeezy/toolkit": "0.0.1",
+        "ts-case-convert": "*"
     }
 }

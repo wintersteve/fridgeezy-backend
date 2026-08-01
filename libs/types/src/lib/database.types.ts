@@ -1350,6 +1350,7 @@ export type Database = {
       }
       singularize_token: { Args: { tok: string }; Returns: string }
       text_to_bytea: { Args: { data: string }; Returns: string }
+      title_case_name: { Args: { input: string }; Returns: string }
       urlencode:
         | { Args: { data: Json }; Returns: string }
         | {

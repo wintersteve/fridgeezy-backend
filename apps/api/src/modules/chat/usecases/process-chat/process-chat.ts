@@ -1,7 +1,6 @@
 import { ChatRequestSchema } from "@fridgeezy/schemas";
 import type { Request, Response } from "express";
 
-import { getRecipeSuggestionsTool } from "../../../ai/tools";
 import type { PartialRecipeSuggestion } from "../../../recipes/services/search-recipe-suggestions";
 import {
     convertToolsToOpenAiTools,
@@ -12,6 +11,7 @@ import {
     parseJsonBody,
     writeSseEvent,
 } from "../../services";
+import { getRecipeSuggestionsTool } from "../../tools";
 
 const SYSTEM_PROMPT = `You are a helpful recipe assistant. When users ask questions about recipes, ingredients, dishes, sauces, cooking methods, or food-related topics, follow this pattern:
 

@@ -221,10 +221,16 @@ those frames incrementally, which is why frame shapes are part of the contract.
 
 ### Chat tool calling
 
-`apps/api/src/modules/ai/tools` holds tool definitions (zod input/output schemas +
-handler). `modules/chat` converts them to OpenAI function-calling schemas
-(`convert-tools-to-openai.ts`) and executes the handlers directly — there is no
-MCP server or transport in this repo.
+`apps/api/src/modules/chat/tools` holds tool definitions (zod input/output
+schemas + handler). `modules/chat` converts them to OpenAI function-calling
+schemas (`convert-tools-to-openai.ts`) and executes the handlers directly — there
+is no MCP server or transport in this repo.
+
+They live under `chat` because chat is the only caller. They were briefly their
+own top-level `modules/ai`, which broke the convention every other module
+follows — routes + controller + usecases + services — by owning no route at all.
+If a second consumer ever appears, promoting them back out is the moment to do
+it, not before.
 
 ### Persistence
 

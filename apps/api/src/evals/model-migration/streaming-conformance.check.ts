@@ -3,6 +3,7 @@ import {
     AnthropicStreamEvent,
     ChatStreamEvent,
     toAnthropicMessages,
+    toAnthropicImageBlock,
     toChatStreamEvents,
     toCompletionChunks,
     toFinishReason,
@@ -614,6 +615,64 @@ function checkMessageTranslation(): void {
     );
 }
 
+
+function checkImageTranslation(): void {
+    console.log("\nVision — image wrapped the way Anthropic expects:");
+
+    // OpenAI infers the media type from the data URI; Anthropic needs it named
+    // separately, so a base64 payload has to be split from its prefix.
+    const bare = toAnthropicImageBlock({
+        kind: "base64",
+        data: "AAAB",
+        mimeType: "image/png",
+    });
+
+    check(
+        `${"base64".padEnd(17)} media_type named separately`,
+        bare.type === "image" &&
+            bare.source.type === "base64" &&
+            "media_type" in bare.source &&
+            bare.source.media_type === "image/png" &&
+            "data" in bare.source &&
+            bare.source.data === "AAAB",
+        JSON.stringify(bare)
+    );
+
+    // Callers reasonably hold the payload either way. Sending the prefix inside
+    // the base64 field fails server-side with an opaque error, so it is stripped
+    // rather than trusted.
+    const prefixed = toAnthropicImageBlock({
+        kind: "base64",
+        data: "data:image/jpeg;base64,AAAB",
+        mimeType: "image/jpeg",
+    });
+
+    check(
+        `${"data: prefix".padEnd(17)} stripped from the payload`,
+        "data" in prefixed.source && prefixed.source.data === "AAAB",
+        JSON.stringify(prefixed)
+    );
+
+    const url = toAnthropicImageBlock({ kind: "url", data: "https://x/y.jpg" });
+
+    check(
+        `${"url".padEnd(17)} passed through as a url source`,
+        url.source.type === "url" &&
+            "url" in url.source &&
+            url.source.url === "https://x/y.jpg",
+        JSON.stringify(url)
+    );
+
+    const defaulted = toAnthropicImageBlock({ kind: "base64", data: "AAAB" });
+
+    check(
+        `${"no mimeType".padEnd(17)} defaults to image/jpeg`,
+        "media_type" in defaulted.source &&
+            defaulted.source.media_type === "image/jpeg",
+        "Anthropic rejects a base64 source with no media_type"
+    );
+}
+
 async function main() {
     console.log(
         "Phase 1 streaming-shape conformance — offline, deterministic, no spend\n" +
@@ -637,6 +696,7 @@ async function main() {
     await checkToolCallStreaming();
     checkFinishReasonMapping();
     checkMessageTranslation();
+    checkImageTranslation();
 
     console.log("\n" + "=".repeat(72));
     console.log(`${passed} passed, ${failed} failed`);

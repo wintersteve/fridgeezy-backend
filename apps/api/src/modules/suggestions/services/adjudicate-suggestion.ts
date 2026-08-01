@@ -18,7 +18,7 @@ export async function adjudicateSameDish(
     dishB: string
 ): Promise<boolean> {
     try {
-        const content = await generateCompletion({
+        const { text: content } = await generateCompletion({
             model: { openai: "gpt-4o-mini" },
             system: SYSTEM_PROMPT,
             user: `DISH A:\n${dishA}\n\nDISH B:\n${dishB}`,

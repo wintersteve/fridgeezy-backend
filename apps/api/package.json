@@ -3,7 +3,9 @@
     "version": "0.0.1",
     "private": true,
     "nx": {
-        "tags": ["scope:app"],
+        "tags": [
+            "scope:app"
+        ],
         "targets": {
             "build": {
                 "executor": "@nx/esbuild:esbuild",
@@ -146,7 +148,6 @@
         "express": "^5.2.1",
         "cors": "^2.8.5",
         "dotenv": "^17.2.3",
-        "openai": "^6.15.0",
         "zod": "^4.2.1",
         "@fridgeezy/domain": "0.0.1",
         "@fridgeezy/genai": "0.0.1",

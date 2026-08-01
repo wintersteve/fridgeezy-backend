@@ -235,7 +235,32 @@ change is validated in isolation before touching hosting.
       extraction and the embedding call sites still import `libs/openai` at top
       level, and it throws at import. A Bedrock-only Lambda needs the next two
       checkboxes plus Phase 4 first.
-- [ ] Port the **vision** path (ingredient extraction) to the Bedrock vision model.
+- [x] Port the **vision** path (ingredient extraction) to the Bedrock vision model.
+      Extraction is one-shot, so it runs through `generateCompletion` with an
+      `image` parameter rather than needing its own entry point. The providers
+      differ only in the wrapper: OpenAI takes one `image_url` string with base64
+      as a data URI, Anthropic a `source` object naming `media_type` separately —
+      `toAnthropicImageBlock` handles that, and strips a `data:` prefix if the
+      caller passes one, since sending it inside the base64 field fails
+      server-side with an opaque error.
+      **`generateCompletion` now returns `{ text, finishReason }`.** Extraction
+      caps output and reports a specific "try a clearer image" error when the
+      model is cut off, and truncation is only distinguishable from plain bad
+      JSON by the stop reason — the old bare-string return threw that away. The
+      three adjudicators read `.text` and ignore it.
+      **`detail: "high"` has no Anthropic counterpart.** Anthropic picks the
+      resolution itself, and Sonnet 4.6 caps the long edge at 1568px against
+      Sonnet 5's 2576px. Extraction accuracy on busy images is therefore a
+      per-model question this translation does *not* preserve — measure it, per
+      the Phase 0 note, rather than assuming it carries over.
+      Verified on the OpenAI branch end to end with a real photo: 12 ingredients
+      with correct hierarchy (`red_bell_pepper` -> `bell_pepper`). Offline
+      coverage for the Anthropic wrapper is in the conformance check, now 40
+      assertions.
+      **This completes the call-site swap.** No module in `apps/api` imports a
+      provider SDK any more; `openai` has been dropped from its dependencies. The
+      only remaining direct `@fridgeezy/openai` imports are `generateEmbedding`
+      (Phase 4, a corpus migration) and the eval harness's deliberate baseline.
 - [ ] Run the Phase 0 eval harness on every path. Re-tune prompts only where the
       new model regresses; record before/after scores.
 - [ ] **Gate:** do not proceed to hosting until authenticity + structure scores

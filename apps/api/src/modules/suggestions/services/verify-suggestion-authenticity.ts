@@ -50,7 +50,7 @@ Respond with a single JSON object and nothing else:
 export async function classifySuggestionAuthenticity(
     suggestion: GenerateSuggestionResponseDto
 ): Promise<AuthenticityVerdict> {
-    const content = await generateCompletion({
+    const { text: content } = await generateCompletion({
         model: { openai: "gpt-4o-mini" },
         system: SYSTEM_PROMPT,
         user: describeSuggestion(

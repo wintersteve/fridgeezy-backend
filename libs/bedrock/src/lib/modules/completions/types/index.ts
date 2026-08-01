@@ -25,6 +25,35 @@ export type ThinkingType = "adaptive" | "enabled" | "disabled";
 
 export type ThinkingEffort = "low" | "medium" | "high";
 
+/**
+ * An image for a vision request, in whichever form the caller already has.
+ *
+ * Provider-neutral because the two SDKs disagree about the wrapper but not the
+ * payload: OpenAI takes a single `image_url` string (a data URI for base64),
+ * Anthropic takes a `source` object that names the media type separately.
+ */
+export interface ImageInput {
+    kind: "base64" | "url";
+    /** Raw base64 payload (no data: prefix) when `kind` is base64; else the URL. */
+    data: string;
+    /** Required for base64 — Anthropic needs it as its own field. */
+    mimeType?: string;
+}
+
+/**
+ * A one-shot completion, with the stop reason kept alongside the text.
+ *
+ * The reason is not decoration: ingredient extraction caps output and reports a
+ * specific "try a clearer image" error when the model is cut off, which is only
+ * distinguishable from malformed JSON by this field. Returning a bare string
+ * threw that away.
+ */
+export interface CompletionResult {
+    text: string;
+    /** Mapped to the OpenAI vocabulary — see `toFinishReason`. */
+    finishReason: string | null;
+}
+
 export interface BedrockCompletionParams {
     /** Inference profile ID. Defaults to {@link BEDROCK_MODEL}. */
     model?: string;
@@ -32,6 +61,8 @@ export interface BedrockCompletionParams {
     system?: string;
     /** The user turn. */
     user: string;
+    /** Optional image, making this a vision request. */
+    image?: ImageInput;
     /**
      * Bedrock requires an explicit output cap where the OpenAI path sets none.
      * Defaults to {@link BEDROCK_MAX_TOKENS}.

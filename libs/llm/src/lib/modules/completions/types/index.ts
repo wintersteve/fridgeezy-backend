@@ -1,8 +1,16 @@
-import type { ThinkingEffort, ThinkingType } from "@fridgeezy/bedrock";
+import type {
+    ImageInput,
+    ThinkingEffort,
+    ThinkingType,
+} from "@fridgeezy/bedrock";
 
 import type { LlmProvider } from "../../provider";
 
-export type { CompletionChunk } from "@fridgeezy/bedrock";
+export type {
+    CompletionChunk,
+    CompletionResult,
+    ImageInput,
+} from "@fridgeezy/bedrock";
 
 /**
  * Model IDs are provider-specific and unrelated (`gpt-4.1` vs
@@ -70,4 +78,11 @@ export interface GenerateCompletionParams
      * using this flag already does, since the OpenAI prompts say so too.
      */
     json?: boolean;
+    /**
+     * Makes this a vision request. The two providers wrap images differently —
+     * OpenAI takes a single `image_url` string, Anthropic a `source` object with
+     * the media type as its own field — so call sites describe the image once
+     * and the branch below shapes it.
+     */
+    image?: ImageInput;
 }

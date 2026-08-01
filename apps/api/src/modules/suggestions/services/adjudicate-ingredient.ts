@@ -95,7 +95,7 @@ export async function adjudicateIngredient(
         : `NAME: ${name}\nCANDIDATE: (none)`;
 
     try {
-        const content = await generateCompletion({
+        const { text: content } = await generateCompletion({
             model: { openai: "gpt-4o-mini" },
             system: SYSTEM_PROMPT,
             user: userPrompt,

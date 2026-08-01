@@ -1,6 +1,5 @@
-import { openai } from "@fridgeezy/openai";
+import { generateCompletion } from "@fridgeezy/llm";
 import { createStreamHandler } from "@fridgeezy/streaming-server";
-import OpenAI from "openai";
 import { z } from "zod/v4";
 
 // Request body schema - accepts base64 image or URL
@@ -73,41 +72,21 @@ Confidence levels:
 
 No markdown, no code blocks, just the JSON object.`;
 
-        // Build the image content based on type
-        const imageContent: OpenAI.Chat.Completions.ChatCompletionContentPartImage =
-            body.imageType === "url"
-                ? {
-                      type: "image_url",
-                      image_url: { url: body.image, detail: "high" },
-                  }
-                : {
-                      type: "image_url",
-                      image_url: {
-                          url: `data:${body.mimeType};base64,${body.image}`,
-                          detail: "high",
-                      },
-                  };
-
-        const response = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [
-                { role: "system", content: systemPrompt },
-                {
-                    role: "user",
-                    content: [
-                        imageContent,
-                        {
-                            type: "text",
-                            text: "Identify all the food ingredients visible in this image.",
-                        },
-                    ],
-                },
-            ],
-            max_completion_tokens: 2000,
+        const { text: content, finishReason } = await generateCompletion({
+            model: { openai: "gpt-4o" },
+            system: systemPrompt,
+            user: "Identify all the food ingredients visible in this image.",
+            image: {
+                kind: body.imageType,
+                data: body.image,
+                mimeType: body.mimeType,
+            },
+            // Both providers are capped here, unlike the adjudicators: this
+            // output is a whole ingredient list, so the cap is a real ceiling
+            // rather than a cost guard, and a Bedrock run needs its own budget
+            // that clears the thinking allowance.
+            maxTokens: { openai: 2000, bedrock: 4000 },
         });
-
-        const choice = response.choices[0];
-        const content = choice?.message?.content?.trim();
 
         if (!content) {
             return {
@@ -119,7 +98,7 @@ No markdown, no code blocks, just the JSON object.`;
 
         // A response cut off at the token cap yields invalid JSON — surface it as
         // a clear, actionable error instead of a generic parse failure.
-        if (choice.finish_reason === "length") {
+        if (finishReason === "length") {
             return {
                 type: "raw" as const,
                 statusCode: 500,

@@ -1,2 +1,0 @@
--- Seed data for recipes
-

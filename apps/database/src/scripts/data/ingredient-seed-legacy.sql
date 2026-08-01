@@ -1,3 +1,15 @@
+-- LEGACY, INERT — kept for its data, not to be run.
+--
+-- Every line below is commented out and has been for a long time; it seeded
+-- nothing. It used to live in supabase/seeds/ as 005_ingredients.sql, where it
+-- looked like an active seed but contributed nothing to `db reset`.
+--
+-- It is kept because it still holds curated content: roughly 384 distinct
+-- ingredient names against the 305 in ingredient-seed.json beside it. Those
+-- extras are worth merging into the JSON — which is the live authoring format,
+-- expanded by generate-ingredient-seed and loaded by seed-ingredients — after
+-- which this file can be deleted.
+
 -- -- Seed essential ingredients covering 99% of world cuisine
 -- -- Organized by category with parent-child relationships
 --

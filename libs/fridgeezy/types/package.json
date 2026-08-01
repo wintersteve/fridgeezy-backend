@@ -26,9 +26,6 @@
     "supabase"
   ],
   "license": "MIT",
-  "scripts": {
-    "generate:types": "node ../../../tools/scripts/generate-entity-types.mjs"
-  },
   "publishConfig": {
     "access": "public"
   },

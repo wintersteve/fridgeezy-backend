@@ -26,9 +26,6 @@
         "client"
     ],
     "license": "MIT",
-    "scripts": {
-        "generate:types": "node ../../tools/scripts/generate-entity-types.mjs"
-    },
     "dependencies": {
         "@fridgeezy/domain": "*",
         "@fridgeezy/schemas": "*",

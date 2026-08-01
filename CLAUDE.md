@@ -47,9 +47,23 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
 
 - `up` / `reset` — `supabase migration up --linked` / `db reset --linked`
 - `types` — regenerate `database.types.ts` **and** the derived entity types
-- `embed-categories|embed-units|embed-tags|embed-suggestions|embed-recipes`
-- `seed-ingredients`, `generate-ingredient-seed`, `generate-ingredient-substitutes`
-- `dedupe-ingredients`, `dedupe-recipes`, `normalize-names`, `generate-category-images`
+- `embed-categories|embed-units|embed-tags|embed-suggestions|embed-recipes` —
+  all five run one script, `src/scripts/generate-embeddings.ts <target>`. They
+  backfill only rows missing a vector; append `-- --all` to re-embed everything,
+  which is what you want after changing a text builder.
+- `seed-ingredients`, `generate-ingredient-seed`, `dedupe-ingredients`,
+  `dedupe-recipes`, `generate-category-images`
+
+The Supabase project root is **`apps/database/`**, not `apps/database/src/` —
+that is where `config.toml`, `migrations/` and `seeds/` live, and where the CLI
+resolves it. They must not diverge: when they did, `db dump`, `migration repair`
+and `migration list` all failed in ways that looked unrelated, and
+`migration list` reported an empty Local column while happily connecting.
+
+Seeds run in glob order (`./seeds/*.sql`), so the numeric prefixes are load
+order, not decoration — `0021_…` once sorted ahead of `002_…` because `'1'`
+precedes `'_'`. Ingredients are **not** seeded by `db reset`; run
+`seed-ingredients` after one.
 
 Evals (`npx nx run @fridgeezy/api:<target>`): `eval`, `calibrate`,
 `calibrate-ingredients`, `calibrate-authenticity`, `eval-model-migration`,

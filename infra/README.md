@@ -134,13 +134,36 @@ Terraform >= 1.10 locks via `use_lockfile`, so no DynamoDB table is needed.
 
 ## Build the artifact
 
-Terraform zips `apps/api/dist` — it does not build it. `@fridgeezy/api` builds
-unbundled (`bundle: false`), so `node_modules` must be installed into the output:
+Terraform zips `apps/api/dist` — it does not build it. Use the script:
 
 ```bash
-npx nx run @fridgeezy/api:prune          # build + package.json + lockfile + workspace_modules
-npm ci --omit=dev --prefix apps/api/dist
+./infra/build-artifact.sh
 ```
+
+It runs the build, installs production dependencies into the output, repairs the
+workspace links, and verifies the result. Do not run the two underlying commands
+by hand: that sequence produced an artifact which booted perfectly locally and
+died on Lambda, twice.
+
+**Why it needs a script.** `@fridgeezy/api` builds unbundled, so `node_modules`
+has to be installed into `dist/` — and `nx run api:prune` *recreates* `dist/`,
+so doing it in the wrong order silently deletes the install. Then `npm ci` links
+`@fridgeezy/*` according to the pruned lockfile, which resolves them to
+repo-relative paths like `libs/schemas`; inside `dist/` that lands on
+`dist/libs/schemas`, the compiled JS output, which has no `package.json`. The
+symlink exists and points at something real, and is still unusable. `prune`
+already stages correct copies under `dist/workspace_modules/`, so the script
+swaps those in.
+
+**Neither failure is visible locally.** Running `node apps/api/dist/main.js`
+from inside the repo lets Node walk up past `dist/` and resolve `@fridgeezy/*`
+from the repo's own `node_modules`. Lambda has no parent directory to walk up
+to. To test an artifact honestly, copy it somewhere outside the repo and boot it
+there — that reproduces the failure in seconds, without a deploy.
+
+Both failure modes are now Terraform preconditions, so a bad artifact stops at
+plan time instead of becoming a function that answers HTTP 200 with
+`Runtime.ImportModuleError` in the body.
 
 There are no native binaries in the artifact. `sharp` used to require a
 cross-platform install step here (macOS produces darwin-arm64 binaries, which

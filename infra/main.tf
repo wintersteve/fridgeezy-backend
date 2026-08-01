@@ -43,7 +43,20 @@ data "archive_file" "api" {
   lifecycle {
     precondition {
       condition     = fileexists("${var.artifact_dir}/node_modules/express/package.json")
-      error_message = "Artifact at ${var.artifact_dir} has no installed dependencies. Run:\n  npx nx run @fridgeezy/api:prune\n  npm ci --omit=dev --prefix apps/api/dist\nin that order — prune rebuilds dist/ and would wipe an earlier install."
+      error_message = "Artifact at ${var.artifact_dir} has no third-party dependencies installed. Run ./infra/build-artifact.sh"
+    }
+
+    # Checked separately from express because the two fail for unrelated
+    # reasons and only this one is invisible locally: `npm ci` links
+    # @fridgeezy/* per the pruned lockfile, which resolves them to
+    # repo-relative paths like `libs/schemas`. Inside dist/ that lands on the
+    # compiled output, which has no package.json — so the symlink exists,
+    # points at something real, and is still unusable on Lambda. Running the
+    # app from inside the repo hides it entirely, because Node walks up and
+    # finds the repo's own node_modules.
+    precondition {
+      condition     = fileexists("${var.artifact_dir}/node_modules/@fridgeezy/schemas/package.json")
+      error_message = "Artifact at ${var.artifact_dir} has workspace packages that will not resolve on Lambda. Run ./infra/build-artifact.sh"
     }
   }
 }

@@ -59,19 +59,26 @@ took the vacated number. The remote already had `…007` marked applied, so
 
 Consolidating removes the whole class of problem: one baseline, no renumbering.
 
-## Two live defects found, preserved verbatim, NOT fixed here
+## Two live defects found during the consolidation
 
-A consolidation must reproduce the schema exactly. Both of these deserve their
-own migration with a backfill:
+A consolidation must reproduce the schema exactly, so neither was fixed inside
+the baseline itself.
 
-1. **Ingredient canonical ids disagree with themselves.**
-   `set_ingredient_canonical_id()` (the BEFORE INSERT trigger) does not
-   singularise; `ingredient_canonical_id()` (what callers compute with) does.
-   `persist_recipe` computes the singular form for its `ON CONFLICT
-   (canonical_id)` target, and the trigger then overwrites it with the plural —
-   so the conflict never matches. **169 of 724 ingredient rows** have a
-   `canonical_id` that a lookup will not find. That is the duplicate-ingredient
-   bug.
+1. **Ingredient canonical ids disagreed with themselves — FIXED in
+   `20260801000016`.** `set_ingredient_canonical_id()` (the BEFORE INSERT
+   trigger) did not singularise; `ingredient_canonical_id()` (what callers
+   compute with) does. `persist_recipe` computes the singular form for its
+   `ON CONFLICT (canonical_id)` target and the trigger overwrote it with the
+   plural, so the conflict never matched and plural spellings produced duplicate
+   ingredients — **170 of 729 rows** carried an id no lookup would find.
+
+   The fix merges the duplicates (one group: `Shiitake Mushrooms` +
+   `shiitake mushroom`), points the trigger at `ingredient_canonical_id()` so
+   the two can never drift again, and backfills. Verified end-to-end: inserting
+   `'Zzztest Berries'` now yields `zzztest_berry`, and a follow-up
+   `ON CONFLICT` insert of `'zzztest berry'` reuses that row instead of creating
+   a second one. `…0003` and `…0012` keep the original definitions on purpose —
+   a reset replays them and then the fix.
 
 2. **`handle_new_user()` is invisible to the repo.** It is fired by
    `on_auth_user_created` on `auth.users`, outside the public schema, and no

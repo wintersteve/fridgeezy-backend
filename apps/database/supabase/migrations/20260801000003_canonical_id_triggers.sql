@@ -5,11 +5,12 @@
 -- rule, and set_ingredient_canonical_id in particular does NOT singularise the
 -- way ingredient_canonical_id() does.
 --
--- That divergence is a real defect — 169 of 724 ingredient rows have a
--- canonical_id that ingredient_canonical_id(name) would not produce, so a
--- lookup keyed on the function misses them. It is preserved here on purpose: a
--- schema consolidation must not quietly change behaviour. Fix it as its own
--- migration, with a backfill, so the change is reviewable and reversible.
+-- That divergence was a real defect — 170 of 729 ingredient rows had a
+-- canonical_id that ingredient_canonical_id(name) would not produce, so lookups
+-- keyed on the function missed them and created duplicates. It is reproduced
+-- here as-was because a consolidation must not quietly change behaviour;
+-- 20260801000016 fixes it (trigger + merge + backfill). Do not "correct" this
+-- file — a reset replays it and then the fix, which is the honest history.
 
 create or replace function public.set_category_canonical_id()
     returns trigger

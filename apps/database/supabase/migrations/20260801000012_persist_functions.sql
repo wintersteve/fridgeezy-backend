@@ -2,15 +2,14 @@
 -- suggestion streaming. Each one inserts a parent row plus all of its children
 -- in a single call, so a half-written recipe is impossible.
 --
--- KNOWN DEFECT, preserved verbatim: persist_recipe computes an ingredient's
--- canonical_id with ingredient_canonical_id() — which singularises — and relies
--- on ON CONFLICT (canonical_id) to reuse an existing row. But the BEFORE INSERT
--- trigger set_ingredient_canonical_id() then OVERWRITES that value with the
--- non-singularising rule, so the conflict target never sees the singular form.
--- The result is 169 of 724 ingredient rows whose canonical_id does not match
--- what a lookup computes, and duplicate ingredients for plural spellings.
--- Fixing it needs a trigger change plus a backfill; that belongs in its own
--- migration, not in a consolidation whose job is to change nothing.
+-- persist_recipe computes an ingredient's canonical_id with
+-- ingredient_canonical_id() — which singularises — and relies on
+-- ON CONFLICT (canonical_id) to reuse an existing row. At the time of this
+-- baseline the BEFORE INSERT trigger overwrote that value with a
+-- non-singularising rule, so the conflict target never saw the singular form
+-- and plural spellings produced duplicate ingredients. 20260801000016 makes the
+-- trigger defer to the same helper, so the two now agree and this function
+-- needs no change.
 
 create or replace function public.persist_suggestion(p_name text, p_description text, p_difficulty difficulty_type,
                                                      p_ingredient_ids uuid[], p_tag_ids uuid[], p_embedding vector,

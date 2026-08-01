@@ -3,7 +3,9 @@
     "version": "0.0.1",
     "private": true,
     "nx": {
-        "tags": ["scope:app"],
+        "tags": [
+            "scope:app"
+        ],
         "targets": {
             "embed-ingredients": {
                 "executor": "nx:run-commands",
@@ -101,40 +103,6 @@
                     "command": "npx jiti src/scripts/generate-category-images.ts",
                     "cwd": "apps/database"
                 }
-            },
-            "prune-lockfile": {
-                "dependsOn": [
-                    "build"
-                ],
-                "cache": true,
-                "executor": "@nx/js:prune-lockfile",
-                "outputs": [
-                    "{workspaceRoot}/apps/database/dist/package.json",
-                    "{workspaceRoot}/apps/database/dist/package-lock.json"
-                ],
-                "options": {
-                    "buildTarget": "build"
-                }
-            },
-            "copy-workspace-modules": {
-                "dependsOn": [
-                    "build"
-                ],
-                "cache": true,
-                "outputs": [
-                    "{workspaceRoot}/apps/database/dist/workspace_modules"
-                ],
-                "executor": "@nx/js:copy-workspace-modules",
-                "options": {
-                    "buildTarget": "build"
-                }
-            },
-            "prune": {
-                "dependsOn": [
-                    "prune-lockfile",
-                    "copy-workspace-modules"
-                ],
-                "executor": "nx:noop"
             }
         }
     },

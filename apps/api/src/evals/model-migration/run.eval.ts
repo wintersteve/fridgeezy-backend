@@ -24,10 +24,8 @@ import {
     buildRecipeSystemPrompt,
     buildRecipeUserPrompt,
 } from "../../modules/recipes/usecases/generate-recipe/generate-recipe";
-import {
-    buildSuggestionsUserPrompt,
-    SUGGESTIONS_SYSTEM_PROMPT,
-} from "../../modules/suggestions/services/generate-suggestions-stream";
+import { buildSuggestionsUserPrompt } from "../../modules/suggestions/services/build-suggestions-user-prompt";
+import { SUGGESTIONS_SYSTEM_PROMPT } from "../../modules/suggestions/services/generate-suggestions-stream";
 
 import {
     BASELINE,

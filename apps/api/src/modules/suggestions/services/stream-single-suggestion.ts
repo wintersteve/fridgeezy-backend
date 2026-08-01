@@ -7,8 +7,8 @@ import {
     GenerateSuggestionRequestDto,
     GenerateSuggestionResponseSchema,
 } from "@fridgeezy/schemas";
-import { castArray } from "@fridgeezy/toolkit";
 
+import { buildSuggestionsUserPrompt } from "./build-suggestions-user-prompt";
 import { extractStableJsonFields } from "./extract-stable-json-fields";
 import {
     persistOrReuseSuggestion,
@@ -58,25 +58,6 @@ Emit the keys in EXACTLY this order:
 - ingredients (array of strings)
 - tags (array of strings with component, cuisine, and dietary tags)
 - name_alt (the OTHER name: the native spelling if \`name\` is English, the English translation if \`name\` is native. Use null when the dish is only ever known by one name — do NOT echo \`name\`, and do NOT invent a translation nobody uses)`;
-
-const buildUserPrompt = (request: GenerateSuggestionRequestDto): string => {
-    const formatFilter = (filter: string, value?: string | string[]) => {
-        const isValid = Array.isArray(value) ? value.length > 0 : !!value;
-        return isValid ? `${filter}: ${castArray(value).join(",")}` : "";
-    };
-
-    return [
-        formatFilter("Blacklist", request.blacklist),
-        formatFilter("Component", request.component),
-        formatFilter("Course", request.course),
-        formatFilter("Cuisine", request.cuisine),
-        formatFilter("Difficulty", request.difficulty),
-        formatFilter("Dietary Restrictions", request.dietaryRestrictions),
-        formatFilter("Ingredients", request.ingredients),
-    ]
-        .filter(Boolean)
-        .join("\n");
-};
 
 /**
  * The subset of a suggestion's raw fields that have streamed in so far. Fields
@@ -205,7 +186,7 @@ export async function streamSingleSuggestion(
     const stream = generateStream({
         model: { openai: "gpt-4.1" },
         system: SYSTEM_PROMPT,
-        user: buildUserPrompt(request),
+        user: buildSuggestionsUserPrompt(request),
         provider,
     });
 

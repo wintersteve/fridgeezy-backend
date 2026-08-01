@@ -1,3 +1,4 @@
+export * from "./build-suggestions-user-prompt";
 export * from "./fetch-enriched-suggestion";
 export * from "./find-recipe-for-dish";
 export * from "./find-suggestion-by-name";

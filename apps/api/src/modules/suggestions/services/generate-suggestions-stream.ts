@@ -6,8 +6,8 @@ import {
     GenerateSuggestionResponseSchema,
 } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
-import { castArray } from "@fridgeezy/toolkit";
 
+import { buildSuggestionsUserPrompt } from "./build-suggestions-user-prompt";
 import {
     buildExistingDishesBlock,
     listCatalogDishes,
@@ -62,27 +62,6 @@ Each recipe object must include:
 - difficulty (easy, medium, or hard)
 - ingredients (array of strings)
 - tags (array of strings with component, cuisine, and dietary tags)`;
-
-export const buildSuggestionsUserPrompt = (
-    request: GenerateSuggestionRequestDto
-): string => {
-    const formatFilter = (filter: string, value?: string | string[]) => {
-        const isValid = Array.isArray(value) ? value.length > 0 : !!value;
-        return isValid ? `${filter}: ${castArray(value).join(",")}` : "";
-    };
-
-    return [
-        formatFilter("Blacklist", request.blacklist),
-        formatFilter("Component", request.component),
-        formatFilter("Course", request.course),
-        formatFilter("Cuisine", request.cuisine),
-        formatFilter("Difficulty", request.difficulty),
-        formatFilter("Dietary Restrictions", request.dietaryRestrictions),
-        formatFilter("Ingredients", request.ingredients),
-    ]
-        .filter(Boolean)
-        .join("\n");
-};
 
 /**
  * `provider` overrides `LLM_PROVIDER` for this call only, which is how the two

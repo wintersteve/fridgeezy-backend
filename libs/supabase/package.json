@@ -31,8 +31,7 @@
         "@fridgeezy/schemas": "*",
         "@fridgeezy/toolkit": "*",
         "@fridgeezy/types": "*",
-        "@supabase/supabase-js": "^2.89.0",
-        "vite": "^7.0.0"
+        "@supabase/supabase-js": "^2.89.0"
     },
     "publishConfig": {
         "access": "public"

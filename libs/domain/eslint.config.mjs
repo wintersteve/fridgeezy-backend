@@ -12,6 +12,10 @@ export default [
                         "{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}",
                         "{projectRoot}/vite.config.{js,ts,mjs,mts}",
                     ],
+                    // vite is the bundler, not something the built package
+                    // imports. Left in `dependencies` it was installed into the
+                    // Lambda artifact by `npm ci --omit=dev`.
+                    ignoredDependencies: ["vite"],
                 },
             ],
         },

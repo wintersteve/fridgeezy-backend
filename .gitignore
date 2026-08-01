@@ -18,6 +18,12 @@ yarn-error.log*
 # them were tracked and churned on each commit.
 *.tsbuildinfo
 
+# Declarations emitted for the vite configs themselves. Generated, not source,
+# and not shipped by any package's `files` — but they sat outside dist/, so the
+# rules above never caught them and 14 were tracked across 7 libs.
+vite.config.d.mts
+vite.config.d.mts.map
+
 /.idea
 
 /.claude

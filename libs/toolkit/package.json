@@ -15,9 +15,6 @@
             "default": "./dist/index.js"
         }
     },
-    "dependencies": {
-        "vite": "^7.0.0"
-    },
     "nx": {
         "tags": [
             "scope:shared"

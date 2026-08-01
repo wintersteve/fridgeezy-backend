@@ -13,7 +13,7 @@ import { buildSuggestionSignature } from "@fridgeezy/toolkit";
  * and error handling are shared.
  *
  * Usage:
- *   npx jiti src/scripts/generate-embeddings.ts <target> [--all]
+ *   npx jiti operations/generate-embeddings.ts <target> [--all]
  *
  *   <target>  categories | units | tags | suggestions | recipes
  *   --all     re-embed every row, not just those missing one. Use after

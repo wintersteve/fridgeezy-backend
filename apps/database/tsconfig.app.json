@@ -9,8 +9,8 @@
         "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo"
     },
     "include": [
-        "src/**/*.ts",
-        "tools/**/*.ts"
+        "operations/**/*.ts",
+        "codegen/**/*.ts"
     ],
     "exclude": [
         "eslint.config.js",

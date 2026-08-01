@@ -14,14 +14,14 @@ config();
  * exists), dedupes by canonical_id, and writes the combined set to a reviewable
  * JSON file. Review it, then load it with seed-ingredients.ts.
  *
- *   OUT_FILE (default src/scripts/data/ingredient-seed.generated.json)
+ *   OUT_FILE (default operations/data/ingredient-seed.generated.json)
  *
  * This never writes the DB — generation and loading are separate on purpose so
  * the dataset can be reviewed/edited before anything is persisted.
  */
-const CORE_FILE = process.env.CORE_FILE ?? "src/scripts/data/ingredient-seed.json";
+const CORE_FILE = process.env.CORE_FILE ?? "operations/data/ingredient-seed.json";
 const OUT_FILE =
-    process.env.OUT_FILE ?? "src/scripts/data/ingredient-seed.generated.json";
+    process.env.OUT_FILE ?? "operations/data/ingredient-seed.generated.json";
 const MODEL = process.env.SEED_MODEL ?? "gpt-4o";
 
 interface SeedIngredient {

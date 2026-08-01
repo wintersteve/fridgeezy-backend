@@ -10,7 +10,7 @@
             "embed-ingredients": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti src/scripts/generate-embeddings.ts ingredients",
+                    "command": "npx jiti operations/generate-embeddings.ts ingredients",
                     "cwd": "apps/database",
                     "forwardAllArgs": true
                 }
@@ -18,7 +18,7 @@
             "embed-categories": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti src/scripts/generate-embeddings.ts categories",
+                    "command": "npx jiti operations/generate-embeddings.ts categories",
                     "cwd": "apps/database",
                     "forwardAllArgs": true
                 }
@@ -26,7 +26,7 @@
             "embed-units": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti src/scripts/generate-embeddings.ts units",
+                    "command": "npx jiti operations/generate-embeddings.ts units",
                     "cwd": "apps/database",
                     "forwardAllArgs": true
                 }
@@ -34,7 +34,7 @@
             "embed-tags": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti src/scripts/generate-embeddings.ts tags",
+                    "command": "npx jiti operations/generate-embeddings.ts tags",
                     "cwd": "apps/database",
                     "forwardAllArgs": true
                 }
@@ -42,7 +42,7 @@
             "embed-suggestions": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti src/scripts/generate-embeddings.ts suggestions",
+                    "command": "npx jiti operations/generate-embeddings.ts suggestions",
                     "cwd": "apps/database",
                     "forwardAllArgs": true
                 }
@@ -50,7 +50,7 @@
             "embed-recipes": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti src/scripts/generate-embeddings.ts recipes",
+                    "command": "npx jiti operations/generate-embeddings.ts recipes",
                     "cwd": "apps/database",
                     "forwardAllArgs": true
                 }
@@ -58,21 +58,21 @@
             "dedupe-ingredients": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti src/scripts/dedupe-ingredients.ts",
+                    "command": "npx jiti operations/dedupe-ingredients.ts",
                     "cwd": "apps/database"
                 }
             },
             "generate-ingredient-seed": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti src/scripts/generate-ingredient-seed.ts",
+                    "command": "npx jiti operations/generate-ingredient-seed.ts",
                     "cwd": "apps/database"
                 }
             },
             "seed-ingredients": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti src/scripts/seed-ingredients.ts",
+                    "command": "npx jiti operations/seed-ingredients.ts",
                     "cwd": "apps/database"
                 }
             },
@@ -93,14 +93,14 @@
             "types": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti tools/generate-types.ts && npx jiti tools/generate-entity-types.ts",
+                    "command": "npx jiti codegen/generate-types.ts && npx jiti codegen/generate-entity-types.ts",
                     "cwd": "apps/database"
                 }
             },
             "generate-category-images": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti src/scripts/generate-category-images.ts",
+                    "command": "npx jiti operations/generate-category-images.ts",
                     "cwd": "apps/database"
                 }
             }

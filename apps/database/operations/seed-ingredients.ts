@@ -26,7 +26,7 @@ config();
  *   - existing aliases are skipped
  */
 const APPLY = process.env.SEED_APPLY === "true";
-const SEED_FILE = process.env.SEED_FILE ?? "src/scripts/data/ingredient-seed.json";
+const SEED_FILE = process.env.SEED_FILE ?? "operations/data/ingredient-seed.json";
 const EMBED_MODEL = "text-embedding-3-small" as const;
 const EMBED_DIMS = 1536;
 const EMBED_CHUNK = 256;

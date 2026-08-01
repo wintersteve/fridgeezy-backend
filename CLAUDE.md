@@ -59,7 +59,7 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
 - `up` / `reset` — `supabase migration up --linked` / `db reset --linked`
 - `types` — regenerate `database.types.ts` **and** the derived entity types
 - `embed-ingredients|embed-categories|embed-units|embed-tags|embed-suggestions|embed-recipes`
-  — all six run one script, `src/scripts/generate-embeddings.ts <target>`. They
+  — all six run one script, `operations/generate-embeddings.ts <target>`. They
   backfill only rows missing a vector; append `-- --all` to re-embed everything,
   which is what you want after changing a text builder. `embed-ingredients` is
   the one to reach for after any bulk import: `seed-ingredients` embeds only the
@@ -70,16 +70,20 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
   when the catalog visibly holds two names for one thing ("scallion" /
   "green onion"). Dry run unless `DEDUP_APPLY=true`, and it costs ~5N LLM calls.
 
-Scripts sit in two directories, split by what they touch:
+Scripts sit in two directories, and the split is a safety boundary — the names
+say which is which:
 
-- `apps/database/src/scripts/` — **changes the database or storage**, and most
-  cost money: seeding, embeddings, category images, the dedupe audit.
-- `apps/database/tools/` — **regenerates source files in this repo**:
+- `apps/database/operations/` — **acts on the live database or storage**, and
+  most cost money: seeding, embeddings, category images, the dedupe audit.
+- `apps/database/codegen/` — **regenerates source files in this repo**:
   `generate-types` (Supabase → `database.types.ts`) and `generate-entity-types`
   (that file → the `entities/` wrappers). Deterministic, no production effects.
 
-Keep that line intact when adding a script — it is the difference between "safe
-to run any time" and "this writes to prod".
+Put a new script on the correct side — it is the difference between "safe to run
+any time" and "this writes to prod". These were `src/scripts/` and `tools/`,
+which carried none of that meaning and left the distinction living only in this
+file; `src/` was actively misleading, since this project's real artifacts are the
+SQL under `supabase/`.
 
 The `supabase` CLI is pinned to an **exact** version (2.72.2), not a caret range,
 because its destructive commands differ across versions. On 2.72.2 `db reset`

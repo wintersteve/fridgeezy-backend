@@ -47,10 +47,13 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
 
 - `up` / `reset` — `supabase migration up --linked` / `db reset --linked`
 - `types` — regenerate `database.types.ts` **and** the derived entity types
-- `embed-categories|embed-units|embed-tags|embed-suggestions|embed-recipes` —
-  all five run one script, `src/scripts/generate-embeddings.ts <target>`. They
+- `embed-ingredients|embed-categories|embed-units|embed-tags|embed-suggestions|embed-recipes`
+  — all six run one script, `src/scripts/generate-embeddings.ts <target>`. They
   backfill only rows missing a vector; append `-- --all` to re-embed everything,
-  which is what you want after changing a text builder.
+  which is what you want after changing a text builder. `embed-ingredients` is
+  the one to reach for after any bulk import: `seed-ingredients` embeds only the
+  rows it creates, so anything the LLM added arrives without a vector and stays
+  invisible to similarity matching until this runs.
 - `seed-ingredients`, `generate-ingredient-seed`, `generate-category-images`
 - `dedupe-ingredients` — an audit, not routine. Nothing calls it; run it only
   when the catalog visibly holds two names for one thing ("scallion" /

@@ -63,6 +63,19 @@ const TARGETS: Record<string, Target> = {
         column: "embedding",
         buildText: (row) => row.name,
     },
+    // Bare name, matching what seed-ingredients embeds on insert and what
+    // match-ingredients searches with — the vectors have to live in the same
+    // space or the similarity threshold means nothing.
+    //
+    // Only seed-ingredients embedded these before, and only for rows it created,
+    // so anything the LLM added stayed unembedded and invisible to vector
+    // matching. That is what this target is for.
+    ingredients: {
+        table: "ingredients",
+        select: "id, name",
+        column: "embedding",
+        buildText: (row) => row.name,
+    },
     // Suggestions and recipes share one text: the dish SIGNATURE, built by the
     // same helper the API uses. That is what makes a stored recipe vector and a
     // freshly generated suggestion vector directly comparable — dedupe depends

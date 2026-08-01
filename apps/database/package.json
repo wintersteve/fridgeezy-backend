@@ -5,6 +5,14 @@
     "nx": {
         "tags": ["scope:app"],
         "targets": {
+            "embed-ingredients": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/scripts/generate-embeddings.ts ingredients",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
             "embed-categories": {
                 "executor": "nx:run-commands",
                 "options": {

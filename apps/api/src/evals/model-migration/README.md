@@ -23,7 +23,8 @@ Or directly, from `apps/api`: `npx jiti src/evals/model-migration/run.eval.ts �
 | `--quick` | One fixture per path, skips the authenticity judge |
 | `--repeat=N` | Run each fixture N times (default 1) |
 | `--skip-authenticity` | Skip the LLM authenticity judge — the priciest scorer |
-| `--skip-recipes` | Suggestions only |
+| `--skip-recipes` | Skip the recipe path — the only one needing Supabase |
+| `--skip-substitutes` | Skip the substitutes path |
 | `--only=<substring>` | Restrict to candidates whose id matches |
 
 **This costs real money on both providers.** Start with `--quick`.
@@ -38,7 +39,7 @@ one run and **4/4** in the next. One sample per fixture is noise. Use
 
 | Column | Asks |
 |---|---|
-| `jsonl` | Did the model emit the structure the prompt demands? Suggestions: exactly 4 parseable lines. Recipes: header + nutrition + one line per requested ingredient |
+| `jsonl` | Did the model emit the structure the prompt demands? Suggestions: exactly 4 parseable lines. Recipes: header + nutrition + one line per requested ingredient. Substitutes: one answered line per requested ingredient, name echoed exactly |
 | `tags` | Exactly 1 component, 1 cuisine, 1 course tag — scored against the live `tags` table, not a hardcoded list |
 | `ingr` | Are the dish-defining ingredients present, and blacklisted ones absent? |
 | `real` | The production authenticity gate (`verifySuggestionAuthenticity`) |
@@ -48,6 +49,22 @@ one run and **4/4** in the next. One sample per fixture is noise. Use
 `jsonl` counts *dropped* lines, which is the failure mode that matters: a
 malformed line fails schema validation and is silently skipped, so a structural
 regression shows up as a short recipe rather than as an error.
+
+## Why substitutes is scored on coverage, not prose
+
+`/rest/substitutes/generate` was added after this harness and was not covered by
+it — so the Phase 1 gate would have passed without ever exercising an endpoint
+the migration moves. It is scored now, on whether every requested ingredient
+comes back answered under the name it was asked for.
+
+Coverage rather than quality, because coverage is the part the service cannot
+paper over. `generate-substitutes-stream` already buffers out-of-order lines,
+drops duplicates, and fills anything the model skipped with a fallback frame. A
+model that renames ingredients therefore yields a card full of fallbacks rather
+than an error — silent in production, and invisible to every other scorer here.
+
+The fixtures need no database: the prompt is built with a null recipe, so it
+falls back to `recipeName`.
 
 The authenticity judge stays on OpenAI for every candidate on purpose — a judge
 that moved with the candidate would measure the pair, not the candidate.

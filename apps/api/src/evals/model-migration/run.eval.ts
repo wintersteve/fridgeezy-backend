@@ -11,9 +11,12 @@ import {
     IngredientSchema,
     InstructionSchema,
     NutritionSchema,
+    SubstituteSuggestionLlmDto,
+    SubstituteSuggestionLlmSchema,
     TipSchema,
 } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
+import { canonicalizeName } from "@fridgeezy/toolkit";
 
 import {
     fetchRecipeMetadata,
@@ -24,6 +27,10 @@ import {
     buildRecipeSystemPrompt,
     buildRecipeUserPrompt,
 } from "../../modules/recipes/usecases/generate-recipe/generate-recipe";
+import {
+    buildSubstitutesUserPrompt,
+    SUBSTITUTES_SYSTEM_PROMPT,
+} from "../../modules/substitutes/services/generate-substitutes-stream";
 import { buildSuggestionsUserPrompt } from "../../modules/suggestions/services/build-suggestions-user-prompt";
 import { SUGGESTIONS_SYSTEM_PROMPT } from "../../modules/suggestions/services/generate-suggestions-stream";
 
@@ -34,7 +41,11 @@ import {
     CompletionChunk,
     streamCompletion,
 } from "./candidates";
-import { RECIPE_FIXTURES, SUGGESTION_FIXTURES } from "./fixtures";
+import {
+    RECIPE_FIXTURES,
+    SUBSTITUTE_FIXTURES,
+    SUGGESTION_FIXTURES,
+} from "./fixtures";
 import {
     avoidsIngredients,
     coversIngredients,
@@ -69,7 +80,8 @@ import {
  *   --quick               one fixture per path, skip the authenticity judge
  *   --repeat=N            run each fixture N times (default 1; use >= 5 to decide)
  *   --skip-authenticity   skip the LLM authenticity judge (the priciest scorer)
- *   --skip-recipes        suggestions only (recipes need Supabase metadata)
+ *   --skip-recipes        skip the recipe path (the only one needing Supabase)
+ *   --skip-substitutes    skip the substitutes path (needs no Supabase)
  *   --only=<substring>    restrict to candidates whose id matches
  */
 const ARGS = process.argv.slice(2);
@@ -77,6 +89,7 @@ const has = (flag: string) => ARGS.includes(flag);
 const QUICK = has("--quick");
 const SKIP_AUTHENTICITY = QUICK || has("--skip-authenticity");
 const SKIP_RECIPES = has("--skip-recipes");
+const SKIP_SUBSTITUTES = has("--skip-substitutes");
 const ONLY = ARGS.find((a) => a.startsWith("--only="))?.slice("--only=".length);
 const REPEAT = Math.max(
     1,
@@ -255,6 +268,76 @@ async function runRecipeFixtures(
     }
 }
 
+/**
+ * Substitutes: one JSONL line per requested missing ingredient, echoing the name
+ * EXACTLY as asked, in request order.
+ *
+ * Scored as coverage rather than as prose quality, because coverage is the part
+ * the service cannot paper over cheaply. `generate-substitutes-stream` already
+ * buffers out-of-order lines, drops duplicates, and fills any ingredient the
+ * model skipped with a fallback frame — so a model that names things its own way
+ * produces a card of fallbacks, not an error. That degradation is silent in
+ * production and invisible to the other scorers; this is what makes it visible.
+ *
+ * No database: the prompt is built with a null recipe, so it falls back to
+ * `recipeName` and the fixture set stays self-contained.
+ */
+async function runSubstituteFixtures(
+    candidate: Candidate,
+    result: CandidateResult
+): Promise<void> {
+    const fixtures = sampled(SUBSTITUTE_FIXTURES);
+
+    for (const fixture of fixtures) {
+        const raw = { text: "" };
+        const answered = new Set<string>();
+
+        try {
+            const stream = tee(
+                streamCompletion(
+                    candidate,
+                    SUBSTITUTES_SYSTEM_PROMPT,
+                    buildSubstitutesUserPrompt(fixture.request, null)
+                ),
+                raw
+            );
+
+            for await (const { parsed } of processJsonlStream(stream, [
+                SubstituteSuggestionLlmSchema,
+            ])) {
+                const line = parsed as SubstituteSuggestionLlmDto;
+
+                // An empty `substitutes` array parses but answers nothing, and
+                // the prompt forbids refusing an ingredient — so it counts as
+                // unanswered rather than as a line.
+                const key = canonicalizeName(line.ingredient_name);
+
+                if (key && line.substitutes.length > 0) answered.add(key);
+            }
+        } catch (error) {
+            result.errors.push(
+                `${fixture.label}: ${error instanceof Error ? error.message : String(error)}`
+            );
+            record(result.validJsonl, false);
+            continue;
+        }
+
+        if (hasLeakedScaffolding(raw.text)) result.leaks += 1;
+
+        // Canonicalised both sides, matching how the service pairs lines back to
+        // requests — scoring on the raw string would fail on casing alone and
+        // overstate the problem.
+        record(
+            result.validJsonl,
+            fixture.request.missingIngredients.every((ingredient) => {
+                const key = canonicalizeName(ingredient.name);
+
+                return key !== null && answered.has(key);
+            })
+        );
+    }
+}
+
 async function runCandidate(
     candidate: Candidate,
     tagTypes: Map<string, string>,
@@ -277,6 +360,9 @@ async function runCandidate(
     await runSuggestionFixtures(candidate, tagTypes, result);
     if (!SKIP_RECIPES) {
         await runRecipeFixtures(candidate, unitsPrompt, tagsPrompt, result);
+    }
+    if (!SKIP_SUBSTITUTES) {
+        await runSubstituteFixtures(candidate, result);
     }
     result.elapsedMs = Date.now() - started;
 
@@ -362,10 +448,20 @@ async function main() {
         process.exit(1);
     }
 
+    // Name the paths actually running. This used to read "[suggestions only]"
+    // whenever recipes were skipped, which stopped being true once substitutes
+    // became a third path — and a banner that misreports scope makes every score
+    // under it ambiguous.
+    const paths = [
+        "suggestions",
+        ...(SKIP_RECIPES ? [] : ["recipes"]),
+        ...(SKIP_SUBSTITUTES ? [] : ["substitutes"]),
+    ];
+
     console.log(
         `Phase 0 eval — ${roster.length} candidate(s) x${REPEAT}${QUICK ? " [quick]" : ""}` +
             `${SKIP_AUTHENTICITY ? " [no authenticity judge]" : ""}` +
-            `${SKIP_RECIPES ? " [suggestions only]" : ""}`
+            ` [${paths.join(" + ")}]`
     );
 
     // Tag taxonomy and the units/tags prompt fragments come from Supabase, exactly

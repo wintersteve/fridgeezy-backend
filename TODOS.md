@@ -49,6 +49,7 @@ Model call sites today:
 | Escalate difficulty | `apps/api/src/modules/recipes/usecases/escalate-difficulty/escalate-difficulty.ts` | `gpt-4.1` |
 | Compose suggestions | `apps/api/src/modules/recipes/services/generate-compose-suggestions.ts` | `gpt-4.1` |
 | Promote | `apps/api/src/modules/suggestions/usecases/promote/promote.ts` | `gpt-4.1` |
+| Substitutes | `apps/api/src/modules/substitutes/services/generate-substitutes-stream.ts` | `gpt-4.1` |
 | Chat / recipe-chat | `chat.schema.ts` default `gpt-4o` | `gpt-4o` |
 | Ingredient extraction (vision) | `apps/api/src/modules/ingredients/usecases/extract-ingredients/extract-ingredients.ts` | `gpt-4o` |
 | Embeddings | `libs/openai/src/lib/modules/embeddings/*` | `text-embedding-3-small` |
@@ -57,6 +58,12 @@ Model call sites today:
 Shared streaming plumbing that must keep working regardless of provider:
 `processJsonlStream` + `extractStableJsonFields` (`libs/streaming-server`,
 `apps/api/src/modules/suggestions/services/extract-stable-json-fields.ts`).
+
+**Substitutes was missing from this table** until 2026-08-01. The endpoint was
+built after this inventory was written, so it was neither listed here nor covered
+by the Phase 0 eval — meaning the Phase 1 gate could have passed without ever
+exercising it. Both are fixed. Add new streaming endpoints to this table *and* to
+the harness when they land, or the gate quietly narrows.
 
 ---
 

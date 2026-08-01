@@ -2,7 +2,12 @@ import type { Request, Response } from "express";
 
 export interface SseEvent {
     type: string;
-    data?: any;
+    /**
+     * Serialised with `JSON.stringify`, so `unknown` is the honest type: this
+     * function does not read the payload, it only encodes it. Each caller knows
+     * its own frame shape, and the client parses by event name.
+     */
+    data?: unknown;
 }
 
 /**
@@ -37,7 +42,7 @@ export function endSseStream(res: Response): void {
  * Read and JSON-parse a raw request body. These streaming routes deliberately
  * skip the JSON body middleware, so we drain the stream ourselves.
  */
-export async function parseJsonBody(req: Request): Promise<any> {
+export async function parseJsonBody(req: Request): Promise<unknown> {
     return new Promise((resolve, reject) => {
         let body = "";
         req.on("data", (chunk) => {

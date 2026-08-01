@@ -1,7 +1,25 @@
 import type { ChatMessage, ToolCall } from "@fridgeezy/schemas";
 
+/**
+ * What a tool handler resolves to. Handlers answer in the content-block shape
+ * (`{ content: [{ type: "text", text }] }`); anything else is stringified whole
+ * by the caller, so the fields are optional rather than assumed.
+ */
+export interface ToolResult {
+    content?: Array<{ type: string; text?: string }>;
+}
+
 interface ToolHandler {
-    handler: (input: any, context?: any) => Promise<any>;
+    /**
+     * Declared as a method rather than a property so parameters stay bivariant:
+     * the registry is heterogeneous, and each tool's handler takes its own
+     * concrete input type, which would not be assignable to `unknown` under
+     * `strictFunctionTypes` if this were an arrow-typed property.
+     *
+     * `input` really is unknown here — it arrives as `JSON.parse` output of the
+     * model's tool-call arguments, which nothing has validated yet.
+     */
+    handler(input: unknown, context?: unknown): Promise<ToolResult>;
 }
 
 export interface ToolRegistry {

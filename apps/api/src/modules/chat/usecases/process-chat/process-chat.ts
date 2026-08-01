@@ -1,7 +1,12 @@
-import { ChatRequestSchema } from "@fridgeezy/schemas";
+import { ChatRequestSchema, type ToolCall } from "@fridgeezy/schemas";
 import type { Request, Response } from "express";
 
-import type { PartialRecipeSuggestion } from "../../../recipes/services/search-recipe-suggestions";
+import type {
+    PartialRecipeSuggestion,
+    RecipeSuggestionItem,
+    RecipeSuggestionResult,
+    SearchMetadata,
+} from "../../../recipes/services/search-recipe-suggestions";
 import {
     convertToolsToOpenAiTools,
     createChatCompletion,
@@ -84,8 +89,13 @@ export async function processChat(req: Request, res: Response): Promise<void> {
         let iteration = 0;
 
         // Buffer suggestion/metadata events so they emit after content
-        const bufferedSuggestions: Array<any> = [];
-        let bufferedMetadata: any = null;
+        // Either shape can land here: an enriched item from the tool result, or
+        // a partial promoted below when generation failed after its card
+        // streamed. Both render as a card; only the enriched one has an id.
+        const bufferedSuggestions: Array<
+            RecipeSuggestionItem | PartialRecipeSuggestion
+        > = [];
+        let bufferedMetadata: SearchMetadata | null = null;
 
         // Partially-streamed suggestions, keyed by tempId. Only used as a
         // fallback: an enriched result normally supersedes its partial, but
@@ -104,7 +114,7 @@ export async function processChat(req: Request, res: Response): Promise<void> {
             });
 
             let currentContent = "";
-            let currentToolCalls: any[] | null = null;
+            let currentToolCalls: ToolCall[] | null = null;
 
             for await (const event of stream) {
                 if (event.type === "chunk") {
@@ -240,9 +250,13 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                                 toolResult.content
                             ) {
                                 try {
+                                    // Tool output crosses a JSON boundary, so
+                                    // this is an assertion about our own tool,
+                                    // not a validated parse. Fields are read
+                                    // defensively below.
                                     const parsedResult = JSON.parse(
                                         toolResult.content
-                                    );
+                                    ) as Partial<RecipeSuggestionResult>;
 
                                     if (
                                         toolCall?.function.name ===

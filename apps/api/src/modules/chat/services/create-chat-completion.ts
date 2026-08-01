@@ -1,5 +1,5 @@
 import { openai } from "@fridgeezy/openai";
-import type { ChatMessage } from "@fridgeezy/schemas";
+import type { ChatMessage, ToolCall } from "@fridgeezy/schemas";
 import type OpenAI from "openai";
 
 export interface ChatCompletionOptions {
@@ -10,7 +10,7 @@ export interface ChatCompletionOptions {
 
 export type ChatStreamEvent =
     | { type: "chunk"; delta: string }
-    | { type: "tool_calls"; tool_calls: any[] }
+    | { type: "tool_calls"; tool_calls: ToolCall[] }
     | { type: "done"; finish_reason: string | null }
     | { type: "error"; error: string };
 
@@ -66,7 +66,9 @@ export async function* createChatCompletion(
                 stream: true,
             });
 
-            const accumulatedToolCalls: any[] = [];
+            // Sparse until every index has been seen: the model streams tool-call
+            // fragments by index, so holes are filtered out at the yield below.
+            const accumulatedToolCalls: ToolCall[] = [];
 
             for await (const chunk of completion) {
                 const choice = chunk.choices[0];
@@ -143,10 +145,20 @@ export async function* createChatCompletion(
             }
 
             if (choice.message.tool_calls) {
-                yield {
-                    type: "tool_calls",
-                    tool_calls: choice.message.tool_calls,
-                };
+                // The SDK's tool-call union also covers *custom* tool calls,
+                // which carry no `function` field at all. This code — and every
+                // consumer of the `tool_calls` event — reads `tc.function.name`
+                // unconditionally, so a custom call would have surfaced as an
+                // undefined tool name rather than as an error. We register only
+                // function tools, so filtering here is a guard, not a behaviour
+                // change.
+                const functionCalls = choice.message.tool_calls.filter(
+                    (tc) => tc.type === "function"
+                );
+
+                if (functionCalls.length > 0) {
+                    yield { type: "tool_calls", tool_calls: functionCalls };
+                }
             }
 
             yield {

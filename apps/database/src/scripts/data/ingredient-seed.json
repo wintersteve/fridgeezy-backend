@@ -1,326 +1,3751 @@
 [
-  { "name": "chicken", "category": "meats", "aliases": [] },
-  { "name": "chicken breast", "category": "meats", "aliases": ["boneless chicken breast"] },
-  { "name": "chicken thigh", "category": "meats", "aliases": [] },
-  { "name": "chicken wing", "category": "meats", "aliases": [] },
-  { "name": "ground beef", "category": "meats", "aliases": ["minced beef", "beef mince", "hamburger meat"] },
-  { "name": "beef steak", "category": "meats", "aliases": ["steak"] },
-  { "name": "beef chuck", "category": "meats", "aliases": ["stewing beef", "chuck roast"] },
-  { "name": "pork", "category": "meats", "aliases": [] },
-  { "name": "pork belly", "category": "meats", "aliases": [] },
-  { "name": "pork chop", "category": "meats", "aliases": [] },
-  { "name": "ground pork", "category": "meats", "aliases": ["minced pork", "pork mince"] },
-  { "name": "bacon", "category": "meats", "aliases": ["streaky bacon"] },
-  { "name": "ham", "category": "meats", "aliases": [] },
-  { "name": "prosciutto", "category": "meats", "aliases": ["parma ham"] },
-  { "name": "sausage", "category": "meats", "aliases": [] },
-  { "name": "lamb", "category": "meats", "aliases": [] },
-  { "name": "ground lamb", "category": "meats", "aliases": ["minced lamb", "lamb mince"] },
-  { "name": "turkey", "category": "meats", "aliases": [] },
-  { "name": "duck", "category": "meats", "aliases": [] },
-
-  { "name": "salmon", "category": "seafood", "aliases": [] },
-  { "name": "tuna", "category": "seafood", "aliases": [] },
-  { "name": "shrimp", "category": "seafood", "aliases": ["prawn"] },
-  { "name": "cod", "category": "seafood", "aliases": [] },
-  { "name": "tilapia", "category": "seafood", "aliases": [] },
-  { "name": "sardine", "category": "seafood", "aliases": [] },
-  { "name": "anchovy", "category": "seafood", "aliases": [] },
-  { "name": "crab", "category": "seafood", "aliases": [] },
-  { "name": "lobster", "category": "seafood", "aliases": [] },
-  { "name": "squid", "category": "seafood", "aliases": ["calamari"] },
-  { "name": "scallop", "category": "seafood", "aliases": [] },
-  { "name": "mussel", "category": "seafood", "aliases": [] },
-  { "name": "clam", "category": "seafood", "aliases": [] },
-  { "name": "mackerel", "category": "seafood", "aliases": [] },
-  { "name": "sea bass", "category": "seafood", "aliases": [] },
-
-  { "name": "egg", "category": "eggs", "aliases": ["chicken egg"] },
-  { "name": "egg white", "category": "eggs", "aliases": [] },
-  { "name": "egg yolk", "category": "eggs", "aliases": [] },
-
-  { "name": "milk", "category": "dairy", "aliases": ["whole milk"] },
-  { "name": "butter", "category": "dairy", "aliases": [] },
-  { "name": "unsalted butter", "category": "dairy", "aliases": [] },
-  { "name": "heavy cream", "category": "dairy", "aliases": ["double cream", "heavy whipping cream", "whipping cream"] },
-  { "name": "sour cream", "category": "dairy", "aliases": [] },
-  { "name": "yogurt", "category": "dairy", "aliases": ["yoghurt"] },
-  { "name": "greek yogurt", "category": "dairy", "aliases": ["greek yoghurt"] },
-  { "name": "cream cheese", "category": "dairy", "aliases": [] },
-  { "name": "parmesan", "category": "dairy", "aliases": ["parmigiano reggiano", "parmesan cheese"] },
-  { "name": "cheddar", "category": "dairy", "aliases": ["cheddar cheese"] },
-  { "name": "mozzarella", "category": "dairy", "aliases": ["mozzarella cheese"] },
-  { "name": "feta", "category": "dairy", "aliases": ["feta cheese"] },
-  { "name": "ricotta", "category": "dairy", "aliases": ["ricotta cheese"] },
-  { "name": "goat cheese", "category": "dairy", "aliases": ["chevre"] },
-  { "name": "buttermilk", "category": "dairy", "aliases": [] },
-  { "name": "condensed milk", "category": "dairy", "aliases": ["sweetened condensed milk"] },
-  { "name": "evaporated milk", "category": "dairy", "aliases": [] },
-  { "name": "creme fraiche", "category": "dairy", "aliases": [] },
-  { "name": "mascarpone", "category": "dairy", "aliases": [] },
-  { "name": "ghee", "category": "dairy", "aliases": ["clarified butter"] },
-
-  { "name": "onion", "category": "vegetables", "aliases": ["yellow onion", "brown onion"] },
-  { "name": "red onion", "category": "vegetables", "aliases": [] },
-  { "name": "garlic", "category": "vegetables", "aliases": ["garlic clove"] },
-  { "name": "ginger", "category": "vegetables", "aliases": ["fresh ginger", "ginger root"] },
-  { "name": "carrot", "category": "vegetables", "aliases": [] },
-  { "name": "potato", "category": "vegetables", "aliases": [] },
-  { "name": "sweet potato", "category": "vegetables", "aliases": [] },
-  { "name": "tomato", "category": "vegetables", "aliases": [] },
-  { "name": "cherry tomato", "category": "vegetables", "aliases": [] },
-  { "name": "bell pepper", "category": "vegetables", "aliases": ["capsicum", "sweet pepper"] },
-  { "name": "red bell pepper", "category": "vegetables", "aliases": ["red capsicum"] },
-  { "name": "celery", "category": "vegetables", "aliases": [] },
-  { "name": "cucumber", "category": "vegetables", "aliases": [] },
-  { "name": "zucchini", "category": "vegetables", "aliases": ["courgette"] },
-  { "name": "eggplant", "category": "vegetables", "aliases": ["aubergine", "brinjal"] },
-  { "name": "spinach", "category": "vegetables", "aliases": [] },
-  { "name": "kale", "category": "vegetables", "aliases": [] },
-  { "name": "lettuce", "category": "vegetables", "aliases": [] },
-  { "name": "cabbage", "category": "vegetables", "aliases": [] },
-  { "name": "napa cabbage", "category": "vegetables", "aliases": ["chinese cabbage"] },
-  { "name": "broccoli", "category": "vegetables", "aliases": [] },
-  { "name": "cauliflower", "category": "vegetables", "aliases": [] },
-  { "name": "green bean", "category": "vegetables", "aliases": ["string bean"] },
-  { "name": "pea", "category": "vegetables", "aliases": ["green pea", "garden pea"] },
-  { "name": "snow pea", "category": "vegetables", "aliases": ["mangetout"] },
-  { "name": "corn", "category": "vegetables", "aliases": ["sweetcorn", "maize"] },
-  { "name": "scallion", "category": "vegetables", "aliases": ["green onion", "spring onion"] },
-  { "name": "leek", "category": "vegetables", "aliases": [] },
-  { "name": "shallot", "category": "vegetables", "aliases": [] },
-  { "name": "beet", "category": "vegetables", "aliases": ["beetroot"] },
-  { "name": "radish", "category": "vegetables", "aliases": [] },
-  { "name": "asparagus", "category": "vegetables", "aliases": [] },
-  { "name": "brussels sprout", "category": "vegetables", "aliases": [] },
-  { "name": "bok choy", "category": "vegetables", "aliases": ["pak choi"] },
-  { "name": "fennel", "category": "vegetables", "aliases": [] },
-  { "name": "turnip", "category": "vegetables", "aliases": [] },
-  { "name": "parsnip", "category": "vegetables", "aliases": [] },
-  { "name": "okra", "category": "vegetables", "aliases": ["ladies finger"] },
-  { "name": "pumpkin", "category": "vegetables", "aliases": [] },
-  { "name": "butternut squash", "category": "vegetables", "aliases": [] },
-  { "name": "jalapeno", "category": "vegetables", "aliases": ["jalapeno pepper"] },
-  { "name": "chili pepper", "category": "vegetables", "aliases": ["chilli pepper", "chile pepper", "hot pepper"] },
-
-  { "name": "apple", "category": "fruits", "aliases": [] },
-  { "name": "banana", "category": "fruits", "aliases": [] },
-  { "name": "lemon", "category": "fruits", "aliases": [] },
-  { "name": "lime", "category": "fruits", "aliases": [] },
-  { "name": "orange", "category": "fruits", "aliases": [] },
-  { "name": "mango", "category": "fruits", "aliases": [] },
-  { "name": "pineapple", "category": "fruits", "aliases": [] },
-  { "name": "strawberry", "category": "fruits", "aliases": [] },
-  { "name": "blueberry", "category": "fruits", "aliases": [] },
-  { "name": "raspberry", "category": "fruits", "aliases": [] },
-  { "name": "grape", "category": "fruits", "aliases": [] },
-  { "name": "watermelon", "category": "fruits", "aliases": [] },
-  { "name": "peach", "category": "fruits", "aliases": [] },
-  { "name": "pear", "category": "fruits", "aliases": [] },
-  { "name": "plum", "category": "fruits", "aliases": [] },
-  { "name": "cherry", "category": "fruits", "aliases": [] },
-  { "name": "avocado", "category": "fruits", "aliases": [] },
-  { "name": "coconut", "category": "fruits", "aliases": [] },
-  { "name": "pomegranate", "category": "fruits", "aliases": [] },
-  { "name": "raisin", "category": "fruits", "aliases": ["sultana"] },
-  { "name": "date", "category": "fruits", "aliases": [] },
-  { "name": "apricot", "category": "fruits", "aliases": [] },
-
-  { "name": "rice", "category": "grains", "aliases": ["white rice"] },
-  { "name": "brown rice", "category": "grains", "aliases": [] },
-  { "name": "basmati rice", "category": "grains", "aliases": [] },
-  { "name": "jasmine rice", "category": "grains", "aliases": [] },
-  { "name": "arborio rice", "category": "grains", "aliases": ["risotto rice"] },
-  { "name": "quinoa", "category": "grains", "aliases": [] },
-  { "name": "oat", "category": "grains", "aliases": ["rolled oats", "oatmeal", "porridge oats"] },
-  { "name": "barley", "category": "grains", "aliases": ["pearl barley"] },
-  { "name": "bulgur", "category": "grains", "aliases": ["bulgur wheat"] },
-  { "name": "couscous", "category": "grains", "aliases": [] },
-  { "name": "cornmeal", "category": "grains", "aliases": ["polenta"] },
-  { "name": "farro", "category": "grains", "aliases": [] },
-
-  { "name": "chickpea", "category": "legumes", "aliases": ["garbanzo bean", "garbanzo"] },
-  { "name": "black bean", "category": "legumes", "aliases": [] },
-  { "name": "kidney bean", "category": "legumes", "aliases": [] },
-  { "name": "pinto bean", "category": "legumes", "aliases": [] },
-  { "name": "cannellini bean", "category": "legumes", "aliases": ["white kidney bean"] },
-  { "name": "lentil", "category": "legumes", "aliases": [] },
-  { "name": "red lentil", "category": "legumes", "aliases": ["masoor dal"] },
-  { "name": "split pea", "category": "legumes", "aliases": [] },
-  { "name": "edamame", "category": "legumes", "aliases": [] },
-  { "name": "black-eyed pea", "category": "legumes", "aliases": [] },
-  { "name": "fava bean", "category": "legumes", "aliases": ["broad bean"] },
-  { "name": "butter bean", "category": "legumes", "aliases": ["lima bean"] },
-  { "name": "tofu", "category": "legumes", "aliases": ["bean curd"] },
-  { "name": "tempeh", "category": "legumes", "aliases": [] },
-
-  { "name": "almond", "category": "nuts_seeds", "aliases": [] },
-  { "name": "walnut", "category": "nuts_seeds", "aliases": [] },
-  { "name": "cashew", "category": "nuts_seeds", "aliases": [] },
-  { "name": "peanut", "category": "nuts_seeds", "aliases": ["groundnut"] },
-  { "name": "pecan", "category": "nuts_seeds", "aliases": [] },
-  { "name": "pistachio", "category": "nuts_seeds", "aliases": [] },
-  { "name": "hazelnut", "category": "nuts_seeds", "aliases": [] },
-  { "name": "pine nut", "category": "nuts_seeds", "aliases": [] },
-  { "name": "sesame seed", "category": "nuts_seeds", "aliases": [] },
-  { "name": "sunflower seed", "category": "nuts_seeds", "aliases": [] },
-  { "name": "pumpkin seed", "category": "nuts_seeds", "aliases": ["pepita"] },
-  { "name": "chia seed", "category": "nuts_seeds", "aliases": [] },
-  { "name": "flaxseed", "category": "nuts_seeds", "aliases": ["linseed"] },
-  { "name": "peanut butter", "category": "nuts_seeds", "aliases": [] },
-  { "name": "tahini", "category": "nuts_seeds", "aliases": ["sesame paste"] },
-
-  { "name": "salt", "category": "herbs_spices", "aliases": ["sea salt", "table salt"] },
-  { "name": "black pepper", "category": "herbs_spices", "aliases": ["pepper", "ground black pepper"] },
-  { "name": "white pepper", "category": "herbs_spices", "aliases": [] },
-  { "name": "garlic powder", "category": "herbs_spices", "aliases": [] },
-  { "name": "onion powder", "category": "herbs_spices", "aliases": [] },
-  { "name": "cumin", "category": "herbs_spices", "aliases": ["ground cumin", "cumin powder"] },
-  { "name": "coriander", "category": "herbs_spices", "aliases": ["ground coriander", "coriander seed"] },
-  { "name": "paprika", "category": "herbs_spices", "aliases": [] },
-  { "name": "smoked paprika", "category": "herbs_spices", "aliases": [] },
-  { "name": "chili powder", "category": "herbs_spices", "aliases": ["chilli powder"] },
-  { "name": "cayenne", "category": "herbs_spices", "aliases": ["cayenne pepper"] },
-  { "name": "red pepper flakes", "category": "herbs_spices", "aliases": ["chili flakes", "crushed red pepper"] },
-  { "name": "turmeric", "category": "herbs_spices", "aliases": [] },
-  { "name": "cinnamon", "category": "herbs_spices", "aliases": ["ground cinnamon"] },
-  { "name": "nutmeg", "category": "herbs_spices", "aliases": [] },
-  { "name": "clove", "category": "herbs_spices", "aliases": [] },
-  { "name": "cardamom", "category": "herbs_spices", "aliases": [] },
-  { "name": "star anise", "category": "herbs_spices", "aliases": [] },
-  { "name": "bay leaf", "category": "herbs_spices", "aliases": [] },
-  { "name": "oregano", "category": "herbs_spices", "aliases": ["dried oregano"] },
-  { "name": "basil", "category": "herbs_spices", "aliases": ["fresh basil"] },
-  { "name": "thai basil", "category": "herbs_spices", "aliases": [] },
-  { "name": "thyme", "category": "herbs_spices", "aliases": [] },
-  { "name": "rosemary", "category": "herbs_spices", "aliases": [] },
-  { "name": "parsley", "category": "herbs_spices", "aliases": ["flat-leaf parsley"] },
-  { "name": "cilantro", "category": "herbs_spices", "aliases": ["fresh coriander", "coriander leaf"] },
-  { "name": "mint", "category": "herbs_spices", "aliases": [] },
-  { "name": "dill", "category": "herbs_spices", "aliases": [] },
-  { "name": "sage", "category": "herbs_spices", "aliases": [] },
-  { "name": "chive", "category": "herbs_spices", "aliases": [] },
-  { "name": "curry powder", "category": "herbs_spices", "aliases": [] },
-  { "name": "garam masala", "category": "herbs_spices", "aliases": [] },
-  { "name": "fennel seed", "category": "herbs_spices", "aliases": [] },
-  { "name": "mustard seed", "category": "herbs_spices", "aliases": [] },
-  { "name": "saffron", "category": "herbs_spices", "aliases": [] },
-
-  { "name": "button mushroom", "category": "mushrooms", "aliases": ["white mushroom"] },
-  { "name": "cremini mushroom", "category": "mushrooms", "aliases": ["chestnut mushroom", "baby bella"] },
-  { "name": "portobello mushroom", "category": "mushrooms", "aliases": [] },
-  { "name": "shiitake mushroom", "category": "mushrooms", "aliases": [] },
-  { "name": "oyster mushroom", "category": "mushrooms", "aliases": [] },
-  { "name": "porcini mushroom", "category": "mushrooms", "aliases": [] },
-  { "name": "enoki mushroom", "category": "mushrooms", "aliases": [] },
-
-  { "name": "spaghetti", "category": "noodles", "aliases": [] },
-  { "name": "penne", "category": "noodles", "aliases": [] },
-  { "name": "macaroni", "category": "noodles", "aliases": [] },
-  { "name": "fettuccine", "category": "noodles", "aliases": [] },
-  { "name": "linguine", "category": "noodles", "aliases": [] },
-  { "name": "lasagna sheet", "category": "noodles", "aliases": ["lasagne sheet"] },
-  { "name": "egg noodle", "category": "noodles", "aliases": [] },
-  { "name": "rice noodle", "category": "noodles", "aliases": [] },
-  { "name": "ramen noodle", "category": "noodles", "aliases": [] },
-  { "name": "udon noodle", "category": "noodles", "aliases": [] },
-  { "name": "soba noodle", "category": "noodles", "aliases": [] },
-  { "name": "vermicelli", "category": "noodles", "aliases": [] },
-  { "name": "rigatoni", "category": "noodles", "aliases": [] },
-  { "name": "orzo", "category": "noodles", "aliases": [] },
-
-  { "name": "bread", "category": "breads", "aliases": [] },
-  { "name": "whole wheat bread", "category": "breads", "aliases": ["wholemeal bread"] },
-  { "name": "baguette", "category": "breads", "aliases": [] },
-  { "name": "pita bread", "category": "breads", "aliases": ["pitta bread"] },
-  { "name": "naan", "category": "breads", "aliases": ["naan bread"] },
-  { "name": "tortilla", "category": "breads", "aliases": [] },
-  { "name": "corn tortilla", "category": "breads", "aliases": [] },
-  { "name": "breadcrumb", "category": "breads", "aliases": ["bread crumb"] },
-  { "name": "panko", "category": "breads", "aliases": ["panko breadcrumb"] },
-  { "name": "brioche", "category": "breads", "aliases": [] },
-  { "name": "sourdough bread", "category": "breads", "aliases": ["sourdough"] },
-  { "name": "ciabatta", "category": "breads", "aliases": [] },
-
-  { "name": "olive oil", "category": "fats_oils", "aliases": [] },
-  { "name": "extra virgin olive oil", "category": "fats_oils", "aliases": ["evoo"] },
-  { "name": "vegetable oil", "category": "fats_oils", "aliases": [] },
-  { "name": "canola oil", "category": "fats_oils", "aliases": ["rapeseed oil"] },
-  { "name": "sunflower oil", "category": "fats_oils", "aliases": [] },
-  { "name": "coconut oil", "category": "fats_oils", "aliases": [] },
-  { "name": "sesame oil", "category": "fats_oils", "aliases": ["toasted sesame oil"] },
-  { "name": "peanut oil", "category": "fats_oils", "aliases": ["groundnut oil"] },
-  { "name": "avocado oil", "category": "fats_oils", "aliases": [] },
-  { "name": "lard", "category": "fats_oils", "aliases": [] },
-
-  { "name": "sugar", "category": "sweeteners", "aliases": ["white sugar", "granulated sugar", "caster sugar"] },
-  { "name": "brown sugar", "category": "sweeteners", "aliases": [] },
-  { "name": "powdered sugar", "category": "sweeteners", "aliases": ["confectioners sugar", "icing sugar"] },
-  { "name": "honey", "category": "sweeteners", "aliases": [] },
-  { "name": "maple syrup", "category": "sweeteners", "aliases": [] },
-  { "name": "agave", "category": "sweeteners", "aliases": ["agave nectar", "agave syrup"] },
-  { "name": "molasses", "category": "sweeteners", "aliases": ["treacle"] },
-  { "name": "corn syrup", "category": "sweeteners", "aliases": [] },
-
-  { "name": "chicken stock", "category": "stocks", "aliases": ["chicken broth"] },
-  { "name": "beef stock", "category": "stocks", "aliases": ["beef broth"] },
-  { "name": "vegetable stock", "category": "stocks", "aliases": ["vegetable broth", "veggie stock"] },
-  { "name": "fish stock", "category": "stocks", "aliases": ["fish broth"] },
-  { "name": "dashi", "category": "stocks", "aliases": [] },
-  { "name": "bouillon cube", "category": "stocks", "aliases": ["stock cube"] },
-
-  { "name": "soy sauce", "category": "sauces", "aliases": [] },
-  { "name": "ketchup", "category": "sauces", "aliases": ["tomato ketchup"] },
-  { "name": "mayonnaise", "category": "sauces", "aliases": ["mayo"] },
-  { "name": "mustard", "category": "sauces", "aliases": [] },
-  { "name": "dijon mustard", "category": "sauces", "aliases": [] },
-  { "name": "hot sauce", "category": "sauces", "aliases": [] },
-  { "name": "sriracha", "category": "sauces", "aliases": [] },
-  { "name": "worcestershire sauce", "category": "sauces", "aliases": [] },
-  { "name": "fish sauce", "category": "sauces", "aliases": ["nam pla"] },
-  { "name": "oyster sauce", "category": "sauces", "aliases": [] },
-  { "name": "hoisin sauce", "category": "sauces", "aliases": [] },
-  { "name": "tomato paste", "category": "sauces", "aliases": ["tomato puree"] },
-  { "name": "tomato sauce", "category": "sauces", "aliases": ["marinara", "passata"] },
-  { "name": "barbecue sauce", "category": "sauces", "aliases": ["bbq sauce"] },
-  { "name": "pesto", "category": "sauces", "aliases": [] },
-  { "name": "salsa", "category": "sauces", "aliases": [] },
-  { "name": "teriyaki sauce", "category": "sauces", "aliases": [] },
-  { "name": "gochujang", "category": "sauces", "aliases": ["korean chili paste"] },
-  { "name": "miso paste", "category": "sauces", "aliases": ["miso"] },
-  { "name": "red curry paste", "category": "sauces", "aliases": [] },
-
-  { "name": "white vinegar", "category": "vinegars", "aliases": ["distilled vinegar"] },
-  { "name": "apple cider vinegar", "category": "vinegars", "aliases": ["cider vinegar"] },
-  { "name": "balsamic vinegar", "category": "vinegars", "aliases": [] },
-  { "name": "red wine vinegar", "category": "vinegars", "aliases": [] },
-  { "name": "white wine vinegar", "category": "vinegars", "aliases": [] },
-  { "name": "rice vinegar", "category": "vinegars", "aliases": ["rice wine vinegar"] },
-
-  { "name": "red wine", "category": "beverages", "aliases": [] },
-  { "name": "white wine", "category": "beverages", "aliases": [] },
-  { "name": "coconut milk", "category": "beverages", "aliases": ["coconut cream"] },
-  { "name": "almond milk", "category": "beverages", "aliases": [] },
-  { "name": "oat milk", "category": "beverages", "aliases": [] },
-  { "name": "coffee", "category": "beverages", "aliases": [] },
-  { "name": "espresso", "category": "beverages", "aliases": [] },
-  { "name": "orange juice", "category": "beverages", "aliases": [] },
-  { "name": "lemon juice", "category": "beverages", "aliases": [] },
-  { "name": "lime juice", "category": "beverages", "aliases": [] },
-  { "name": "mirin", "category": "beverages", "aliases": [] },
-  { "name": "shaoxing wine", "category": "beverages", "aliases": ["chinese cooking wine", "shaoxing rice wine"] },
-
-  { "name": "flour", "category": "baking", "aliases": ["all-purpose flour", "plain flour"] },
-  { "name": "bread flour", "category": "baking", "aliases": ["strong flour"] },
-  { "name": "whole wheat flour", "category": "baking", "aliases": ["wholemeal flour"] },
-  { "name": "self-rising flour", "category": "baking", "aliases": ["self-raising flour"] },
-  { "name": "almond flour", "category": "baking", "aliases": ["ground almond"] },
-  { "name": "baking powder", "category": "baking", "aliases": [] },
-  { "name": "baking soda", "category": "baking", "aliases": ["bicarbonate of soda", "bicarb"] },
-  { "name": "yeast", "category": "baking", "aliases": ["active dry yeast", "instant yeast"] },
-  { "name": "vanilla extract", "category": "baking", "aliases": ["vanilla"] },
-  { "name": "cocoa powder", "category": "baking", "aliases": ["cacao powder"] },
-  { "name": "cornstarch", "category": "baking", "aliases": ["cornflour"] },
-  { "name": "dark chocolate", "category": "baking", "aliases": [] },
-  { "name": "chocolate chip", "category": "baking", "aliases": [] }
+  {
+    "name": "agar agar",
+    "category": "baking",
+    "aliases": [],
+    "description": "Vegan gelatin alternative",
+    "shelfLife": "2-3 years",
+    "storageTips": "Keep dry"
+  },
+  {
+    "name": "all purpose flour",
+    "category": "baking",
+    "aliases": [],
+    "description": "Versatile wheat flour",
+    "shelfLife": "6-8 months",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "almond flour",
+    "category": "baking",
+    "aliases": [
+      "ground almond"
+    ]
+  },
+  {
+    "name": "arrowroot",
+    "category": "baking",
+    "aliases": [],
+    "description": "Starchy thickening powder",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "baking powder",
+    "category": "baking",
+    "aliases": [],
+    "description": "Leavening agent",
+    "shelfLife": "6 months-1 year",
+    "storageTips": "Keep dry in container"
+  },
+  {
+    "name": "baking soda",
+    "category": "baking",
+    "aliases": [
+      "bicarbonate of soda",
+      "bicarb"
+    ],
+    "description": "Sodium bicarbonate",
+    "shelfLife": "2 years",
+    "storageTips": "Keep dry"
+  },
+  {
+    "name": "bread flour",
+    "category": "baking",
+    "aliases": [
+      "strong flour"
+    ],
+    "description": "High-protein flour",
+    "shelfLife": "6-8 months",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "chocolate chip",
+    "category": "baking",
+    "aliases": []
+  },
+  {
+    "name": "cocoa powder",
+    "category": "baking",
+    "aliases": [
+      "cacao powder"
+    ],
+    "description": "Unsweetened chocolate powder",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "cornstarch",
+    "category": "baking",
+    "aliases": [
+      "cornflour"
+    ],
+    "description": "Corn-based thickener",
+    "shelfLife": "Indefinite",
+    "storageTips": "Keep dry"
+  },
+  {
+    "name": "cream of tartar",
+    "category": "baking",
+    "aliases": [],
+    "description": "Acidic powder",
+    "shelfLife": "2-3 years",
+    "storageTips": "Keep dry"
+  },
+  {
+    "name": "dark chocolate",
+    "category": "baking",
+    "aliases": []
+  },
+  {
+    "name": "flour",
+    "category": "baking",
+    "aliases": [
+      "all-purpose flour",
+      "plain flour"
+    ],
+    "description": "Ground grain",
+    "shelfLife": "6-8 months",
+    "storageTips": "Airtight container in cool place"
+  },
+  {
+    "name": "gelatin",
+    "category": "baking",
+    "aliases": [],
+    "description": "Setting agent",
+    "shelfLife": "3-4 years",
+    "storageTips": "Keep dry"
+  },
+  {
+    "name": "masa harina",
+    "category": "baking",
+    "aliases": [],
+    "description": "Corn flour for tortillas",
+    "shelfLife": "1 year",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "potato starch",
+    "category": "baking",
+    "aliases": [],
+    "description": "Potato-based thickener",
+    "shelfLife": "2 years",
+    "storageTips": "Keep dry"
+  },
+  {
+    "name": "self-rising flour",
+    "category": "baking",
+    "aliases": [
+      "self-raising flour"
+    ]
+  },
+  {
+    "name": "vanilla extract",
+    "category": "baking",
+    "aliases": [
+      "vanilla"
+    ],
+    "description": "Vanilla flavoring",
+    "shelfLife": "2-4 years",
+    "storageTips": "Store in cool dark place"
+  },
+  {
+    "name": "whole wheat flour",
+    "category": "baking",
+    "aliases": [
+      "wholemeal flour"
+    ],
+    "description": "Whole grain flour",
+    "shelfLife": "3-6 months",
+    "storageTips": "Refrigerate for longer storage"
+  },
+  {
+    "name": "yeast",
+    "category": "baking",
+    "aliases": [
+      "active dry yeast",
+      "instant yeast"
+    ],
+    "description": "Active dry yeast",
+    "shelfLife": "2 years unopened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "almond milk",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Nut-based milk",
+    "shelfLife": "7-10 days opened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "beer",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Brewed grain beverage",
+    "shelfLife": "3 months unopened",
+    "storageTips": "Keep cool"
+  },
+  {
+    "name": "brandy",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Distilled wine spirit",
+    "shelfLife": "Indefinite",
+    "storageTips": "Store at room temp"
+  },
+  {
+    "name": "coconut milk",
+    "category": "beverages",
+    "aliases": [
+      "coconut cream"
+    ],
+    "description": "Creamy coconut liquid",
+    "shelfLife": "4-6 days opened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "coffee",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Brewed coffee beverage",
+    "shelfLife": "2 weeks ground beans",
+    "storageTips": "Airtight container in cool place"
+  },
+  {
+    "name": "espresso",
+    "category": "beverages",
+    "aliases": []
+  },
+  {
+    "name": "lemon juice",
+    "category": "beverages",
+    "aliases": []
+  },
+  {
+    "name": "lime juice",
+    "category": "beverages",
+    "aliases": []
+  },
+  {
+    "name": "mirin",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Sweet Japanese rice wine",
+    "shelfLife": "3 months opened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "oat milk",
+    "category": "beverages",
+    "aliases": []
+  },
+  {
+    "name": "orange juice",
+    "category": "beverages",
+    "aliases": []
+  },
+  {
+    "name": "red wine",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Full-bodied wine",
+    "shelfLife": "3-5 days opened",
+    "storageTips": "Cork and store in cool place"
+  },
+  {
+    "name": "rice wine",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Shaoxing cooking wine",
+    "shelfLife": "6 months opened",
+    "storageTips": "Store in cool place"
+  },
+  {
+    "name": "rum",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Sugarcane spirit",
+    "shelfLife": "Indefinite",
+    "storageTips": "Store at room temp"
+  },
+  {
+    "name": "sake",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Japanese rice wine",
+    "shelfLife": "1 week opened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "shaoxing wine",
+    "category": "beverages",
+    "aliases": [
+      "chinese cooking wine",
+      "shaoxing rice wine"
+    ]
+  },
+  {
+    "name": "sherry",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Fortified wine",
+    "shelfLife": "1-2 weeks opened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "tea",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Steeped tea leaves",
+    "shelfLife": "6 months-2 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "vermouth",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Aromatized wine",
+    "shelfLife": "1 month opened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "vodka",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Neutral grain spirit",
+    "shelfLife": "Indefinite",
+    "storageTips": "Store at room temp"
+  },
+  {
+    "name": "white wine",
+    "category": "beverages",
+    "aliases": [],
+    "description": "Light wine for cooking",
+    "shelfLife": "3-5 days opened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "baguette",
+    "category": "breads",
+    "aliases": [],
+    "description": "French bread",
+    "shelfLife": "1-2 days",
+    "storageTips": "Best eaten fresh"
+  },
+  {
+    "name": "bread",
+    "category": "breads",
+    "aliases": [],
+    "description": "Baked flour product",
+    "shelfLife": "3-5 days",
+    "storageTips": "Store at room temp or freeze"
+  },
+  {
+    "name": "breadcrumb",
+    "category": "breads",
+    "aliases": [
+      "bread crumb"
+    ]
+  },
+  {
+    "name": "brioche",
+    "category": "breads",
+    "aliases": []
+  },
+  {
+    "name": "ciabatta",
+    "category": "breads",
+    "aliases": []
+  },
+  {
+    "name": "corn tortilla",
+    "category": "breads",
+    "aliases": []
+  },
+  {
+    "name": "naan",
+    "category": "breads",
+    "aliases": [
+      "naan bread"
+    ]
+  },
+  {
+    "name": "panko",
+    "category": "breads",
+    "aliases": [
+      "panko breadcrumb"
+    ]
+  },
+  {
+    "name": "pita",
+    "category": "breads",
+    "aliases": [],
+    "description": "Flatbread with pocket",
+    "shelfLife": "5-7 days",
+    "storageTips": "Store in bag"
+  },
+  {
+    "name": "pita bread",
+    "category": "breads",
+    "aliases": [
+      "pitta bread"
+    ]
+  },
+  {
+    "name": "sourdough bread",
+    "category": "breads",
+    "aliases": [
+      "sourdough"
+    ]
+  },
+  {
+    "name": "tortilla",
+    "category": "breads",
+    "aliases": [],
+    "description": "Thin flatbread",
+    "shelfLife": "1 week",
+    "storageTips": "Store in bag at room temp"
+  },
+  {
+    "name": "whole wheat bread",
+    "category": "breads",
+    "aliases": [
+      "wholemeal bread"
+    ]
+  },
+  {
+    "name": "blue cheese",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Veined aged cheese",
+    "shelfLife": "3-4 weeks refrigerated",
+    "storageTips": "Wrap tightly"
+  },
+  {
+    "name": "brie",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Soft French cheese",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Wrap in wax paper"
+  },
+  {
+    "name": "butter",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Churned cream fat",
+    "shelfLife": "1-3 months refrigerated",
+    "storageTips": "Keep wrapped in fridge"
+  },
+  {
+    "name": "buttermilk",
+    "category": "dairy",
+    "aliases": []
+  },
+  {
+    "name": "camembert",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Creamy French cheese",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Wrap in wax paper"
+  },
+  {
+    "name": "cheddar",
+    "category": "dairy",
+    "aliases": [
+      "cheddar cheese"
+    ],
+    "description": "Sharp aged cheese",
+    "shelfLife": "3-4 weeks refrigerated",
+    "storageTips": "Wrap tightly to prevent drying"
+  },
+  {
+    "name": "condensed milk",
+    "category": "dairy",
+    "aliases": [
+      "sweetened condensed milk"
+    ]
+  },
+  {
+    "name": "cream cheese",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Soft spreadable cheese",
+    "shelfLife": "2 weeks refrigerated",
+    "storageTips": "Keep wrapped and cold"
+  },
+  {
+    "name": "creme fraiche",
+    "category": "dairy",
+    "aliases": []
+  },
+  {
+    "name": "evaporated milk",
+    "category": "dairy",
+    "aliases": []
+  },
+  {
+    "name": "feta",
+    "category": "dairy",
+    "aliases": [
+      "feta cheese"
+    ],
+    "description": "Brined Greek cheese",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in brine"
+  },
+  {
+    "name": "ghee",
+    "category": "dairy",
+    "aliases": [
+      "clarified butter"
+    ],
+    "description": "Clarified butter",
+    "shelfLife": "3 months room temp, 1 year refrigerated",
+    "storageTips": "Store in airtight jar"
+  },
+  {
+    "name": "goat cheese",
+    "category": "dairy",
+    "aliases": [
+      "chevre"
+    ],
+    "description": "Soft tangy cheese",
+    "shelfLife": "1-2 weeks refrigerated",
+    "storageTips": "Keep wrapped and cold"
+  },
+  {
+    "name": "gorgonzola",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Italian blue cheese",
+    "shelfLife": "3-4 weeks refrigerated",
+    "storageTips": "Wrap tightly"
+  },
+  {
+    "name": "greek yogurt",
+    "category": "dairy",
+    "aliases": [
+      "greek yoghurt"
+    ]
+  },
+  {
+    "name": "gruyere",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Swiss Alpine cheese",
+    "shelfLife": "3-4 weeks refrigerated",
+    "storageTips": "Wrap tightly"
+  },
+  {
+    "name": "halloumi",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Grilling cheese",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in brine"
+  },
+  {
+    "name": "heavy cream",
+    "category": "dairy",
+    "aliases": [
+      "double cream",
+      "heavy whipping cream",
+      "whipping cream"
+    ],
+    "description": "High-fat cream",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Keep cold, shake before use"
+  },
+  {
+    "name": "labneh",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Strained yogurt cheese",
+    "shelfLife": "1-2 weeks refrigerated",
+    "storageTips": "Keep refrigerated"
+  },
+  {
+    "name": "manchego",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Spanish sheep cheese",
+    "shelfLife": "3-4 weeks refrigerated",
+    "storageTips": "Wrap tightly"
+  },
+  {
+    "name": "mascarpone",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Italian cream cheese",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Keep refrigerated"
+  },
+  {
+    "name": "milk",
+    "category": "dairy",
+    "aliases": [
+      "whole milk"
+    ],
+    "description": "Dairy milk",
+    "shelfLife": "5-7 days refrigerated",
+    "storageTips": "Keep refrigerated, check date"
+  },
+  {
+    "name": "mozzarella",
+    "category": "dairy",
+    "aliases": [
+      "mozzarella cheese"
+    ],
+    "description": "Mild Italian cheese",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Keep in liquid or wrapped"
+  },
+  {
+    "name": "paneer",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Indian fresh cheese",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Keep refrigerated in water"
+  },
+  {
+    "name": "parmesan",
+    "category": "dairy",
+    "aliases": [
+      "parmigiano reggiano",
+      "parmesan cheese"
+    ],
+    "description": "Hard aged Italian cheese",
+    "shelfLife": "6-12 months refrigerated",
+    "storageTips": "Wrap tightly, grate fresh"
+  },
+  {
+    "name": "pecorino",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Italian sheep cheese",
+    "shelfLife": "6 months refrigerated",
+    "storageTips": "Wrap tightly"
+  },
+  {
+    "name": "ricotta",
+    "category": "dairy",
+    "aliases": [
+      "ricotta cheese"
+    ],
+    "description": "Fresh Italian whey cheese",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Keep refrigerated"
+  },
+  {
+    "name": "sour cream",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Cultured cream",
+    "shelfLife": "2-3 weeks refrigerated",
+    "storageTips": "Keep sealed and refrigerated"
+  },
+  {
+    "name": "swiss",
+    "category": "dairy",
+    "aliases": [],
+    "description": "Holey Alpine cheese",
+    "shelfLife": "3-4 weeks refrigerated",
+    "storageTips": "Wrap tightly"
+  },
+  {
+    "name": "unsalted butter",
+    "category": "dairy",
+    "aliases": []
+  },
+  {
+    "name": "yogurt",
+    "category": "dairy",
+    "aliases": [
+      "yoghurt"
+    ],
+    "description": "Cultured milk",
+    "shelfLife": "1-2 weeks refrigerated",
+    "storageTips": "Keep sealed and cold"
+  },
+  {
+    "name": "egg",
+    "category": "eggs",
+    "aliases": [
+      "chicken egg"
+    ],
+    "description": "Chicken egg",
+    "shelfLife": "3-5 weeks refrigerated",
+    "storageTips": "Store in carton in fridge"
+  },
+  {
+    "name": "egg white",
+    "category": "eggs",
+    "aliases": []
+  },
+  {
+    "name": "egg yolk",
+    "category": "eggs",
+    "aliases": []
+  },
+  {
+    "name": "avocado oil",
+    "category": "fats_oils",
+    "aliases": []
+  },
+  {
+    "name": "canola oil",
+    "category": "fats_oils",
+    "aliases": [
+      "rapeseed oil"
+    ],
+    "description": "Light neutral oil",
+    "shelfLife": "1-2 years",
+    "storageTips": "Store in cool place"
+  },
+  {
+    "name": "coconut oil",
+    "category": "fats_oils",
+    "aliases": [],
+    "description": "Tropical oil",
+    "shelfLife": "2 years",
+    "storageTips": "Room temperature, solid when cool"
+  },
+  {
+    "name": "extra virgin olive oil",
+    "category": "fats_oils",
+    "aliases": [
+      "evoo"
+    ],
+    "description": "Premium olive oil",
+    "shelfLife": "1-2 years",
+    "storageTips": "Dark bottle in cool place"
+  },
+  {
+    "name": "lard",
+    "category": "fats_oils",
+    "aliases": []
+  },
+  {
+    "name": "olive oil",
+    "category": "fats_oils",
+    "aliases": [],
+    "description": "Mediterranean oil",
+    "shelfLife": "1-2 years",
+    "storageTips": "Store in cool dark place"
+  },
+  {
+    "name": "peanut oil",
+    "category": "fats_oils",
+    "aliases": [
+      "groundnut oil"
+    ],
+    "description": "High-heat cooking oil",
+    "shelfLife": "1-2 years",
+    "storageTips": "Store in cool place"
+  },
+  {
+    "name": "sesame oil",
+    "category": "fats_oils",
+    "aliases": [
+      "toasted sesame oil"
+    ],
+    "description": "Aromatic Asian oil",
+    "shelfLife": "1 year",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "sunflower oil",
+    "category": "fats_oils",
+    "aliases": []
+  },
+  {
+    "name": "vegetable oil",
+    "category": "fats_oils",
+    "aliases": [],
+    "description": "Neutral cooking oil",
+    "shelfLife": "1-2 years",
+    "storageTips": "Store in cool place"
+  },
+  {
+    "name": "apple",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Crisp sweet fruit",
+    "shelfLife": "1-2 months refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "apricot",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Stone fruit",
+    "shelfLife": "1 week fresh, 6 months dried",
+    "storageTips": "Room temp until ripe"
+  },
+  {
+    "name": "avocado",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Creamy green fruit",
+    "shelfLife": "3-5 days",
+    "storageTips": "Ripen at room temp, then refrigerate"
+  },
+  {
+    "name": "banana",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Yellow tropical fruit",
+    "shelfLife": "3-5 days",
+    "storageTips": "Room temperature"
+  },
+  {
+    "name": "blueberry",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Small blue berry",
+    "shelfLife": "1-2 weeks refrigerated",
+    "storageTips": "Store unwashed"
+  },
+  {
+    "name": "cherry",
+    "category": "fruits",
+    "aliases": []
+  },
+  {
+    "name": "coconut",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Tropical nut fruit",
+    "shelfLife": "2-3 months whole",
+    "storageTips": "Store whole at room temp"
+  },
+  {
+    "name": "cranberry",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Tart red berry",
+    "shelfLife": "1 month fresh, 1 year frozen",
+    "storageTips": "Refrigerate or freeze"
+  },
+  {
+    "name": "date",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Sweet dried fruit",
+    "shelfLife": "6 months",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "fig",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Sweet fruit",
+    "shelfLife": "1 week fresh, 6 months dried",
+    "storageTips": "Refrigerate fresh"
+  },
+  {
+    "name": "grape",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Small round fruit",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store unwashed in bag"
+  },
+  {
+    "name": "kalamata olive",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Greek black olive",
+    "shelfLife": "1 year",
+    "storageTips": "Keep in brine"
+  },
+  {
+    "name": "lemon",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Sour citrus fruit",
+    "shelfLife": "2-3 weeks refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "lime",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Tart green citrus",
+    "shelfLife": "2 weeks refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "mango",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Sweet tropical fruit",
+    "shelfLife": "5 days",
+    "storageTips": "Ripen at room temp"
+  },
+  {
+    "name": "olive",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Brined Mediterranean fruit",
+    "shelfLife": "1 year unopened",
+    "storageTips": "Keep in brine after opening"
+  },
+  {
+    "name": "orange",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Sweet citrus fruit",
+    "shelfLife": "1-2 weeks",
+    "storageTips": "Room temperature or refrigerated"
+  },
+  {
+    "name": "peach",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Fuzzy stone fruit",
+    "shelfLife": "3-5 days",
+    "storageTips": "Ripen at room temp"
+  },
+  {
+    "name": "pear",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Sweet tree fruit",
+    "shelfLife": "5-7 days",
+    "storageTips": "Ripen at room temp"
+  },
+  {
+    "name": "pineapple",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Tropical spiky fruit",
+    "shelfLife": "3-5 days",
+    "storageTips": "Room temperature until ripe"
+  },
+  {
+    "name": "plantain",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Starchy banana relative",
+    "shelfLife": "1 week",
+    "storageTips": "Ripen at room temperature"
+  },
+  {
+    "name": "plum",
+    "category": "fruits",
+    "aliases": []
+  },
+  {
+    "name": "pomegranate",
+    "category": "fruits",
+    "aliases": []
+  },
+  {
+    "name": "prune",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Dried plum",
+    "shelfLife": "6 months",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "raisin",
+    "category": "fruits",
+    "aliases": [
+      "sultana"
+    ],
+    "description": "Dried grape",
+    "shelfLife": "6 months",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "raspberry",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Delicate red berry",
+    "shelfLife": "2-3 days refrigerated",
+    "storageTips": "Very perishable, use quickly"
+  },
+  {
+    "name": "strawberry",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Sweet red berry",
+    "shelfLife": "3-7 days refrigerated",
+    "storageTips": "Don't wash until ready to use"
+  },
+  {
+    "name": "tamarind",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Sour tropical fruit paste",
+    "shelfLife": "1 year",
+    "storageTips": "Store in cool place"
+  },
+  {
+    "name": "watermelon",
+    "category": "fruits",
+    "aliases": [],
+    "description": "Large sweet melon",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Refrigerate after cutting"
+  },
+  {
+    "name": "arborio rice",
+    "category": "grains",
+    "aliases": [
+      "risotto rice"
+    ]
+  },
+  {
+    "name": "barley",
+    "category": "grains",
+    "aliases": [
+      "pearl barley"
+    ],
+    "description": "Chewy grain",
+    "shelfLife": "1 year",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "basmati rice",
+    "category": "grains",
+    "aliases": [],
+    "description": "Aromatic long-grain rice",
+    "shelfLife": "1-2 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "brown rice",
+    "category": "grains",
+    "aliases": [],
+    "description": "Whole grain rice",
+    "shelfLife": "6 months",
+    "storageTips": "Airtight container, consider refrigerating"
+  },
+  {
+    "name": "bulgur",
+    "category": "grains",
+    "aliases": [
+      "bulgur wheat"
+    ],
+    "description": "Cracked wheat",
+    "shelfLife": "1 year",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "cornmeal",
+    "category": "grains",
+    "aliases": [
+      "polenta"
+    ]
+  },
+  {
+    "name": "couscous",
+    "category": "grains",
+    "aliases": [],
+    "description": "Tiny pasta pellets",
+    "shelfLife": "1 year",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "farro",
+    "category": "grains",
+    "aliases": [],
+    "description": "Ancient wheat grain",
+    "shelfLife": "1 year",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "freekeh",
+    "category": "grains",
+    "aliases": [],
+    "description": "Roasted green wheat",
+    "shelfLife": "1 year",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "hominy",
+    "category": "grains",
+    "aliases": [],
+    "description": "Treated corn kernels",
+    "shelfLife": "1 year dried",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "jasmine rice",
+    "category": "grains",
+    "aliases": [],
+    "description": "Fragrant Thai rice",
+    "shelfLife": "1-2 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "oat",
+    "category": "grains",
+    "aliases": [
+      "rolled oats",
+      "oatmeal",
+      "porridge oats"
+    ],
+    "description": "Whole grain cereal",
+    "shelfLife": "1-2 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "quinoa",
+    "category": "grains",
+    "aliases": [],
+    "description": "Protein-rich seed grain",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "rice",
+    "category": "grains",
+    "aliases": [
+      "white rice"
+    ],
+    "description": "Staple grain",
+    "shelfLife": "1-2 years",
+    "storageTips": "Store in airtight container"
+  },
+  {
+    "name": "white rice",
+    "category": "grains",
+    "aliases": [],
+    "description": "Polished rice",
+    "shelfLife": "1-2 years",
+    "storageTips": "Airtight container in cool place"
+  },
+  {
+    "name": "ancho chili",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Dried poblano pepper",
+    "shelfLife": "1 year",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "annatto",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Red coloring spice",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "basil",
+    "category": "herbs_spices",
+    "aliases": [
+      "fresh basil"
+    ],
+    "description": "Sweet Italian herb",
+    "shelfLife": "1 week",
+    "storageTips": "Store like flowers in water"
+  },
+  {
+    "name": "bay leaf",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Aromatic leaf for cooking",
+    "shelfLife": "2-3 years dried",
+    "storageTips": "Store dried in airtight container"
+  },
+  {
+    "name": "black pepper",
+    "category": "herbs_spices",
+    "aliases": [
+      "pepper",
+      "ground black pepper"
+    ],
+    "description": "Common peppercorn",
+    "shelfLife": "3-4 years whole, 2-3 ground",
+    "storageTips": "Store whole, grind fresh"
+  },
+  {
+    "name": "cardamom",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Aromatic sweet spice",
+    "shelfLife": "3-4 years",
+    "storageTips": "Store whole pods"
+  },
+  {
+    "name": "cayenne",
+    "category": "herbs_spices",
+    "aliases": [
+      "cayenne pepper"
+    ]
+  },
+  {
+    "name": "cayenne pepper",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Hot red pepper powder",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "chili powder",
+    "category": "herbs_spices",
+    "aliases": [
+      "chilli powder"
+    ],
+    "description": "Spice blend with chili",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "chipotle",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Smoked dried jalapeño",
+    "shelfLife": "1 year",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "chive",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Mild onion-flavored herb",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in bag"
+  },
+  {
+    "name": "cilantro",
+    "category": "herbs_spices",
+    "aliases": [
+      "fresh coriander",
+      "coriander leaf"
+    ],
+    "description": "Pungent herb (coriander leaves)",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in water or damp towel"
+  },
+  {
+    "name": "cinnamon",
+    "category": "herbs_spices",
+    "aliases": [
+      "ground cinnamon"
+    ],
+    "description": "Sweet warm spice",
+    "shelfLife": "3-4 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "clove",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Intense aromatic spice",
+    "shelfLife": "4 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "coriander",
+    "category": "herbs_spices",
+    "aliases": [
+      "ground coriander",
+      "coriander seed"
+    ],
+    "description": "Citrusy spice (cilantro seed)",
+    "shelfLife": "3-4 years whole, 2-3 years ground",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "cumin",
+    "category": "herbs_spices",
+    "aliases": [
+      "ground cumin",
+      "cumin powder"
+    ],
+    "description": "Warm earthy spice",
+    "shelfLife": "3-4 years whole, 2-3 years ground",
+    "storageTips": "Airtight container in dark place"
+  },
+  {
+    "name": "curry powder",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Spice blend",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "dill",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Delicate feathery herb",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Wrap in damp towel"
+  },
+  {
+    "name": "epazote",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Pungent Mexican herb",
+    "shelfLife": "1 week fresh",
+    "storageTips": "Store in plastic bag"
+  },
+  {
+    "name": "fennel seed",
+    "category": "herbs_spices",
+    "aliases": []
+  },
+  {
+    "name": "fenugreek",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Bitter aromatic seed",
+    "shelfLife": "3-4 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "five spice powder",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Chinese spice blend",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "garam masala",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Indian spice blend",
+    "shelfLife": "1-2 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "garlic powder",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Dried ground garlic",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "kaffir lime leaf",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Aromatic Thai leaf",
+    "shelfLife": "1 week fresh, 1 year frozen",
+    "storageTips": "Freeze for long storage"
+  },
+  {
+    "name": "lemongrass",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Citrus-scented grass",
+    "shelfLife": "2 weeks refrigerated",
+    "storageTips": "Store in plastic bag"
+  },
+  {
+    "name": "mexican oregano",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Citrusy oregano variety",
+    "shelfLife": "1-3 years dried",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "mint",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Cool refreshing herb",
+    "shelfLife": "1 week",
+    "storageTips": "Store in water like flowers"
+  },
+  {
+    "name": "mustard seed",
+    "category": "herbs_spices",
+    "aliases": []
+  },
+  {
+    "name": "nutmeg",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Sweet warm spice",
+    "shelfLife": "4 years whole, 2-3 ground",
+    "storageTips": "Store whole, grate fresh"
+  },
+  {
+    "name": "nutritional yeast",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Cheesy vegan seasoning",
+    "shelfLife": "2 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "onion powder",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Dried ground onion",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "oregano",
+    "category": "herbs_spices",
+    "aliases": [
+      "dried oregano"
+    ],
+    "description": "Mediterranean herb",
+    "shelfLife": "1 week fresh, 1-3 years dried",
+    "storageTips": "Wrap fresh in damp towel"
+  },
+  {
+    "name": "paprika",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Sweet red pepper powder",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container, cool and dark"
+  },
+  {
+    "name": "parsley",
+    "category": "herbs_spices",
+    "aliases": [
+      "flat-leaf parsley"
+    ],
+    "description": "Fresh green herb",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Wrap in damp towel"
+  },
+  {
+    "name": "ras el hanout",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Moroccan spice blend",
+    "shelfLife": "1-2 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "red pepper flakes",
+    "category": "herbs_spices",
+    "aliases": [
+      "chili flakes",
+      "crushed red pepper"
+    ],
+    "description": "Crushed dried chili",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "rosemary",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Pine-scented herb",
+    "shelfLife": "2 weeks refrigerated",
+    "storageTips": "Store in bag in crisper"
+  },
+  {
+    "name": "saffron",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Expensive red spice threads",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container in dark place"
+  },
+  {
+    "name": "sage",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Earthy pungent herb",
+    "shelfLife": "1 week fresh",
+    "storageTips": "Wrap in damp towel"
+  },
+  {
+    "name": "salt",
+    "category": "herbs_spices",
+    "aliases": [
+      "sea salt",
+      "table salt"
+    ],
+    "description": "Sodium chloride",
+    "shelfLife": "Indefinite",
+    "storageTips": "Keep dry"
+  },
+  {
+    "name": "sea salt",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Salt from evaporated seawater",
+    "shelfLife": "Indefinite",
+    "storageTips": "Keep dry"
+  },
+  {
+    "name": "shiso",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Japanese perilla leaf",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Wrap in damp towel"
+  },
+  {
+    "name": "sichuan peppercorn",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Numbing Chinese spice",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "smoked paprika",
+    "category": "herbs_spices",
+    "aliases": []
+  },
+  {
+    "name": "star anise",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Star-shaped licorice spice",
+    "shelfLife": "3-4 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "sumac",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Tangy red berry spice",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "thai basil",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Anise-scented basil",
+    "shelfLife": "1 week",
+    "storageTips": "Store in water"
+  },
+  {
+    "name": "thyme",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Earthy herb",
+    "shelfLife": "1 week fresh, 1-3 years dried",
+    "storageTips": "Wrap in damp towel"
+  },
+  {
+    "name": "turmeric",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Yellow anti-inflammatory spice",
+    "shelfLife": "3-4 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "white pepper",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Mild pepper",
+    "shelfLife": "3-4 years whole",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "zaatar",
+    "category": "herbs_spices",
+    "aliases": [],
+    "description": "Middle Eastern herb blend",
+    "shelfLife": "6 months",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "black bean",
+    "category": "legumes",
+    "aliases": [],
+    "description": "Black turtle bean",
+    "shelfLife": "2-3 years dried",
+    "storageTips": "Airtight container in dry place"
+  },
+  {
+    "name": "black-eyed pea",
+    "category": "legumes",
+    "aliases": []
+  },
+  {
+    "name": "butter bean",
+    "category": "legumes",
+    "aliases": [
+      "lima bean"
+    ]
+  },
+  {
+    "name": "cannellini bean",
+    "category": "legumes",
+    "aliases": [
+      "white kidney bean"
+    ]
+  },
+  {
+    "name": "chickpea",
+    "category": "legumes",
+    "aliases": [
+      "garbanzo bean",
+      "garbanzo"
+    ],
+    "description": "Garbanzo bean",
+    "shelfLife": "2-3 years dried",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "edamame",
+    "category": "legumes",
+    "aliases": [],
+    "description": "Young soybeans",
+    "shelfLife": "3 days refrigerated",
+    "storageTips": "Store in pods in fridge"
+  },
+  {
+    "name": "fava bean",
+    "category": "legumes",
+    "aliases": [
+      "broad bean"
+    ],
+    "description": "Broad bean",
+    "shelfLife": "2-3 years dried",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "firm tofu",
+    "category": "legumes",
+    "aliases": [],
+    "description": "Dense pressed tofu",
+    "shelfLife": "3-5 days refrigerated",
+    "storageTips": "Keep in water in fridge"
+  },
+  {
+    "name": "green lentil",
+    "category": "legumes",
+    "aliases": [],
+    "description": "Firm cooking lentil",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "kidney bean",
+    "category": "legumes",
+    "aliases": [],
+    "description": "Red bean",
+    "shelfLife": "2-3 years dried",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "lentil",
+    "category": "legumes",
+    "aliases": [],
+    "description": "Small lens-shaped legume",
+    "shelfLife": "2-3 years dried",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "pinto bean",
+    "category": "legumes",
+    "aliases": [],
+    "description": "Speckled bean",
+    "shelfLife": "2-3 years dried",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "red lentil",
+    "category": "legumes",
+    "aliases": [
+      "masoor dal"
+    ],
+    "description": "Quick-cooking lentil",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "silken tofu",
+    "category": "legumes",
+    "aliases": [],
+    "description": "Soft unpressed tofu",
+    "shelfLife": "3-5 days refrigerated",
+    "storageTips": "Keep refrigerated"
+  },
+  {
+    "name": "split pea",
+    "category": "legumes",
+    "aliases": [],
+    "description": "Dried split peas",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "tempeh",
+    "category": "legumes",
+    "aliases": [],
+    "description": "Fermented soybean cake",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Keep refrigerated"
+  },
+  {
+    "name": "tofu",
+    "category": "legumes",
+    "aliases": [
+      "bean curd"
+    ],
+    "description": "Soybean curd",
+    "shelfLife": "3-5 days refrigerated",
+    "storageTips": "Keep in water, change daily"
+  },
+  {
+    "name": "white bean",
+    "category": "legumes",
+    "aliases": [],
+    "description": "Cannellini bean",
+    "shelfLife": "2-3 years dried",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "andouille",
+    "category": "meats",
+    "aliases": [],
+    "description": "Cajun smoked sausage",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Keep refrigerated"
+  },
+  {
+    "name": "bacon",
+    "category": "meats",
+    "aliases": [
+      "streaky bacon"
+    ],
+    "description": "Cured pork belly",
+    "shelfLife": "1 week refrigerated, 1 month frozen",
+    "storageTips": "Keep refrigerated in package"
+  },
+  {
+    "name": "beef",
+    "category": "meats",
+    "aliases": [],
+    "description": "Red meat from cattle",
+    "shelfLife": "3-5 days refrigerated, 6-12 months frozen",
+    "storageTips": "Store in coldest part of refrigerator or freeze"
+  },
+  {
+    "name": "beef chuck",
+    "category": "meats",
+    "aliases": [
+      "stewing beef",
+      "chuck roast"
+    ],
+    "description": "Shoulder cut, ideal for slow cooking",
+    "shelfLife": "3-5 days refrigerated, 6-12 months frozen",
+    "storageTips": "Store wrapped in coldest part of fridge"
+  },
+  {
+    "name": "beef sirloin",
+    "category": "meats",
+    "aliases": [],
+    "description": "Tender cut from the back",
+    "shelfLife": "3-5 days refrigerated, 6-12 months frozen",
+    "storageTips": "Store wrapped in coldest part of fridge"
+  },
+  {
+    "name": "beef steak",
+    "category": "meats",
+    "aliases": [
+      "steak"
+    ]
+  },
+  {
+    "name": "bratwurst",
+    "category": "meats",
+    "aliases": [],
+    "description": "German sausage",
+    "shelfLife": "1-2 days refrigerated",
+    "storageTips": "Use quickly or freeze"
+  },
+  {
+    "name": "chicken",
+    "category": "meats",
+    "aliases": [],
+    "description": "Domestic fowl",
+    "shelfLife": "1-2 days refrigerated, 9-12 months frozen",
+    "storageTips": "Store in coldest part of fridge"
+  },
+  {
+    "name": "chicken breast",
+    "category": "meats",
+    "aliases": [
+      "boneless chicken breast"
+    ],
+    "description": "Boneless breast meat",
+    "shelfLife": "1-2 days refrigerated, 9 months frozen",
+    "storageTips": "Store wrapped or freeze immediately"
+  },
+  {
+    "name": "chicken thigh",
+    "category": "meats",
+    "aliases": [],
+    "description": "Dark meat from leg",
+    "shelfLife": "1-2 days refrigerated, 9 months frozen",
+    "storageTips": "Store wrapped in fridge"
+  },
+  {
+    "name": "chicken wing",
+    "category": "meats",
+    "aliases": []
+  },
+  {
+    "name": "chorizo",
+    "category": "meats",
+    "aliases": [],
+    "description": "Spanish/Mexican sausage",
+    "shelfLife": "1 week fresh, 4 weeks cured",
+    "storageTips": "Refrigerate"
+  },
+  {
+    "name": "duck",
+    "category": "meats",
+    "aliases": [],
+    "description": "Waterfowl with rich flavor",
+    "shelfLife": "1-2 days refrigerated, 6 months frozen",
+    "storageTips": "Store in coldest part of fridge"
+  },
+  {
+    "name": "ground beef",
+    "category": "meats",
+    "aliases": [
+      "minced beef",
+      "beef mince",
+      "hamburger meat"
+    ],
+    "description": "Minced beef",
+    "shelfLife": "1-2 days refrigerated, 3-4 months frozen",
+    "storageTips": "Use quickly or freeze immediately"
+  },
+  {
+    "name": "ground chicken",
+    "category": "meats",
+    "aliases": [],
+    "description": "Minced chicken",
+    "shelfLife": "1-2 days refrigerated, 3-4 months frozen",
+    "storageTips": "Use quickly or freeze"
+  },
+  {
+    "name": "ground lamb",
+    "category": "meats",
+    "aliases": [
+      "minced lamb",
+      "lamb mince"
+    ]
+  },
+  {
+    "name": "ground pork",
+    "category": "meats",
+    "aliases": [
+      "minced pork",
+      "pork mince"
+    ],
+    "description": "Minced pork",
+    "shelfLife": "1-2 days refrigerated, 3-4 months frozen",
+    "storageTips": "Use quickly or freeze"
+  },
+  {
+    "name": "ham",
+    "category": "meats",
+    "aliases": []
+  },
+  {
+    "name": "italian sausage",
+    "category": "meats",
+    "aliases": [],
+    "description": "Seasoned pork sausage",
+    "shelfLife": "1-2 days refrigerated",
+    "storageTips": "Use quickly or freeze"
+  },
+  {
+    "name": "lamb",
+    "category": "meats",
+    "aliases": [],
+    "description": "Meat from young sheep",
+    "shelfLife": "3-5 days refrigerated, 6-12 months frozen",
+    "storageTips": "Store in coldest part of refrigerator"
+  },
+  {
+    "name": "leg of lamb",
+    "category": "meats",
+    "aliases": [],
+    "description": "Leg cut of lamb",
+    "shelfLife": "3-5 days refrigerated, 6-12 months frozen",
+    "storageTips": "Store wrapped in fridge"
+  },
+  {
+    "name": "pancetta",
+    "category": "meats",
+    "aliases": [],
+    "description": "Italian cured pork belly",
+    "shelfLife": "3 weeks refrigerated",
+    "storageTips": "Wrap tightly"
+  },
+  {
+    "name": "pork",
+    "category": "meats",
+    "aliases": [],
+    "description": "Meat from pigs",
+    "shelfLife": "3-5 days refrigerated, 6-12 months frozen",
+    "storageTips": "Store in coldest part of refrigerator"
+  },
+  {
+    "name": "pork belly",
+    "category": "meats",
+    "aliases": []
+  },
+  {
+    "name": "pork chop",
+    "category": "meats",
+    "aliases": [],
+    "description": "Cut from pork loin",
+    "shelfLife": "3-5 days refrigerated, 6-12 months frozen",
+    "storageTips": "Store wrapped in fridge"
+  },
+  {
+    "name": "prosciutto",
+    "category": "meats",
+    "aliases": [
+      "parma ham"
+    ],
+    "description": "Italian cured ham",
+    "shelfLife": "2-3 weeks refrigerated",
+    "storageTips": "Wrap tightly"
+  },
+  {
+    "name": "salami",
+    "category": "meats",
+    "aliases": [],
+    "description": "Italian cured sausage",
+    "shelfLife": "3-4 weeks refrigerated",
+    "storageTips": "Keep wrapped"
+  },
+  {
+    "name": "sausage",
+    "category": "meats",
+    "aliases": []
+  },
+  {
+    "name": "turkey",
+    "category": "meats",
+    "aliases": [],
+    "description": "Large domestic fowl",
+    "shelfLife": "1-2 days refrigerated, 12 months frozen",
+    "storageTips": "Store in coldest part of fridge"
+  },
+  {
+    "name": "turkey breast",
+    "category": "meats",
+    "aliases": [],
+    "description": "Breast meat from turkey",
+    "shelfLife": "1-2 days refrigerated, 9 months frozen",
+    "storageTips": "Store wrapped or freeze"
+  },
+  {
+    "name": "veal",
+    "category": "meats",
+    "aliases": [],
+    "description": "Meat from young cattle",
+    "shelfLife": "3-5 days refrigerated, 6-12 months frozen",
+    "storageTips": "Store in coldest part of refrigerator"
+  },
+  {
+    "name": "whole chicken",
+    "category": "meats",
+    "aliases": [],
+    "description": "Entire chicken",
+    "shelfLife": "1-2 days refrigerated, 12 months frozen",
+    "storageTips": "Store in coldest part of fridge"
+  },
+  {
+    "name": "button mushroom",
+    "category": "mushrooms",
+    "aliases": [
+      "white mushroom"
+    ],
+    "description": "Common white mushroom",
+    "shelfLife": "5-7 days refrigerated",
+    "storageTips": "Paper bag in fridge"
+  },
+  {
+    "name": "cremini mushroom",
+    "category": "mushrooms",
+    "aliases": [
+      "chestnut mushroom",
+      "baby bella"
+    ]
+  },
+  {
+    "name": "enoki mushroom",
+    "category": "mushrooms",
+    "aliases": []
+  },
+  {
+    "name": "mushroom",
+    "category": "mushrooms",
+    "aliases": [],
+    "description": "Edible fungus",
+    "shelfLife": "5-7 days refrigerated",
+    "storageTips": "Store in paper bag in fridge"
+  },
+  {
+    "name": "oyster mushroom",
+    "category": "mushrooms",
+    "aliases": []
+  },
+  {
+    "name": "porcini mushroom",
+    "category": "mushrooms",
+    "aliases": []
+  },
+  {
+    "name": "portobello",
+    "category": "mushrooms",
+    "aliases": [],
+    "description": "Large brown mushroom",
+    "shelfLife": "5-7 days refrigerated",
+    "storageTips": "Store in paper bag"
+  },
+  {
+    "name": "portobello mushroom",
+    "category": "mushrooms",
+    "aliases": []
+  },
+  {
+    "name": "shiitake",
+    "category": "mushrooms",
+    "aliases": [],
+    "description": "Asian mushroom",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in paper bag"
+  },
+  {
+    "name": "shiitake mushroom",
+    "category": "mushrooms",
+    "aliases": []
+  },
+  {
+    "name": "egg noodle",
+    "category": "noodles",
+    "aliases": []
+  },
+  {
+    "name": "fettuccine",
+    "category": "noodles",
+    "aliases": [],
+    "description": "Flat ribbon pasta",
+    "shelfLife": "1-2 years",
+    "storageTips": "Store in dry place"
+  },
+  {
+    "name": "lasagna sheet",
+    "category": "noodles",
+    "aliases": [
+      "lasagne sheet"
+    ]
+  },
+  {
+    "name": "linguine",
+    "category": "noodles",
+    "aliases": []
+  },
+  {
+    "name": "macaroni",
+    "category": "noodles",
+    "aliases": []
+  },
+  {
+    "name": "orzo",
+    "category": "noodles",
+    "aliases": []
+  },
+  {
+    "name": "pasta",
+    "category": "noodles",
+    "aliases": [],
+    "description": "Italian noodle",
+    "shelfLife": "1-2 years",
+    "storageTips": "Store in package in dry place"
+  },
+  {
+    "name": "penne",
+    "category": "noodles",
+    "aliases": [],
+    "description": "Tube-shaped pasta",
+    "shelfLife": "1-2 years",
+    "storageTips": "Store in dry place"
+  },
+  {
+    "name": "ramen noodle",
+    "category": "noodles",
+    "aliases": [],
+    "description": "Japanese wheat noodle",
+    "shelfLife": "1 year",
+    "storageTips": "Store in dry place"
+  },
+  {
+    "name": "rice noodle",
+    "category": "noodles",
+    "aliases": [],
+    "description": "Asian rice pasta",
+    "shelfLife": "1 year",
+    "storageTips": "Store in package"
+  },
+  {
+    "name": "rigatoni",
+    "category": "noodles",
+    "aliases": []
+  },
+  {
+    "name": "soba noodle",
+    "category": "noodles",
+    "aliases": [],
+    "description": "Buckwheat noodle",
+    "shelfLife": "1 year",
+    "storageTips": "Store in dry place"
+  },
+  {
+    "name": "spaghetti",
+    "category": "noodles",
+    "aliases": [],
+    "description": "Long thin pasta",
+    "shelfLife": "1-2 years",
+    "storageTips": "Store in dry place"
+  },
+  {
+    "name": "udon noodle",
+    "category": "noodles",
+    "aliases": [],
+    "description": "Thick Japanese noodle",
+    "shelfLife": "1 year",
+    "storageTips": "Store in package"
+  },
+  {
+    "name": "vermicelli",
+    "category": "noodles",
+    "aliases": []
+  },
+  {
+    "name": "almond",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Mild tree nut",
+    "shelfLife": "1 year sealed",
+    "storageTips": "Airtight container, refrigerate"
+  },
+  {
+    "name": "almond butter",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Ground almond spread",
+    "shelfLife": "3-4 months opened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "brazil nut",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Large South American nut",
+    "shelfLife": "6 months",
+    "storageTips": "Refrigerate"
+  },
+  {
+    "name": "cashew",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Creamy nut",
+    "shelfLife": "6-9 months",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "chia seed",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Tiny superfood seed",
+    "shelfLife": "2 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "flaxseed",
+    "category": "nuts_seeds",
+    "aliases": [
+      "linseed"
+    ],
+    "description": "Omega-3 rich seed",
+    "shelfLife": "1 year",
+    "storageTips": "Refrigerate ground seeds"
+  },
+  {
+    "name": "hazelnut",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Sweet tree nut",
+    "shelfLife": "6 months",
+    "storageTips": "Refrigerate or freeze"
+  },
+  {
+    "name": "macadamia",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Buttery tropical nut",
+    "shelfLife": "6 months",
+    "storageTips": "Refrigerate"
+  },
+  {
+    "name": "nigella seed",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Black cumin seed",
+    "shelfLife": "2-3 years",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "peanut",
+    "category": "nuts_seeds",
+    "aliases": [
+      "groundnut"
+    ],
+    "description": "Legume nut",
+    "shelfLife": "1-2 months shelled",
+    "storageTips": "Refrigerate for longer storage"
+  },
+  {
+    "name": "peanut butter",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Ground peanut spread",
+    "shelfLife": "3-4 months opened",
+    "storageTips": "Refrigerate natural kinds"
+  },
+  {
+    "name": "pecan",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Sweet tree nut",
+    "shelfLife": "6 months",
+    "storageTips": "Refrigerate or freeze"
+  },
+  {
+    "name": "pine nut",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Small delicate nut",
+    "shelfLife": "1-2 months",
+    "storageTips": "Refrigerate or freeze"
+  },
+  {
+    "name": "pistachio",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Green nut",
+    "shelfLife": "3 months",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "pumpkin seed",
+    "category": "nuts_seeds",
+    "aliases": [
+      "pepita"
+    ],
+    "description": "Green pepita seed",
+    "shelfLife": "3-4 months",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "sesame seed",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Tiny oil-rich seed",
+    "shelfLife": "6 months",
+    "storageTips": "Airtight container"
+  },
+  {
+    "name": "sunflower seed",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Mild nutty seed",
+    "shelfLife": "3 months",
+    "storageTips": "Airtight container, refrigerate"
+  },
+  {
+    "name": "tahini",
+    "category": "nuts_seeds",
+    "aliases": [
+      "sesame paste"
+    ],
+    "description": "Sesame seed paste",
+    "shelfLife": "6 months",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "walnut",
+    "category": "nuts_seeds",
+    "aliases": [],
+    "description": "Rich tree nut",
+    "shelfLife": "6 months",
+    "storageTips": "Refrigerate or freeze"
+  },
+  {
+    "name": "adobo sauce",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Mexican chili sauce",
+    "shelfLife": "6 months refrigerated",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "barbecue sauce",
+    "category": "sauces",
+    "aliases": [
+      "bbq sauce"
+    ]
+  },
+  {
+    "name": "caper",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Pickled flower bud",
+    "shelfLife": "1 year",
+    "storageTips": "Keep in brine"
+  },
+  {
+    "name": "curry paste",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Spiced Thai paste",
+    "shelfLife": "1 year refrigerated",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "dijon mustard",
+    "category": "sauces",
+    "aliases": []
+  },
+  {
+    "name": "fish sauce",
+    "category": "sauces",
+    "aliases": [
+      "nam pla"
+    ],
+    "description": "Fermented fish liquid",
+    "shelfLife": "3-4 years",
+    "storageTips": "Store at room temperature"
+  },
+  {
+    "name": "gochujang",
+    "category": "sauces",
+    "aliases": [
+      "korean chili paste"
+    ],
+    "description": "Korean fermented chili paste",
+    "shelfLife": "1 year refrigerated",
+    "storageTips": "Keep refrigerated"
+  },
+  {
+    "name": "harissa",
+    "category": "sauces",
+    "aliases": [],
+    "description": "North African chili paste",
+    "shelfLife": "6 months refrigerated",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "hoisin sauce",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Sweet Chinese sauce",
+    "shelfLife": "1 year",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "hot sauce",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Spicy chili sauce",
+    "shelfLife": "3 years",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "jam",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Fruit preserve",
+    "shelfLife": "1 year unopened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "ketchup",
+    "category": "sauces",
+    "aliases": [
+      "tomato ketchup"
+    ],
+    "description": "Tomato condiment",
+    "shelfLife": "1 year",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "marmalade",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Citrus preserve",
+    "shelfLife": "1 year unopened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "mayonnaise",
+    "category": "sauces",
+    "aliases": [
+      "mayo"
+    ],
+    "description": "Egg-oil emulsion",
+    "shelfLife": "2-3 months opened",
+    "storageTips": "Refrigerate"
+  },
+  {
+    "name": "miso paste",
+    "category": "sauces",
+    "aliases": [
+      "miso"
+    ],
+    "description": "Fermented soy paste",
+    "shelfLife": "1 year refrigerated",
+    "storageTips": "Keep refrigerated"
+  },
+  {
+    "name": "mustard",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Tangy seed condiment",
+    "shelfLife": "1-2 years",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "oyster sauce",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Savory shellfish sauce",
+    "shelfLife": "1 year",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "pesto",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Basil-based sauce",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Cover with oil, refrigerate"
+  },
+  {
+    "name": "pomegranate molasses",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Concentrated pomegranate syrup",
+    "shelfLife": "1 year",
+    "storageTips": "Store in pantry"
+  },
+  {
+    "name": "preserved lemon",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Salt-cured lemon",
+    "shelfLife": "1 year refrigerated",
+    "storageTips": "Keep in brine"
+  },
+  {
+    "name": "red curry paste",
+    "category": "sauces",
+    "aliases": []
+  },
+  {
+    "name": "salsa",
+    "category": "sauces",
+    "aliases": []
+  },
+  {
+    "name": "salsa verde",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Green tomatillo sauce",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Keep refrigerated"
+  },
+  {
+    "name": "sambal oelek",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Indonesian chili paste",
+    "shelfLife": "6 months",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "soy sauce",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Fermented soy liquid",
+    "shelfLife": "2-3 years",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "sriracha",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Thai hot chili sauce",
+    "shelfLife": "2 years",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "teriyaki sauce",
+    "category": "sauces",
+    "aliases": []
+  },
+  {
+    "name": "tomato paste",
+    "category": "sauces",
+    "aliases": [
+      "tomato puree"
+    ],
+    "description": "Concentrated tomato",
+    "shelfLife": "18 months unopened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "tomato sauce",
+    "category": "sauces",
+    "aliases": [
+      "marinara",
+      "passata"
+    ],
+    "description": "Cooked tomato sauce",
+    "shelfLife": "18 months unopened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "worcestershire sauce",
+    "category": "sauces",
+    "aliases": [],
+    "description": "Savory fermented sauce",
+    "shelfLife": "3 years",
+    "storageTips": "Store in pantry"
+  },
+  {
+    "name": "abalone",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Edible sea snail",
+    "shelfLife": "1-2 days refrigerated",
+    "storageTips": "Keep alive and cold"
+  },
+  {
+    "name": "albacore tuna",
+    "category": "seafood",
+    "aliases": [],
+    "description": "White-meat tuna",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep chilled"
+  },
+  {
+    "name": "anchovy",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Small oily fish often cured",
+    "shelfLife": "1 day refrigerated, 2-3 months frozen",
+    "storageTips": "Store cold or cured"
+  },
+  {
+    "name": "arctic char",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Salmon-like cold-water fish",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep chilled"
+  },
+  {
+    "name": "barramundi",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Mild Australian sea bass",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store on ice"
+  },
+  {
+    "name": "blue crab",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Crab species common in Americas",
+    "shelfLife": "1 day refrigerated, 3 months frozen",
+    "storageTips": "Cook quickly"
+  },
+  {
+    "name": "bluefin tuna",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Highly prized fatty tuna",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store near freezing"
+  },
+  {
+    "name": "bottarga",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Cured fish roe",
+    "shelfLife": "Several months refrigerated",
+    "storageTips": "Wrap tightly"
+  },
+  {
+    "name": "branzino",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Mediterranean sea bass",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store on ice"
+  },
+  {
+    "name": "calamari",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Culinary term for squid",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store cold"
+  },
+  {
+    "name": "caviar",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Salt-cured sturgeon roe",
+    "shelfLife": "1-2 weeks refrigerated",
+    "storageTips": "Keep unopened and cold"
+  },
+  {
+    "name": "clam",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Bivalve shellfish",
+    "shelfLife": "1-2 days refrigerated",
+    "storageTips": "Store alive, damp cloth"
+  },
+  {
+    "name": "cockle",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Small edible clam",
+    "shelfLife": "1-2 days refrigerated",
+    "storageTips": "Store alive and cold"
+  },
+  {
+    "name": "cod",
+    "category": "seafood",
+    "aliases": []
+  },
+  {
+    "name": "conger eel",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Large eel used in European cuisine",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store on ice"
+  },
+  {
+    "name": "crab",
+    "category": "seafood",
+    "aliases": []
+  },
+  {
+    "name": "crawfish",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Freshwater crustacean",
+    "shelfLife": "1 day refrigerated, 3 months frozen",
+    "storageTips": "Cook promptly"
+  },
+  {
+    "name": "crayfish",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Freshwater lobster-like shellfish",
+    "shelfLife": "1 day refrigerated, 3 months frozen",
+    "storageTips": "Keep cold"
+  },
+  {
+    "name": "cuttlefish",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Cephalopod with mild flavor",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep chilled"
+  },
+  {
+    "name": "eel",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Oily elongated fish",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep chilled"
+  },
+  {
+    "name": "fish roe",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Salted fish eggs",
+    "shelfLife": "3-5 days refrigerated",
+    "storageTips": "Keep sealed and cold"
+  },
+  {
+    "name": "flounder",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Mild flatfish",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store on ice"
+  },
+  {
+    "name": "grouper",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Firm white fish popular in tropics",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store on ice"
+  },
+  {
+    "name": "haddock",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Mild white fish similar to cod",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store on ice"
+  },
+  {
+    "name": "halibut",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Large flatfish with firm white flesh",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store on ice"
+  },
+  {
+    "name": "herring",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Oily fish used fresh or pickled",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep very cold"
+  },
+  {
+    "name": "king crab",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Large crab with sweet meat",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep chilled"
+  },
+  {
+    "name": "langoustine",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Norway lobster",
+    "shelfLife": "1 day refrigerated, 3 months frozen",
+    "storageTips": "Keep very cold"
+  },
+  {
+    "name": "lobster",
+    "category": "seafood",
+    "aliases": []
+  },
+  {
+    "name": "mackerel",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Oily fish with strong flavor",
+    "shelfLife": "1 day refrigerated, 2-3 months frozen",
+    "storageTips": "Store very cold"
+  },
+  {
+    "name": "mahi mahi",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Firm tropical fish",
+    "shelfLife": "1-2 days refrigerated",
+    "storageTips": "Store on ice"
+  },
+  {
+    "name": "marlin",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Large game fish",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep very cold"
+  },
+  {
+    "name": "milkfish",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Popular Southeast Asian fish",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep cold"
+  },
+  {
+    "name": "monkfish",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Firm fish with lobster-like texture",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep very cold"
+  },
+  {
+    "name": "mussel",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Small bivalve shellfish",
+    "shelfLife": "1-2 days refrigerated",
+    "storageTips": "Keep alive, do not seal"
+  },
+  {
+    "name": "octopus",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Large cephalopod",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Freeze to tenderize"
+  },
+  {
+    "name": "oyster",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Briny bivalve shellfish",
+    "shelfLife": "1-2 days refrigerated",
+    "storageTips": "Keep alive, shell down"
+  },
+  {
+    "name": "pollock",
+    "category": "seafood",
+    "aliases": [],
+    "description": "White fish used in fillets and surimi",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep very cold"
+  },
+  {
+    "name": "prawn",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Large shrimp variety",
+    "shelfLife": "1-2 days refrigerated, 3-6 months frozen",
+    "storageTips": "Keep frozen"
+  },
+  {
+    "name": "salmon",
+    "category": "seafood",
+    "aliases": []
+  },
+  {
+    "name": "sardine",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Small oily fish",
+    "shelfLife": "1 day refrigerated, 2-3 months frozen",
+    "storageTips": "Keep iced"
+  },
+  {
+    "name": "scallop",
+    "category": "seafood",
+    "aliases": []
+  },
+  {
+    "name": "sea bass",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Mild, flaky white fish",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep chilled"
+  },
+  {
+    "name": "sea urchin",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Edible gonads (uni)",
+    "shelfLife": "1-2 days refrigerated",
+    "storageTips": "Keep very cold"
+  },
+  {
+    "name": "shrimp",
+    "category": "seafood",
+    "aliases": [
+      "prawn"
+    ]
+  },
+  {
+    "name": "snapper",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Firm white reef fish",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep very cold"
+  },
+  {
+    "name": "snow crab",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Crab with delicate meat",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store cold"
+  },
+  {
+    "name": "sole",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Delicate flatfish",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep cold and dry"
+  },
+  {
+    "name": "squid",
+    "category": "seafood",
+    "aliases": [
+      "calamari"
+    ],
+    "description": "Cephalopod with firm flesh",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Keep very cold"
+  },
+  {
+    "name": "swordfish",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Firm, steak-like fish",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store on ice"
+  },
+  {
+    "name": "tilapia",
+    "category": "seafood",
+    "aliases": []
+  },
+  {
+    "name": "tilefish",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Firm white fish",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store chilled"
+  },
+  {
+    "name": "trout",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Freshwater fish similar to salmon",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store on ice"
+  },
+  {
+    "name": "tuna",
+    "category": "seafood",
+    "aliases": []
+  },
+  {
+    "name": "whelk",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Sea snail",
+    "shelfLife": "1-2 days refrigerated",
+    "storageTips": "Store chilled"
+  },
+  {
+    "name": "yellowfin tuna",
+    "category": "seafood",
+    "aliases": [],
+    "description": "Lean tuna variety",
+    "shelfLife": "1-2 days refrigerated, 3 months frozen",
+    "storageTips": "Store very cold"
+  },
+  {
+    "name": "beef stock",
+    "category": "stocks",
+    "aliases": [
+      "beef broth"
+    ],
+    "description": "Beef bone broth",
+    "shelfLife": "3-4 days refrigerated",
+    "storageTips": "Refrigerate or freeze"
+  },
+  {
+    "name": "bouillon cube",
+    "category": "stocks",
+    "aliases": [
+      "stock cube"
+    ]
+  },
+  {
+    "name": "chicken stock",
+    "category": "stocks",
+    "aliases": [
+      "chicken broth"
+    ],
+    "description": "Chicken bone broth",
+    "shelfLife": "3-4 days refrigerated, 4-6 months frozen",
+    "storageTips": "Refrigerate or freeze"
+  },
+  {
+    "name": "dashi",
+    "category": "stocks",
+    "aliases": []
+  },
+  {
+    "name": "fish stock",
+    "category": "stocks",
+    "aliases": [
+      "fish broth"
+    ]
+  },
+  {
+    "name": "vegetable stock",
+    "category": "stocks",
+    "aliases": [
+      "vegetable broth",
+      "veggie stock"
+    ],
+    "description": "Vegetable broth",
+    "shelfLife": "3-4 days refrigerated",
+    "storageTips": "Refrigerate or freeze"
+  },
+  {
+    "name": "agave",
+    "category": "sweeteners",
+    "aliases": [
+      "agave nectar",
+      "agave syrup"
+    ]
+  },
+  {
+    "name": "agave nectar",
+    "category": "sweeteners",
+    "aliases": [],
+    "description": "Agave plant sweetener",
+    "shelfLife": "2 years",
+    "storageTips": "Store in pantry"
+  },
+  {
+    "name": "brown sugar",
+    "category": "sweeteners",
+    "aliases": [],
+    "description": "Molasses sugar",
+    "shelfLife": "2 years",
+    "storageTips": "Keep airtight to prevent hardening"
+  },
+  {
+    "name": "corn syrup",
+    "category": "sweeteners",
+    "aliases": []
+  },
+  {
+    "name": "honey",
+    "category": "sweeteners",
+    "aliases": [],
+    "description": "Bee-produced sweetener",
+    "shelfLife": "Indefinite",
+    "storageTips": "Store at room temperature"
+  },
+  {
+    "name": "maple syrup",
+    "category": "sweeteners",
+    "aliases": [],
+    "description": "Tree sap syrup",
+    "shelfLife": "1 year unopened",
+    "storageTips": "Refrigerate after opening"
+  },
+  {
+    "name": "molasses",
+    "category": "sweeteners",
+    "aliases": [
+      "treacle"
+    ]
+  },
+  {
+    "name": "powdered sugar",
+    "category": "sweeteners",
+    "aliases": [
+      "confectioners sugar",
+      "icing sugar"
+    ],
+    "description": "Confectioners sugar",
+    "shelfLife": "Indefinite",
+    "storageTips": "Keep dry"
+  },
+  {
+    "name": "sugar",
+    "category": "sweeteners",
+    "aliases": [
+      "white sugar",
+      "granulated sugar",
+      "caster sugar"
+    ],
+    "description": "White granulated sugar",
+    "shelfLife": "Indefinite",
+    "storageTips": "Keep dry in airtight container"
+  },
+  {
+    "name": "artichoke",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Thistle flower bud",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in plastic bag"
+  },
+  {
+    "name": "arugula",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Peppery salad green",
+    "shelfLife": "3-5 days refrigerated",
+    "storageTips": "Store in crisper, keep dry"
+  },
+  {
+    "name": "asparagus",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Green spear vegetable",
+    "shelfLife": "3-4 days refrigerated",
+    "storageTips": "Store upright in water"
+  },
+  {
+    "name": "bamboo shoot",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Young bamboo sprout",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in water"
+  },
+  {
+    "name": "bean sprout",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Sprouted mung beans",
+    "shelfLife": "2-3 days refrigerated",
+    "storageTips": "Keep in sealed bag"
+  },
+  {
+    "name": "beet",
+    "category": "vegetables",
+    "aliases": [
+      "beetroot"
+    ],
+    "description": "Sweet red root",
+    "shelfLife": "2-4 weeks refrigerated",
+    "storageTips": "Remove greens, store in crisper"
+  },
+  {
+    "name": "bell pepper",
+    "category": "vegetables",
+    "aliases": [
+      "capsicum",
+      "sweet pepper"
+    ],
+    "description": "Sweet pepper",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper drawer"
+  },
+  {
+    "name": "bok choy",
+    "category": "vegetables",
+    "aliases": [
+      "pak choi"
+    ],
+    "description": "Chinese cabbage",
+    "shelfLife": "3-4 days refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "broccoli",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Green cruciferous vegetable",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "brussels sprout",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Small cabbage-like vegetable",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "butternut squash",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Sweet winter squash",
+    "shelfLife": "1-3 months",
+    "storageTips": "Store in cool, dry place"
+  },
+  {
+    "name": "cabbage",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Dense leafy vegetable",
+    "shelfLife": "2 weeks refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "carrot",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Orange root vegetable",
+    "shelfLife": "3-4 weeks refrigerated",
+    "storageTips": "Store in crisper drawer"
+  },
+  {
+    "name": "cauliflower",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "White cruciferous vegetable",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "celery",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Crunchy stalk",
+    "shelfLife": "2 weeks refrigerated",
+    "storageTips": "Wrap in foil, store in crisper"
+  },
+  {
+    "name": "celery root",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Celeriac root",
+    "shelfLife": "1-2 weeks refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "cherry tomato",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Small sweet tomato",
+    "shelfLife": "1 week",
+    "storageTips": "Room temperature for best flavor"
+  },
+  {
+    "name": "chili pepper",
+    "category": "vegetables",
+    "aliases": [
+      "chilli pepper",
+      "chile pepper",
+      "hot pepper"
+    ],
+    "description": "Hot pepper",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper or freeze"
+  },
+  {
+    "name": "collard green",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Hearty Southern green",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "corn",
+    "category": "vegetables",
+    "aliases": [
+      "sweetcorn",
+      "maize"
+    ],
+    "description": "Sweet kernel vegetable",
+    "shelfLife": "3-5 days refrigerated",
+    "storageTips": "Keep in husk, refrigerate"
+  },
+  {
+    "name": "cucumber",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Cool green vegetable",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "daikon",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Japanese radish",
+    "shelfLife": "1-2 weeks refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "eggplant",
+    "category": "vegetables",
+    "aliases": [
+      "aubergine",
+      "brinjal"
+    ],
+    "description": "Purple nightshade",
+    "shelfLife": "1 week",
+    "storageTips": "Store in cool place, not too cold"
+  },
+  {
+    "name": "endive",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Bitter leafy vegetable",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "fennel",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Anise-flavored bulb",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "galangal",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Thai ginger relative",
+    "shelfLife": "2 weeks refrigerated",
+    "storageTips": "Wrap and refrigerate"
+  },
+  {
+    "name": "garlic",
+    "category": "vegetables",
+    "aliases": [
+      "garlic clove"
+    ],
+    "description": "Aromatic bulb",
+    "shelfLife": "3-6 months",
+    "storageTips": "Store in cool, dark, dry place"
+  },
+  {
+    "name": "ginger",
+    "category": "vegetables",
+    "aliases": [
+      "fresh ginger",
+      "ginger root"
+    ],
+    "description": "Spicy rhizome",
+    "shelfLife": "1-3 weeks refrigerated",
+    "storageTips": "Refrigerate unpeeled or freeze"
+  },
+  {
+    "name": "green bean",
+    "category": "vegetables",
+    "aliases": [
+      "string bean"
+    ],
+    "description": "Crisp pod vegetable",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "habanero",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Very hot orange pepper",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "jalapeno",
+    "category": "vegetables",
+    "aliases": [
+      "jalapeno pepper"
+    ],
+    "description": "Medium-hot chili",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "jicama",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Crunchy root vegetable",
+    "shelfLife": "2-3 weeks refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "kale",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Hearty leafy green",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "kimchi",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Fermented Korean vegetables",
+    "shelfLife": "3-6 months refrigerated",
+    "storageTips": "Keep refrigerated"
+  },
+  {
+    "name": "kohlrabi",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "German turnip",
+    "shelfLife": "2 weeks refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "kombu",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Kelp for dashi",
+    "shelfLife": "1 year",
+    "storageTips": "Store in cool dry place"
+  },
+  {
+    "name": "leek",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Mild onion relative",
+    "shelfLife": "1-2 weeks refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "lettuce",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Salad green",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "mustard green",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Peppery leafy green",
+    "shelfLife": "3-5 days refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "napa cabbage",
+    "category": "vegetables",
+    "aliases": [
+      "chinese cabbage"
+    ],
+    "description": "Chinese cabbage",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "nopal",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Cactus paddle",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in plastic bag"
+  },
+  {
+    "name": "nori",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Dried seaweed sheets",
+    "shelfLife": "1 year",
+    "storageTips": "Keep in airtight container"
+  },
+  {
+    "name": "okra",
+    "category": "vegetables",
+    "aliases": [
+      "ladies finger"
+    ],
+    "description": "Green pod vegetable",
+    "shelfLife": "3-4 days refrigerated",
+    "storageTips": "Store in paper bag"
+  },
+  {
+    "name": "onion",
+    "category": "vegetables",
+    "aliases": [
+      "yellow onion",
+      "brown onion"
+    ],
+    "description": "Pungent bulb vegetable",
+    "shelfLife": "1-2 months",
+    "storageTips": "Store in cool, dark, dry place"
+  },
+  {
+    "name": "parsnip",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "White root vegetable",
+    "shelfLife": "2-3 weeks refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "pea",
+    "category": "vegetables",
+    "aliases": [
+      "green pea",
+      "garden pea"
+    ],
+    "description": "Sweet pod vegetable",
+    "shelfLife": "3-5 days refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "poblano",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Mild Mexican pepper",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "potato",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Starchy tuber",
+    "shelfLife": "2-3 months",
+    "storageTips": "Store in cool, dark, dry place"
+  },
+  {
+    "name": "pumpkin",
+    "category": "vegetables",
+    "aliases": []
+  },
+  {
+    "name": "radicchio",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Bitter red lettuce",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "radish",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Crisp peppery root",
+    "shelfLife": "1-2 weeks refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "red bell pepper",
+    "category": "vegetables",
+    "aliases": [
+      "red capsicum"
+    ],
+    "description": "Sweet red pepper",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "red onion",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Milder purple onion",
+    "shelfLife": "1-2 months",
+    "storageTips": "Store in cool, dry place"
+  },
+  {
+    "name": "rhubarb",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Tart pink stalk",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in plastic bag"
+  },
+  {
+    "name": "rutabaga",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Yellow root vegetable",
+    "shelfLife": "2-3 weeks refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "scallion",
+    "category": "vegetables",
+    "aliases": [
+      "green onion",
+      "spring onion"
+    ],
+    "description": "Green onion",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Wrap in damp towel in fridge"
+  },
+  {
+    "name": "serrano",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Hot green chili",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "shallot",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Small mild onion",
+    "shelfLife": "1 month",
+    "storageTips": "Store in cool, dry place"
+  },
+  {
+    "name": "snow pea",
+    "category": "vegetables",
+    "aliases": [
+      "mangetout"
+    ],
+    "description": "Flat edible pod pea",
+    "shelfLife": "3-5 days refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "spinach",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Leafy green",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper, keep dry"
+  },
+  {
+    "name": "sun dried tomato",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Dried concentrated tomato",
+    "shelfLife": "6 months in oil",
+    "storageTips": "Store in oil or dry"
+  },
+  {
+    "name": "sweet potato",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Sweet orange tuber",
+    "shelfLife": "2-3 weeks",
+    "storageTips": "Store in cool, dark place"
+  },
+  {
+    "name": "swiss chard",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Colorful leafy green",
+    "shelfLife": "3-5 days refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "tomatillo",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Green husk tomato",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in paper bag"
+  },
+  {
+    "name": "tomato",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Red fruit used as vegetable",
+    "shelfLife": "1 week at room temp",
+    "storageTips": "Store at room temperature"
+  },
+  {
+    "name": "turnip",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "White root vegetable",
+    "shelfLife": "2 weeks refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "wakame",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Japanese seaweed",
+    "shelfLife": "1 year dried",
+    "storageTips": "Store in airtight container"
+  },
+  {
+    "name": "water chesnut",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Crunchy aquatic vegetable",
+    "shelfLife": "2 weeks refrigerated",
+    "storageTips": "Store in water"
+  },
+  {
+    "name": "yucca",
+    "category": "vegetables",
+    "aliases": [],
+    "description": "Starchy root vegetable",
+    "shelfLife": "1 week",
+    "storageTips": "Store in cool place"
+  },
+  {
+    "name": "zucchini",
+    "category": "vegetables",
+    "aliases": [
+      "courgette"
+    ],
+    "description": "Green summer squash",
+    "shelfLife": "1 week refrigerated",
+    "storageTips": "Store in crisper"
+  },
+  {
+    "name": "apple cider vinegar",
+    "category": "vinegars",
+    "aliases": [
+      "cider vinegar"
+    ],
+    "description": "Fermented apple vinegar",
+    "shelfLife": "Indefinite",
+    "storageTips": "Store in pantry"
+  },
+  {
+    "name": "balsamic vinegar",
+    "category": "vinegars",
+    "aliases": [],
+    "description": "Sweet Italian vinegar",
+    "shelfLife": "Indefinite",
+    "storageTips": "Store in cool place"
+  },
+  {
+    "name": "red wine vinegar",
+    "category": "vinegars",
+    "aliases": [],
+    "description": "Wine-based vinegar",
+    "shelfLife": "Indefinite",
+    "storageTips": "Store in pantry"
+  },
+  {
+    "name": "rice vinegar",
+    "category": "vinegars",
+    "aliases": [
+      "rice wine vinegar"
+    ],
+    "description": "Mild Asian vinegar",
+    "shelfLife": "Indefinite",
+    "storageTips": "Store in pantry"
+  },
+  {
+    "name": "vinegar",
+    "category": "vinegars",
+    "aliases": [],
+    "description": "Acetic acid liquid",
+    "shelfLife": "Indefinite",
+    "storageTips": "Store in pantry"
+  },
+  {
+    "name": "white vinegar",
+    "category": "vinegars",
+    "aliases": [
+      "distilled vinegar"
+    ],
+    "description": "Distilled vinegar",
+    "shelfLife": "Indefinite",
+    "storageTips": "Store in pantry"
+  },
+  {
+    "name": "white wine vinegar",
+    "category": "vinegars",
+    "aliases": []
+  }
 ]

@@ -31,6 +31,14 @@ interface SeedIngredient {
     name: string;
     category: string;
     aliases?: string[];
+    /**
+     * Optional catalog metadata, carried over from the legacy SQL seed when it
+     * was merged into this file. Present on 384 of the entries; absent entries
+     * simply leave the columns null.
+     */
+    description?: string;
+    shelfLife?: string;
+    storageTips?: string;
 }
 
 // Ingredient identity — shared with match-ingredients.ts and mirrored by the
@@ -128,6 +136,11 @@ async function main() {
             canonical_id: cid,
             category_id: catByCanonical.get(s.category),
             embedding: JSON.stringify(embeddingByCanonical.get(cid)),
+            // Omitted rather than written as null when absent, so a partial
+            // seed never blanks a column that already holds something.
+            ...(s.description ? { description: s.description } : {}),
+            ...(s.shelfLife ? { shelf_life: s.shelfLife } : {}),
+            ...(s.storageTips ? { storage_tips: s.storageTips } : {}),
         }));
         const { data, error } = await supabaseAdmin
             .from("ingredients")

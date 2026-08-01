@@ -28,6 +28,14 @@ interface SeedIngredient {
     name: string;
     category: string;
     aliases?: string[];
+    /**
+     * Catalog metadata the model does not produce — it only returns names and
+     * aliases. Declared so it round-trips: core entries are carried through
+     * whole, and rebuilding them field-by-field here would silently drop it.
+     */
+    description?: string;
+    shelfLife?: string;
+    storageTips?: string;
 }
 
 // ~1,900 total across the 20 categories (tune freely).

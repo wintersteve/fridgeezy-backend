@@ -34,6 +34,17 @@ async function generateAndUploadCategoryImage(
             aspectRatio: "1:1",
         });
 
+        // base64Data is optional: the model sometimes answers a prompt with text
+        // and no image at all. Passing that straight to Buffer.from() raised an
+        // opaque TypeError about the argument type instead of saying what went
+        // wrong — and went unnoticed because this file lived in tools/, which
+        // tsconfig.app.json never included.
+        if (!base64Data) {
+            throw new Error(
+                `Model returned no image data for ${cuisine} (${dishName}) — the prompt likely produced a text response.`
+            );
+        }
+
         // Convert base64 to buffer
         const buffer = Buffer.from(base64Data, "base64");
 

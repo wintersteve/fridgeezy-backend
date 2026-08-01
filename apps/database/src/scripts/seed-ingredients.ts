@@ -17,9 +17,13 @@ config();
  * Reads a JSON array of { name, category, aliases? } where `category` is a
  * category canonical_id (one of the 20 seeded categories).
  *
- * DRY RUN by default — set SEED_APPLY=true to write. Idempotent: existing
- * ingredients (by canonical_id) and existing aliases are skipped, so it is safe
- * to re-run after extending the dataset.
+ * DRY RUN by default — set SEED_APPLY=true to write. Idempotent and safe to
+ * re-run after extending the dataset:
+ *   - ingredients already in the catalog (by canonical_id) are never recreated
+ *   - they ARE enriched: description, shelf life, storage tips and category are
+ *     filled where the row has nothing and the seed has something. Never
+ *     overwritten, since the catalog is also edited by the app and by hand.
+ *   - existing aliases are skipped
  */
 const APPLY = process.env.SEED_APPLY === "true";
 const SEED_FILE = process.env.SEED_FILE ?? "src/scripts/data/ingredient-seed.json";
@@ -82,25 +86,64 @@ async function main() {
         if (cid && !byCanonical.has(cid)) byCanonical.set(cid, s);
     }
 
-    // 3. Which canonicals already exist.
+    // 3. Which canonicals already exist, and what metadata they are missing.
     const canonicalIds = [...byCanonical.keys()];
     const existingByCanonical = new Map<string, string>();
+    interface ExistingRow {
+        id: string;
+        description: string | null;
+        shelf_life: string | null;
+        storage_tips: string | null;
+        category_id: string | null;
+    }
+    const existingRowByCanonical = new Map<string, ExistingRow>();
     for (const ids of chunk(canonicalIds, 500)) {
         const { data: rows, error } = await supabaseAdmin
             .from("ingredients")
-            .select("id, canonical_id")
+            .select("id, canonical_id, description, shelf_life, storage_tips, category_id")
             .in("canonical_id", ids);
         if (error) throw new Error(error.message);
-        for (const r of rows ?? [])
+        for (const r of rows ?? []) {
             existingByCanonical.set(r.canonical_id as string, r.id as string);
+            existingRowByCanonical.set(r.canonical_id as string, r as ExistingRow);
+        }
     }
 
     const toCreate = [...byCanonical.entries()].filter(
         ([cid]) => !existingByCanonical.has(cid)
     );
 
+    /**
+     * Rows that exist but are missing something the seed can supply.
+     *
+     * FILL-ONLY, never overwrite. The live catalog is edited by the app and by
+     * hand; a seed re-run must not stamp its own version over a description
+     * someone improved. So a field is written only where the row currently has
+     * nothing and the seed has something.
+     *
+     * This exists because the script used to be insert-only: 466 seed entries
+     * carry metadata but only the newly created rows ever received it, leaving
+     * everything already in the catalog permanently blank.
+     */
+    const toEnrich: { id: string; patch: Record<string, string> }[] = [];
+    for (const [cid, s] of byCanonical) {
+        const row = existingRowByCanonical.get(cid);
+        if (!row) continue;
+
+        const patch: Record<string, string> = {};
+        if (s.description && !row.description) patch.description = s.description;
+        if (s.shelfLife && !row.shelf_life) patch.shelf_life = s.shelfLife;
+        if (s.storageTips && !row.storage_tips) patch.storage_tips = s.storageTips;
+
+        // A category the seed knows and the row lacks — same fill-only rule.
+        const seedCategoryId = catByCanonical.get(s.category);
+        if (seedCategoryId && !row.category_id) patch.category_id = seedCategoryId;
+
+        if (Object.keys(patch).length > 0) toEnrich.push({ id: row.id, patch });
+    }
+
     console.log(
-        `Unique: ${byCanonical.size} | already in catalog: ${existingByCanonical.size} | to create: ${toCreate.length}${APPLY ? "" : " — DRY RUN"}`
+        `Unique: ${byCanonical.size} | already in catalog: ${existingByCanonical.size} | to create: ${toCreate.length} | to enrich: ${toEnrich.length}${APPLY ? "" : " — DRY RUN"}`
     );
 
     if (!APPLY) {
@@ -110,8 +153,37 @@ async function main() {
                 `  ${cid.padEnd(24)} [${s.category}]  aliases: ${(s.aliases ?? []).join(", ") || "—"}`
             );
         }
+        if (toEnrich.length) {
+            const fields = new Map<string, number>();
+            for (const { patch } of toEnrich)
+                for (const k of Object.keys(patch))
+                    fields.set(k, (fields.get(k) ?? 0) + 1);
+            console.log("\nFields that would be filled on existing rows:");
+            for (const [field, n] of [...fields].sort())
+                console.log(`  ${field.padEnd(14)} ${n}`);
+        }
         console.log("\nDRY RUN — set SEED_APPLY=true to write.");
         return;
+    }
+
+    // 3b. Fill the blanks on existing rows. One statement each: the patches
+    // differ per row, and an upsert would need every NOT NULL column this
+    // script never reads.
+    if (toEnrich.length) {
+        console.log(`\nEnriching ${toEnrich.length} existing ingredients...`);
+        let enriched = 0;
+        for (const { id, patch } of toEnrich) {
+            const { error } = await supabaseAdmin
+                .from("ingredients")
+                .update(patch as never)
+                .eq("id", id);
+            if (error) {
+                console.error(`  ${id}: ${error.message}`);
+                continue;
+            }
+            enriched++;
+        }
+        console.log(`Enriched ${enriched}/${toEnrich.length}.`);
     }
 
     // 4. Batch-embed the new ingredient names.

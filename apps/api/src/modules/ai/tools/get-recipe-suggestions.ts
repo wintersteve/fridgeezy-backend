@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 
 import {
+    COMPONENT_TAGS,
     searchRecipeSuggestions,
     type SearchRecipeSuggestionsOptions,
 } from "../../recipes/services/search-recipe-suggestions";
@@ -42,6 +43,18 @@ export const RecipeSuggestionInputSchema = z.object({
         .optional()
         .describe(
             "The concrete ingredients the user says they have, one per entry, singular and unqualified (e.g. ['chicken', 'rice'] for 'what can I make with chicken and rice?'). Set this whenever the user asks what to cook FROM ingredients — it is the only way an existing recipe is matched by ingredient rather than by name. Omit it when they name a dish, a cuisine or a concept instead."
+        ),
+    component: z
+        .enum(COMPONENT_TAGS)
+        .optional()
+        .describe(
+            "Set this whenever the user asks for a COMPONENT rather than a finished dish: 'what sauce goes with apple strudel' is component 'sauce', 'a marinade for chicken' is 'marinade'. Results are then restricted to recipes of that component type and anything generated is forced to be one, so the dish being accompanied cannot come back as the answer. Omit it for ordinary dish requests."
+        ),
+    exclude: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "Dish names that must NOT be returned: every dish already shown earlier in THIS conversation, plus the dish the user wants an accompaniment FOR ('what sauce goes with apple strudel' -> ['apple strudel']). Without it the search matches the accompanied dish and hands back the same card."
         ),
     dietaryRestrictions: z
         .array(z.string())

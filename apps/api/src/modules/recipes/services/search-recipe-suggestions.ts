@@ -36,6 +36,46 @@ import { searchRecipes } from "./search-recipes";
  */
 const DEFAULT_MATCH_THRESHOLD = 0.5;
 
+/**
+ * The canonical `component` tag vocabulary, mirroring `seeds/002_tags.sql`.
+ * Every recipe and suggestion carries exactly one of these, which makes it the
+ * one reliable way to tell "a sauce" from "a dish that has a sauce in it" —
+ * similarity search cannot: "sauce for apple strudel" scores highest against
+ * Apple Strudel itself, so a component question always answered with the dish.
+ */
+export const COMPONENT_TAGS = [
+    "sauce",
+    "stock",
+    "gravy",
+    "roux",
+    "slurry",
+    "spice blend",
+    "paste",
+    "rub",
+    "marinade",
+    "brine",
+    "cure",
+    "dough",
+    "batter",
+    "pastry",
+    "vinaigrette",
+    "dressing",
+    "custard",
+    "curd",
+    "caramel",
+    "crumb",
+    "pickle",
+    "jam",
+    "compote",
+    "syrup",
+    "glaze",
+    "icing",
+    "dish",
+    "puree",
+] as const;
+
+export type ComponentTag = (typeof COMPONENT_TAGS)[number];
+
 export interface RecipeSuggestionInput {
     query: string;
     matchThreshold?: number;
@@ -48,6 +88,27 @@ export interface RecipeSuggestionInput {
      * a dish or a concept rather than ingredients.
      */
     ingredients?: string[];
+    /**
+     * Dish names already shown earlier in the conversation, filtered out of
+     * every catalogue stage.
+     *
+     * Without it a follow-up about an ACCOMPANIMENT re-matched the dish it
+     * accompanies: "sauce for chicken parmesan" scores well above
+     * DEFAULT_MATCH_THRESHOLD against Chicken Parmesan's own signature, so
+     * stage 1b returned that recipe, the early return fired, and stage 3 never
+     * got to generate the sauce. Excluding it lets the search fall through to
+     * generation, which is what the question actually asked for.
+     */
+    exclude?: string[];
+    /**
+     * The component type the user actually asked for ("sauce", "marinade"). Set
+     * only for component questions; when present, every catalogue stage keeps
+     * just the rows carrying that component tag and stage 3 is told to generate
+     * one. This is what stops "what sauce goes with apple strudel" from being
+     * answered with Apple Strudel — the exclusion above only covers dishes we
+     * can name up front.
+     */
+    component?: ComponentTag;
     /** Dietary tags any generated suggestion must satisfy. */
     dietaryRestrictions?: string[];
     /** Ingredients to never suggest (allergies/dislikes). */
@@ -133,10 +194,21 @@ export async function searchRecipeSuggestions(
         matchThreshold = DEFAULT_MATCH_THRESHOLD,
         maxResults = 5,
         ingredients,
+        exclude,
+        component,
         dietaryRestrictions,
         blacklist,
     } = input;
     const { onPartialSuggestion } = options;
+
+    const excluded = new Set((exclude ?? []).map(canonicalizeName));
+    const isExcluded = (...names: Array<string | null | undefined>) =>
+        names.some((name) => !!name && excluded.has(canonicalizeName(name)));
+
+    // No component asked for means no component filter — every row qualifies.
+    const wanted = component ? canonicalizeName(component) : null;
+    const isWantedComponent = (tags: Array<{ name: string }>) =>
+        !wanted || tags.some((tag) => canonicalizeName(tag.name) === wanted);
 
     const suggestions: RecipeSuggestionItem[] = [];
     const metadata: SearchMetadata = {
@@ -157,10 +229,14 @@ export async function searchRecipeSuggestions(
             `[SearchRecipeSuggestions] Name lookup failed for "${query}":`,
             namedRecipe.error.message
         );
-    } else if (namedRecipe.value) {
+    } else if (namedRecipe.value && !isExcluded(query)) {
         const summary = await fetchRecipeSummary(namedRecipe.value.id);
 
-        if (summary) {
+        if (
+            summary &&
+            !isExcluded(summary.name) &&
+            isWantedComponent(summary.tags)
+        ) {
             suggestions.push({
                 id: summary.id,
                 name: summary.name,
@@ -190,7 +266,11 @@ export async function searchRecipeSuggestions(
     vectorResults.forEach((result, i) => {
         const recipeSummary = summaries[i];
 
-        if (recipeSummary) {
+        if (
+            recipeSummary &&
+            !isExcluded(recipeSummary.name) &&
+            isWantedComponent(recipeSummary.tags)
+        ) {
             suggestions.push({
                 id: recipeSummary.id,
                 name: recipeSummary.name,
@@ -234,6 +314,8 @@ export async function searchRecipeSuggestions(
 
         for (const row of catalogue) {
             if (suggestions.some((item) => item.id === row.id)) continue;
+            if (isExcluded(row.name)) continue;
+            if (!isWantedComponent(row.tags)) continue;
 
             suggestions.push({
                 id: row.id,
@@ -271,20 +353,24 @@ export async function searchRecipeSuggestions(
     // outlive its promotion (nothing deletes it if the user reached the recipe
     // another way), and surfacing both would show the same dish twice — once as
     // a recipe and once as a card offering to generate it again.
-    const existingSuggestion = await findSuggestionByName(query);
+    const existingSuggestion = isExcluded(query)
+        ? null
+        : await findSuggestionByName(query);
     const alreadyListed =
         !!existingSuggestion &&
-        suggestions.some(
-            (item) =>
-                // By id as well as by name: stage 1c can surface this very
-                // suggestion row via find_recipes, and a name comparison alone
-                // would miss it if the two spellings ever diverge.
-                item.id === existingSuggestion.id ||
-                canonicalizeName(item.name) ===
-                    canonicalizeName(existingSuggestion.name) ||
-                canonicalizeName(item.name) ===
-                    canonicalizeName(existingSuggestion.nameEn)
-        );
+        (isExcluded(existingSuggestion.name, existingSuggestion.nameEn) ||
+            !isWantedComponent(existingSuggestion.tags) ||
+            suggestions.some(
+                (item) =>
+                    // By id as well as by name: stage 1c can surface this very
+                    // suggestion row via find_recipes, and a name comparison
+                    // alone would miss it if the two spellings ever diverge.
+                    item.id === existingSuggestion.id ||
+                    canonicalizeName(item.name) ===
+                        canonicalizeName(existingSuggestion.name) ||
+                    canonicalizeName(item.name) ===
+                        canonicalizeName(existingSuggestion.nameEn)
+            ));
 
     if (existingSuggestion && !alreadyListed) {
         suggestions.push({
@@ -327,7 +413,12 @@ export async function searchRecipeSuggestions(
                 const tempId = randomUUID();
 
                 const outcome = await streamSingleSuggestion(
-                    { ingredients: [query], dietaryRestrictions, blacklist },
+                    {
+                        ingredients: [query],
+                        component,
+                        dietaryRestrictions,
+                        blacklist,
+                    },
                     {
                         onField: (fields) => {
                             // `name` streams first; hold the frame until it lands
@@ -391,6 +482,7 @@ export async function searchRecipeSuggestions(
                 let generatedCount = 0;
                 const stream = generateSuggestionsStream({
                     ingredients: [query],
+                    component,
                     dietaryRestrictions,
                     blacklist,
                 });

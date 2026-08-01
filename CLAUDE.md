@@ -19,8 +19,12 @@ The React Native client lives at **`/Users/steve/Projects/fridgeezy`** (GitHub:
 `wintersteve/fridgeezy`). It is a separate repo but it is *not* independent:
 
 - It consumes `@fridgeezy/schemas` and `@fridgeezy/types` as `file:` tarballs
-  built from `libs/fridgeezy/schemas` and `libs/fridgeezy/types` in this repo
-  (`file:../../WebstormProjects/fridgeezy-backend/libs/fridgeezy/<lib>/dist/*.tgz`).
+  built from `libs/schemas` and `libs/types` in this repo. The client **commits**
+  those tarballs at `vendor/fridgeezy-<lib>.tgz` and pins
+  `file:vendor/fridgeezy-<lib>.tgz` — it does *not* reference a path into this
+  repo. That was tried and abandoned: a `file:../../WebstormProjects/...` pin
+  resolves on one laptop and fails on EAS Build and any CI runner, which only
+  get what is in git. See that repo's `vendor/README.md` for the refresh steps.
 - Its `src/shared/api/ai` hooks call the `/rest` endpoints directly, and
   `src/shared/api/streaming` parses the SSE frames field-by-field as they arrive.
 
@@ -30,6 +34,13 @@ client code** (`/Users/steve/Projects/fridgeezy/src/shared/api/`, and that repo'
 own `CLAUDE.md`). A change that only compiles here still breaks the app: the
 client pins a built tarball, so schema edits do not reach it until the lib is
 rebuilt, packed, and reinstalled there.
+
+**Nothing in this repo automates that.** There is no `pack` target — the refresh
+is `nx run-many -t build` here, then `npm pack` per lib, then copy into the
+client's `vendor/` and `npm install` **naming each dep explicitly**. A bare
+`npm install` does not pick up a changed tarball: the path is unchanged, so npm
+resolves from cache and silently keeps the old copy. Treat the client refresh as
+a manual step you have to remember, not something a build will do for you.
 
 ## Commands
 
@@ -78,11 +89,15 @@ picked up whichever was current, so the same `db reset --linked` either seeded o
 did not depending on the day. Before upgrading, re-read `db reset --help` and
 adjust the `reset` target to match — do not assume the flags carried over.
 
-The Supabase project root is **`apps/database/`**, not `apps/database/src/` —
-that is where `config.toml`, `migrations/` and `seeds/` live, and where the CLI
-resolves it. They must not diverge: when they did, `db dump`, `migration repair`
-and `migration list` all failed in ways that looked unrelated, and
-`migration list` reported an empty Local column while happily connecting.
+Run the Supabase CLI from **`apps/database/`**, not `apps/database/src/` — every
+`database` target sets `cwd` there. The CLI looks for a `supabase/` directory
+below its working directory, so the files themselves live one level further down,
+in **`apps/database/supabase/`** (`config.toml`, `migrations/`, `seeds/`).
+
+Those two must stay in step: when the cwd and the `supabase/` directory diverged,
+`db dump`, `migration repair` and `migration list` all failed in ways that looked
+unrelated, and `migration list` reported an empty Local column while happily
+connecting.
 
 Seeds run in glob order (`./seeds/*.sql`), so the numeric prefixes are load
 order, not decoration — `0021_…` once sorted ahead of `002_…` because `'1'`

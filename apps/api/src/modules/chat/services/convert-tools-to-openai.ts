@@ -1,4 +1,4 @@
-import type OpenAI from "openai";
+import type { OpenAiShapedTool } from "@fridgeezy/llm";
 import { z } from "zod/v4";
 
 export interface ToolDefinition {
@@ -41,7 +41,7 @@ function zodToJsonSchema(schema: z.ZodTypeAny): JsonSchemaObject {
 export function convertToolToOpenAiFunction(
     name: string,
     definition: ToolDefinition
-): OpenAI.ChatCompletionTool {
+): OpenAiShapedTool {
     const parameters = zodToJsonSchema(definition.inputSchema);
 
     return {
@@ -59,7 +59,7 @@ export function convertToolToOpenAiFunction(
  */
 export function convertToolsToOpenAiTools(
     tools: Record<string, { definition: ToolDefinition }>
-): OpenAI.ChatCompletionTool[] {
+): OpenAiShapedTool[] {
     return Object.entries(tools).map(([name, tool]) =>
         convertToolToOpenAiFunction(name, tool.definition)
     );

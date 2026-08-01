@@ -1,6 +1,11 @@
 import {
+    AnthropicChatEvent,
     AnthropicStreamEvent,
+    ChatStreamEvent,
+    toAnthropicMessages,
+    toChatStreamEvents,
     toCompletionChunks,
+    toFinishReason,
 } from "@fridgeezy/bedrock";
 import {
     GenerateSuggestionResponseSchema,
@@ -32,6 +37,14 @@ import { accumulateSuggestionReveals } from "../../modules/suggestions/services/
  * missing suggestions, not as an error.
  *
  *   npx nx run @fridgeezy/api:check-streaming-conformance
+ *
+ * **It tests the BUILT libs, not their source.** It runs under `jiti`, which
+ * resolves `@fridgeezy/bedrock` through package exports to `dist/` rather than
+ * through the `@fridgeezy/source` condition tsc uses. That is the right thing to
+ * verify — it is what ships — but it means editing a translator and re-running
+ * this check without rebuilding silently grades the *previous* build. If a
+ * change you expect to break something leaves the count untouched, rebuild the
+ * lib before believing it.
  */
 
 // --------------------------------------------------------------------------
@@ -299,6 +312,308 @@ async function checkThinkingFiltered(): Promise<void> {
     }
 }
 
+
+// --------------------------------------------------------------------------
+// Tool calling — the part of the chat port with no JSONL to fall back on.
+// --------------------------------------------------------------------------
+
+/**
+ * The arguments a tool call carries. Deliberately awkward: nested braces, a
+ * string containing a `}`, and a unicode escape — because the Anthropic side
+ * rebuilds this from `input_json_delta` fragments, and a naive reassembly that
+ * splits on braces or mangles escapes produces JSON that still *parses* but
+ * means something else.
+ */
+const TOOL_ARGS =
+    '{"query":"sauce for apple strudel","exclude":["apple strudel"],"note":"say }} if unsure","unicode":"cr\\u00e8me"}';
+
+/** Wrap tool-call fragments in the Anthropic content-block envelope. */
+function anthropicToolEvents(
+    argChunks: string[],
+    options: { text?: string; second?: boolean } = {}
+): AsyncIterable<AnthropicChatEvent> {
+    const events: AnthropicChatEvent[] = [{ type: "message_start" }];
+
+    // Thinking first, as it arrives on any adaptive-thinking request. It must
+    // never reach the user, and must never be mistaken for tool input.
+    events.push(
+        { type: "content_block_start", index: 0, content_block: { type: "thinking" } },
+        {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "thinking_delta", text: "<thinking>which tool</thinking>" },
+        },
+        { type: "content_block_stop", index: 0 }
+    );
+
+    if (options.text) {
+        events.push(
+            { type: "content_block_start", index: 1, content_block: { type: "text" } },
+            {
+                type: "content_block_delta",
+                index: 1,
+                delta: { type: "text_delta", text: options.text },
+            },
+            { type: "content_block_stop", index: 1 }
+        );
+    }
+
+    events.push({
+        type: "content_block_start",
+        index: 2,
+        content_block: { type: "tool_use", id: "toolu_01", name: "GET_RECIPE_SUGGESTIONS" },
+    });
+    for (const chunk of argChunks) {
+        events.push({
+            type: "content_block_delta",
+            index: 2,
+            delta: { type: "input_json_delta", partial_json: chunk },
+        });
+    }
+    events.push({ type: "content_block_stop", index: 2 });
+
+    if (options.second) {
+        // A second tool call, opened at a HIGHER block index. Ordering by index
+        // is what keeps tool results aligned with what the model asked for.
+        events.push(
+            {
+                type: "content_block_start",
+                index: 3,
+                content_block: { type: "tool_use", id: "toolu_02", name: "SECOND_TOOL" },
+            },
+            {
+                type: "content_block_delta",
+                index: 3,
+                delta: { type: "input_json_delta", partial_json: '{"a":1}' },
+            },
+            { type: "content_block_stop", index: 3 }
+        );
+    }
+
+    events.push(
+        { type: "message_delta", delta: { stop_reason: "tool_use" } },
+        { type: "message_stop" }
+    );
+
+    return (async function* () {
+        for (const event of events) yield event;
+    })();
+}
+
+async function collectChatEvents(
+    events: AsyncIterable<AnthropicChatEvent>
+): Promise<ChatStreamEvent[]> {
+    const out: ChatStreamEvent[] = [];
+
+    for await (const event of toChatStreamEvents(events)) out.push(event);
+
+    return out;
+}
+
+async function checkToolCallStreaming(): Promise<void> {
+    console.log("\nTool calling — argument reassembly across chunk boundaries:");
+
+    for (const [regime, split] of Object.entries(REGIMES)) {
+        const events = await collectChatEvents(
+            anthropicToolEvents(split(TOOL_ARGS), { text: "Let me look." })
+        );
+
+        const toolEvent = events.find((e) => e.type === "tool_calls");
+        const call =
+            toolEvent?.type === "tool_calls" ? toolEvent.tool_calls[0] : undefined;
+
+        // The arguments must survive fragmentation byte-for-byte: the handler
+        // layer JSON.parses this string, and a corrupted one is caught and
+        // turned into a default verdict rather than an error.
+        const exact = call?.function.arguments === TOOL_ARGS;
+        const parses = (() => {
+            try {
+                return (
+                    JSON.parse(call?.function.arguments ?? "").query ===
+                    "sauce for apple strudel"
+                );
+            } catch {
+                return false;
+            }
+        })();
+
+        const named =
+            call?.function.name === "GET_RECIPE_SUGGESTIONS" && call?.id === "toolu_01";
+
+        // Thinking must not surface as visible text, and must not be swallowed
+        // into the tool arguments either.
+        const chunks = events
+            .filter((e) => e.type === "chunk")
+            .map((e) => (e.type === "chunk" ? e.delta : ""))
+            .join("");
+        const clean = !chunks.includes("<thinking>") && chunks === "Let me look.";
+
+        const done = events[events.length - 1];
+        const finished =
+            done?.type === "done" && done.finish_reason === "tool_calls";
+
+        check(
+            `${regime.padEnd(17)} ${split(TOOL_ARGS).length.toString().padStart(3)} frag -> args ${exact ? "exact" : "CORRUPT"}`,
+            exact && parses && named && clean && finished,
+            [
+                exact ? "" : "arguments differ from source",
+                parses ? "" : "arguments do not parse",
+                named ? "" : "id/name lost",
+                clean ? "" : "thinking leaked into visible text",
+                finished ? "" : "stop_reason not mapped to tool_calls",
+            ]
+                .filter(Boolean)
+                .join("; ")
+        );
+    }
+
+    // Two calls in one turn, emitted in block order.
+    const two = await collectChatEvents(
+        anthropicToolEvents([TOOL_ARGS], { second: true })
+    );
+    const twoEvent = two.find((e) => e.type === "tool_calls");
+    const ids =
+        twoEvent?.type === "tool_calls"
+            ? twoEvent.tool_calls.map((c) => c.id)
+            : [];
+
+    check(
+        `${"two calls".padEnd(17)} ordered by content-block index`,
+        ids.join(",") === "toolu_01,toolu_02",
+        `got ${ids.join(",") || "none"}`
+    );
+
+    // A turn with no tool call must not fabricate an empty tool_calls event —
+    // process-chat treats its presence as "run the tools".
+    const plain = await collectChatEvents(
+        (async function* () {
+            yield { type: "content_block_start", index: 0, content_block: { type: "text" } };
+            yield {
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "text_delta", text: "Just chatting." },
+            };
+            yield { type: "message_delta", delta: { stop_reason: "end_turn" } };
+        })()
+    );
+
+    check(
+        `${"no tools".padEnd(17)} emits no tool_calls event`,
+        !plain.some((e) => e.type === "tool_calls") &&
+            plain[plain.length - 1]?.type === "done",
+        "an empty tool_calls event would make process-chat run the tool loop"
+    );
+}
+
+function checkFinishReasonMapping(): void {
+    console.log("\nTool calling — stop_reason mapped to the OpenAI vocabulary:");
+
+    // process-chat branches on `finish_reason === "tool_calls"`, so a wrong
+    // mapping here disables tool calling silently rather than erroring.
+    const cases: [string, string | null][] = [
+        ["tool_use", "tool_calls"],
+        ["end_turn", "stop"],
+        ["stop_sequence", "stop"],
+        ["max_tokens", "length"],
+    ];
+
+    for (const [anthropic, expected] of cases) {
+        const actual = toFinishReason(anthropic);
+
+        check(
+            `${anthropic.padEnd(17)} -> ${expected}`,
+            actual === expected,
+            `got ${actual}`
+        );
+    }
+}
+
+function checkMessageTranslation(): void {
+    console.log("\nTool calling — conversation reshaped for Anthropic:");
+
+    const { system, messages } = toAnthropicMessages([
+        { role: "system", content: "You are a recipe assistant." },
+        { role: "user", content: "what sauce goes with apple strudel?" },
+        {
+            role: "assistant",
+            content: "Let me look.",
+            tool_calls: [
+                {
+                    id: "toolu_01",
+                    type: "function",
+                    function: { name: "GET_RECIPE_SUGGESTIONS", arguments: '{"query":"x"}' },
+                },
+                {
+                    id: "toolu_02",
+                    type: "function",
+                    function: { name: "SECOND_TOOL", arguments: "not json" },
+                },
+            ],
+        },
+        { role: "tool", tool_call_id: "toolu_01", content: '{"suggestions":[]}' },
+        { role: "tool", tool_call_id: "toolu_02", content: "{}" },
+        { role: "system", content: "Now summarise." },
+    ]);
+
+    check(
+        `${"system".padEnd(17)} lifted out and joined`,
+        system === "You are a recipe assistant.\n\nNow summarise." &&
+            !messages.some((m) => (m.role as string) === "system"),
+        "Anthropic takes system as a top-level field, and this app sends two"
+    );
+
+    const assistant = messages[1];
+    const blocks = Array.isArray(assistant?.content) ? assistant.content : [];
+    const toolUse = blocks.filter((b) => b.type === "tool_use");
+
+    check(
+        `${"tool_calls".padEnd(17)} become tool_use blocks with parsed input`,
+        toolUse.length === 2 &&
+            toolUse[0].type === "tool_use" &&
+            JSON.stringify(toolUse[0].input) === '{"query":"x"}',
+        "Anthropic wants `input` as an object where OpenAI carries a JSON string"
+    );
+
+    check(
+        `${"bad arguments".padEnd(17)} degrade to {} rather than throwing`,
+        toolUse[1]?.type === "tool_use" &&
+            JSON.stringify(toolUse[1].input) === "{}",
+        "a throw here would abort a conversation mid-turn"
+    );
+
+    // The merge is not cosmetic: Anthropic rejects one assistant turn with two
+    // tool_use blocks answered by two separate user messages.
+    const results = messages.filter(
+        (m) =>
+            m.role === "user" &&
+            Array.isArray(m.content) &&
+            m.content.some((b) => b.type === "tool_result")
+    );
+    const merged =
+        results.length === 1 &&
+        Array.isArray(results[0].content) &&
+        results[0].content.length === 2;
+
+    check(
+        `${"tool results".padEnd(17)} merged into ONE user turn`,
+        merged,
+        `got ${results.length} user turn(s) carrying tool_result`
+    );
+
+    // OpenAI tolerates empty-string content; Anthropic rejects it.
+    const { messages: sparse } = toAnthropicMessages([
+        { role: "user", content: "hi" },
+        { role: "assistant", content: "" },
+        { role: "user", content: null },
+    ]);
+
+    check(
+        `${"empty content".padEnd(17)} dropped, not sent as ""`,
+        sparse.length === 1,
+        `got ${sparse.length} message(s)`
+    );
+}
+
 async function main() {
     console.log(
         "Phase 1 streaming-shape conformance — offline, deterministic, no spend\n" +
@@ -319,6 +634,9 @@ async function main() {
         6
     );
     await checkIncrementalReveal();
+    await checkToolCallStreaming();
+    checkFinishReasonMapping();
+    checkMessageTranslation();
 
     console.log("\n" + "=".repeat(72));
     console.log(`${passed} passed, ${failed} failed`);

@@ -17,7 +17,8 @@
     },
     "dependencies": {
         "@fridgeezy/bedrock": "0.0.1",
-        "@fridgeezy/openai": "0.0.1"
+        "@fridgeezy/openai": "0.0.1",
+        "@fridgeezy/schemas": "0.0.1"
     },
     "nx": {
         "tags": [

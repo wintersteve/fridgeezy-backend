@@ -16,7 +16,8 @@
         }
     },
     "dependencies": {
-        "@anthropic-ai/bedrock-sdk": "^0.32.0"
+        "@anthropic-ai/bedrock-sdk": "^0.32.0",
+        "@fridgeezy/schemas": "0.0.1"
     },
     "nx": {
         "tags": [

@@ -7,15 +7,23 @@
         "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo",
         "emitDeclarationOnly": true,
         "forceConsistentCasingInFileNames": true,
-        "types": ["node", "vite/client"]
+        "types": [
+            "node",
+            "vite/client"
+        ]
     },
-    "include": ["src/**/*.ts"],
+    "include": [
+        "src/**/*.ts"
+    ],
     "references": [
         {
             "path": "../openai/tsconfig.lib.json"
         },
         {
             "path": "../bedrock/tsconfig.lib.json"
+        },
+        {
+            "path": "../schemas/tsconfig.lib.json"
         }
     ]
 }

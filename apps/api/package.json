@@ -144,11 +144,6 @@
         }
     },
     "dependencies": {
-        "@anthropic-ai/bedrock-sdk": "^0.32.0",
-        "express": "^5.2.1",
-        "cors": "^2.8.5",
-        "dotenv": "^17.2.3",
-        "zod": "^4.2.1",
         "@fridgeezy/domain": "0.0.1",
         "@fridgeezy/genai": "0.0.1",
         "@fridgeezy/llm": "0.0.1",
@@ -157,6 +152,14 @@
         "@fridgeezy/streaming-server": "0.0.1",
         "@fridgeezy/supabase": "0.0.1",
         "@fridgeezy/toolkit": "0.0.1",
+        "cors": "^2.8.5",
+        "dotenv": "^17.2.3",
+        "express": "^5.2.1",
+        "zod": "^4.2.1"
+    },
+    "devDependencies": {
+        "@anthropic-ai/bedrock-sdk": "^0.32.0",
+        "@aws-sdk/client-bedrock-runtime": "^3.1101.0",
         "@fridgeezy/bedrock": "0.0.1"
     }
 }

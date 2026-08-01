@@ -18,6 +18,7 @@
         "supabase": "2.72.2"
     },
     "devDependencies": {
+        "@aws-sdk/client-bedrock-runtime": "^3.1101.0",
         "@eslint/js": "^9.8.0",
         "@nx/esbuild": "22.3.3",
         "@nx/eslint": "22.3.3",

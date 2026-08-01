@@ -39,7 +39,13 @@ export interface CompletionChunk {
 export interface Candidate {
     /** Label shown in the score table. */
     id: string;
-    provider: "openai" | "bedrock";
+    /**
+     * `bedrock` speaks the Anthropic Messages API; `bedrock-converse` speaks
+     * Bedrock's own Converse API. Both are Bedrock, but they are different
+     * wire protocols with different SDKs — only Anthropic models accept the
+     * former, and everything else on Bedrock requires the latter.
+     */
+    provider: "openai" | "bedrock" | "bedrock-converse";
     model: string;
     /**
      * Claude only, and only on models that support adaptive thinking (Sonnet 4.6
@@ -98,6 +104,32 @@ export const BEDROCK_CANDIDATES: Candidate[] = [
         id: "sonnet-4.5",
         provider: "bedrock",
         model: "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    },
+];
+
+/**
+ * OpenAI's **open-weight** models, served through Bedrock's Converse API.
+ *
+ * These are not the models this app runs. Production is `gpt-4.1` and `gpt-4o`,
+ * which are proprietary and reachable only through OpenAI's own API or Azure —
+ * they will not appear on Bedrock. So this is a genuine model migration, with
+ * the same prompt re-validation burden as moving to Claude, not a way to keep
+ * the current models under AWS billing.
+ *
+ * It earns a place on the roster for one reason: **it is not behind the
+ * Anthropic use-case gate.** Probed 2026-08-01 and it answers immediately, so it
+ * can measure whether leaving OpenAI's proprietary models is viable at all while
+ * the Claude candidates remain blocked on a console approval.
+ *
+ * Note the bare `openai.` ID: unlike the Anthropic entries, this one is NOT an
+ * `eu.` inference profile — `eu.openai.gpt-oss-20b-1:0` returns "provided model
+ * identifier is invalid".
+ */
+export const CONVERSE_CANDIDATES: Candidate[] = [
+    {
+        id: "gpt-oss-120b",
+        provider: "bedrock-converse",
+        model: "openai.gpt-oss-120b-1:0",
     },
 ];
 
@@ -184,12 +216,58 @@ async function* streamBedrock(
     }
 }
 
+/**
+ * Stream from a non-Anthropic Bedrock model over the Converse API.
+ *
+ * Converse is Bedrock's own protocol, and it differs from the Anthropic path in
+ * two ways that matter here: the system prompt is a separate top-level array
+ * rather than a string, and reasoning arrives as `reasoningContent` delta blocks
+ * alongside the visible `text` ones.
+ *
+ * Those reasoning blocks are dropped for exactly the reason thinking deltas are
+ * dropped on the Anthropic path — every scorer parses the visible text as JSONL,
+ * so reasoning that reached the parser would corrupt the line it landed on and
+ * be silently skipped. gpt-oss emits reasoning by default and cannot be asked
+ * not to, which makes this filter load-bearing rather than defensive.
+ */
+async function* streamConverse(
+    candidate: Candidate,
+    system: string,
+    user: string
+): AsyncGenerator<CompletionChunk> {
+    const { BedrockRuntimeClient, ConverseStreamCommand } = await import(
+        "@aws-sdk/client-bedrock-runtime"
+    );
+
+    const client = new BedrockRuntimeClient({
+        region: process.env.AWS_REGION ?? "eu-central-1",
+    });
+
+    const response = await client.send(
+        new ConverseStreamCommand({
+            modelId: candidate.model,
+            system: [{ text: system }],
+            messages: [{ role: "user", content: [{ text: user }] }],
+            inferenceConfig: { maxTokens: BEDROCK_MAX_TOKENS },
+        })
+    );
+
+    for await (const event of response.stream ?? []) {
+        const text = event.contentBlockDelta?.delta?.text;
+
+        if (text) yield { choices: [{ delta: { content: text } }] };
+    }
+}
+
 export function streamCompletion(
     candidate: Candidate,
     system: string,
     user: string
 ): AsyncGenerator<CompletionChunk> {
-    return candidate.provider === "openai"
-        ? streamOpenAi(candidate, system, user)
-        : streamBedrock(candidate, system, user);
+    if (candidate.provider === "openai") return streamOpenAi(candidate, system, user);
+    if (candidate.provider === "bedrock-converse") {
+        return streamConverse(candidate, system, user);
+    }
+
+    return streamBedrock(candidate, system, user);
 }

@@ -37,6 +37,7 @@ import { SUGGESTIONS_SYSTEM_PROMPT } from "../../modules/suggestions/services/ge
 import {
     BASELINE,
     BEDROCK_CANDIDATES,
+    CONVERSE_CANDIDATES,
     Candidate,
     CompletionChunk,
     streamCompletion,
@@ -439,7 +440,11 @@ function reportGate(results: CandidateResult[]): void {
 }
 
 async function main() {
-    const roster = [BASELINE, ...BEDROCK_CANDIDATES].filter(
+    const roster = [
+        BASELINE,
+        ...BEDROCK_CANDIDATES,
+        ...CONVERSE_CANDIDATES,
+    ].filter(
         (c) => !ONLY || c.id.includes(ONLY)
     );
 

@@ -12,7 +12,7 @@ import {
 } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 
-import { extractStableJsonFields } from "../../modules/suggestions/services/extract-stable-json-fields";
+import { accumulateSuggestionReveals } from "../../modules/suggestions/services/stream-single-suggestion";
 
 /**
  * Phase 1 — "port the streaming shape" conformance check.
@@ -172,30 +172,20 @@ async function collectJsonl(
 }
 
 /**
- * Replays `stream-single-suggestion.ts`'s reveal loop verbatim. Duplicated
- * rather than imported because that function is welded to a live OpenAI client
- * (`client.chat.completions.create`) and cannot be handed a stream — porting it
- * is the *next* checkbox. If its algorithm changes, this must change with it.
+ * Drives the *production* reveal loop, not a copy of it.
+ *
+ * This used to replay `stream-single-suggestion.ts`'s algorithm verbatim,
+ * because that function was welded to a live OpenAI client and could not be
+ * handed a stream. Now that it takes a provider-neutral one, the check calls the
+ * real `accumulateSuggestionReveals` — so the algorithm asserted here cannot
+ * drift from the algorithm that ships.
  */
 async function collectReveals(
     stream: AsyncIterable<{ choices: { delta?: { content?: string | null } }[] }>
 ): Promise<Record<string, unknown>[]> {
     const reveals: Record<string, unknown>[] = [];
-    let buffer = "";
-    let emittedKeys = 0;
 
-    for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content;
-        if (!content) continue;
-        buffer += content;
-
-        const stable = extractStableJsonFields(buffer);
-        const keyCount = Object.keys(stable).length;
-        if (keyCount > emittedKeys) {
-            emittedKeys = keyCount;
-            reveals.push(stable);
-        }
-    }
+    await accumulateSuggestionReveals(stream, (stable) => reveals.push(stable));
 
     return reveals;
 }

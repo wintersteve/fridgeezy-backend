@@ -1,4 +1,4 @@
-import { openai } from "@fridgeezy/openai";
+import { generateStream } from "@fridgeezy/llm";
 import {
     EscalateDifficultyRequestSchema,
     HeaderSchema,
@@ -186,25 +186,16 @@ export const escalateDifficulty = createStreamHandler({
         const unitsPrompt = formatUnitsForPrompt(metadata.units);
         const tagsPrompt = formatTagsForPrompt(metadata.tags);
 
-        // 4. Call OpenAI
-        const stream = await openai.chat.completions.create({
-            model: "gpt-4.1",
-            messages: [
-                {
-                    role: "system",
-                    content: buildSystemPrompt(
-                        unitsPrompt,
-                        tagsPrompt,
-                        existingRecipe.difficulty,
-                        body.difficulty
-                    ),
-                },
-                {
-                    role: "user",
-                    content: buildUserPrompt(existingRecipe, body.difficulty),
-                },
-            ],
-            stream: true,
+        // 4. Call the model
+        const stream = generateStream({
+            model: { openai: "gpt-4.1" },
+            system: buildSystemPrompt(
+                unitsPrompt,
+                tagsPrompt,
+                existingRecipe.difficulty,
+                body.difficulty
+            ),
+            user: buildUserPrompt(existingRecipe, body.difficulty),
         });
 
         // 5. Build the recipe stream (initialState sets the base recipe properties)

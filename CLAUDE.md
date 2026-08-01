@@ -174,17 +174,21 @@ those frames incrementally, which is why frame shapes are part of the contract.
 
 ### LLM providers
 
-- **OpenAI** (`@fridgeezy/openai`) serves every production request path today —
-  chat, suggestions, recipe generation, and embeddings — via the shared `openai`
-  client.
-- **Bedrock** (`@fridgeezy/bedrock`, `@anthropic-ai/bedrock-sdk`) is wired up but
-  currently only exercised by the model-migration eval harness
-  (`apps/api/src/evals/model-migration/`).
-- **`@fridgeezy/llm`** is the seam meant to unify them: `resolveProvider()` reads
-  `LLM_PROVIDER` (`openai` | `bedrock`, defaulting to `openai` and throwing on
-  anything else) and `generateStream()` dispatches accordingly. API call sites
-  have not been moved onto it yet — they still import `@fridgeezy/openai`
-  directly. Route new completion call sites through `@fridgeezy/llm`.
+- **`@fridgeezy/llm`** is the seam every text call site goes through:
+  `resolveProvider()` reads `LLM_PROVIDER` (`openai` | `bedrock`, defaulting to
+  `openai` and throwing on anything else), and `generateStream()` /
+  `generateCompletion()` dispatch accordingly. **Route new completion call sites
+  through here** — never import a provider SDK directly.
+- **OpenAI** (`@fridgeezy/openai`) still serves every production request, because
+  the default provider is `openai`. Three things bypass the facade and import it
+  directly, each still an open checkbox in `TODOS.md`: chat
+  (`create-chat-completion.ts`, tool calling), ingredient extraction (image
+  input), and embeddings (Phase 4). Because `libs/openai` throws at *import* on a
+  missing key, those keep `OPENAI_API_KEY` a hard boot requirement for the API.
+- **Bedrock** (`@fridgeezy/bedrock`, `@anthropic-ai/bedrock-sdk`) is reachable
+  from every ported call site by setting `LLM_PROVIDER=bedrock`, but **has never
+  run end-to-end** — Anthropic models are gated on this AWS account. Its streaming
+  translation is covered offline by `check-streaming-conformance`.
 - **`@fridgeezy/genai`** (`@google/genai`) generates recipe images.
 
 ### Chat tool calling

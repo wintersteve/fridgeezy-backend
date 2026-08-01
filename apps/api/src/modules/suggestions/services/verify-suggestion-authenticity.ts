@@ -1,4 +1,4 @@
-import { openai } from "@fridgeezy/openai";
+import { generateCompletion } from "@fridgeezy/llm";
 import { GenerateSuggestionResponseDto } from "@fridgeezy/schemas";
 
 import { describeSuggestion } from "./suggestion-signature";
@@ -50,25 +50,19 @@ Respond with a single JSON object and nothing else:
 export async function classifySuggestionAuthenticity(
     suggestion: GenerateSuggestionResponseDto
 ): Promise<AuthenticityVerdict> {
-    const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            {
-                role: "user",
-                content: describeSuggestion(
-                    suggestion.name,
-                    suggestion.name_alt,
-                    suggestion.tags,
-                    suggestion.ingredients
-                ),
-            },
-        ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: 20,
+    const content = await generateCompletion({
+        model: { openai: "gpt-4o-mini" },
+        system: SYSTEM_PROMPT,
+        user: describeSuggestion(
+            suggestion.name,
+            suggestion.name_alt,
+            suggestion.tags,
+            suggestion.ingredients
+        ),
+        json: true,
+        maxTokens: { openai: 20 },
     });
 
-    const content = response.choices[0]?.message?.content?.trim();
     if (!content) return { status: "unknown", confidence: 0 };
 
     const parsed = JSON.parse(content) as {

@@ -1,4 +1,4 @@
-import { openai } from "@fridgeezy/openai";
+import { generateCompletion } from "@fridgeezy/llm";
 
 const SYSTEM_PROMPT = `You decide whether two dish descriptions refer to the SAME dish for a recipe database.
 
@@ -18,17 +18,14 @@ export async function adjudicateSameDish(
     dishB: string
 ): Promise<boolean> {
     try {
-        const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-                { role: "system", content: SYSTEM_PROMPT },
-                { role: "user", content: `DISH A:\n${dishA}\n\nDISH B:\n${dishB}` },
-            ],
-            response_format: { type: "json_object" },
-            max_completion_tokens: 10,
+        const content = await generateCompletion({
+            model: { openai: "gpt-4o-mini" },
+            system: SYSTEM_PROMPT,
+            user: `DISH A:\n${dishA}\n\nDISH B:\n${dishB}`,
+            json: true,
+            maxTokens: { openai: 10 },
         });
 
-        const content = response.choices[0]?.message?.content?.trim();
         if (!content) return false;
         return (JSON.parse(content) as { same?: boolean }).same === true;
     } catch (error) {

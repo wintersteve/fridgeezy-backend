@@ -1,8 +1,7 @@
+import type { CompletionChunk } from "@fridgeezy/llm";
 import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { splitIngredientName } from "@fridgeezy/toolkit";
-import { Stream } from "openai/core/streaming.mjs";
-import { ChatCompletionChunk } from "openai/resources/index.mjs";
 import { z } from "zod/v4";
 
 /**
@@ -33,8 +32,14 @@ export interface RecipeStreamConfig {
     ingredientIdMap?: Map<string, string>;
 }
 
+/**
+ * `stream` is typed against the provider-neutral chunk shape rather than the
+ * OpenAI SDK's `Stream<ChatCompletionChunk>`: everything here does with it is
+ * hand it to `processJsonlStream`, which is structurally typed, so naming the
+ * SDK type only pinned this to one provider.
+ */
 export async function* createRecipeStream(
-    openaiStream: Stream<ChatCompletionChunk>,
+    stream: AsyncIterable<CompletionChunk>,
     config: RecipeStreamConfig
 ): AsyncGenerator<any, GenerateRecipeResponseDto> {
     const recipe: GenerateRecipeResponseDto = {
@@ -63,7 +68,7 @@ export async function* createRecipeStream(
     };
 
     for await (const { parsed, schemaIndex } of processJsonlStream(
-        openaiStream,
+        stream,
         config.schemas
     )) {
         // Schema 0: Header

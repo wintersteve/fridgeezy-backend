@@ -1,4 +1,4 @@
-import { openai } from "@fridgeezy/openai";
+import { generateStream } from "@fridgeezy/llm";
 import {
     GenerateRecipeRequestSchema,
     HeaderSchema,
@@ -183,25 +183,16 @@ export const generateRecipe = createStreamHandler({
             console.error("Image generation failed:", error);
         });
 
-        // 6. Call OpenAI
-        const stream = await openai.chat.completions.create({
-            model: "gpt-4.1",
-            messages: [
-                {
-                    role: "system",
-                    content: buildRecipeSystemPrompt(unitsPrompt, tagsPrompt, ingredientNames),
-                },
-                {
-                    role: "user",
-                    content: buildRecipeUserPrompt(
-                        suggestion.name,
-                        suggestion.difficulty,
-                        ingredientNames,
-                        body.servings
-                    ),
-                },
-            ],
-            stream: true,
+        // 6. Call the model
+        const stream = generateStream({
+            model: { openai: "gpt-4.1" },
+            system: buildRecipeSystemPrompt(unitsPrompt, tagsPrompt, ingredientNames),
+            user: buildRecipeUserPrompt(
+                suggestion.name,
+                suggestion.difficulty,
+                ingredientNames,
+                body.servings
+            ),
         });
 
         // 7. Create recipe stream with ingredient ID map

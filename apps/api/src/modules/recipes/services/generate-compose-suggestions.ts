@@ -1,4 +1,4 @@
-import { openai } from "@fridgeezy/openai";
+import { generateStream, type LlmProvider } from "@fridgeezy/llm";
 import {
     ComposeRecipeRequestDto,
     ComposeRecipeResultDto,
@@ -6,7 +6,6 @@ import {
     GenerateRecipeResponseDto,
 } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
-import type OpenAI from "openai";
 import { z } from "zod/v4";
 
 import { findSuggestionByName } from "../../suggestions/services/find-suggestion-by-name";
@@ -131,13 +130,13 @@ const buildUserPrompt = (
  *
  * @param baseRecipe The recipe to compose with
  * @param request Composition parameters (course types, matching preferences, etc.)
- * @param client OpenAI client (for testing)
+ * @param provider Overrides `LLM_PROVIDER` for this call, to A/B the two
  * @yields Progress updates and recipe results
  */
 export async function* generateComposeRecipes(
     baseRecipe: GenerateRecipeResponseDto & { imageUrl?: string },
     request: ComposeRecipeRequestDto,
-    client: OpenAI = openai
+    provider?: LlmProvider
 ): AsyncGenerator<ComposeRecipeResultDto | ComposeRecipeProgressDto> {
     // Fetch metadata to get course tags from database
     const metadata = await fetchRecipeMetadata();
@@ -172,16 +171,11 @@ export async function* generateComposeRecipes(
         message: `Generating ${allowedCourses.length} course type(s)`,
     };
 
-    const stream = await client.chat.completions.create({
-        model: "gpt-4.1",
-        messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            {
-                role: "user",
-                content: buildUserPrompt(baseRecipe, request, courseTagNames),
-            },
-        ],
-        stream: true,
+    const stream = generateStream({
+        model: { openai: "gpt-4.1" },
+        system: SYSTEM_PROMPT,
+        user: buildUserPrompt(baseRecipe, request, courseTagNames),
+        provider,
     });
 
     // Process JSONL stream with validation

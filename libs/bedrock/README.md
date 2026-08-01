@@ -12,6 +12,9 @@ const stream = streamCompletion({ system, user, effort: "low" });
 for await (const { parsed } of processJsonlStream(stream, schemas)) {
     // …unchanged from the OpenAI path
 }
+
+// One-shot, for the short adjudicator calls that parse a single JSON object.
+const text = await createCompletion({ system, user, maxTokens: 512 });
 ```
 
 ## Why it emits OpenAI-shaped chunks
@@ -66,4 +69,12 @@ Anthropic-specific entitlement, not Bedrock access.
 Verified so far: a live call reaches Bedrock and comes back with the access-gate
 error — proving credentials, region, the inference-profile ID form and the request
 shape are all correct — and fails no earlier. The response-parsing half is
-unexercised until access lands.
+unexercised against a live model until access lands, though the streaming half of
+it is covered offline by
+`apps/api/src/evals/model-migration/streaming-conformance.check.ts`.
+
+`createCompletion` splits its response handling into `toCompletionText` for the
+same reason `streamCompletion` splits out `toCompletionChunks`: the transform can
+be driven from a recorded response while access is gated. `toCompletionText` has
+no offline check of its own yet — the conformance harness covers the streaming
+path only.

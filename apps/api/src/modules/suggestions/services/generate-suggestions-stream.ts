@@ -1,4 +1,4 @@
-import { openai } from "@fridgeezy/openai";
+import { generateStream, type LlmProvider } from "@fridgeezy/llm";
 import {
     EnrichedSuggestionResponseDto,
     GenerateSuggestionRequestDto,
@@ -7,7 +7,6 @@ import {
 } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { castArray } from "@fridgeezy/toolkit";
-import type OpenAI from "openai";
 
 import {
     buildExistingDishesBlock,
@@ -85,25 +84,26 @@ export const buildSuggestionsUserPrompt = (
         .join("\n");
 };
 
+/**
+ * `provider` overrides `LLM_PROVIDER` for this call only, which is how the two
+ * providers get A/B'd in one process. It replaces the `client?: OpenAI` this took
+ * before: that parameter could only ever inject an OpenAI client, so it was no
+ * use for the Bedrock comparison it existed to enable.
+ */
 export async function* generateSuggestionsStream(
     request: GenerateSuggestionRequestDto,
-    client: OpenAI = openai
+    provider?: LlmProvider
 ): AsyncGenerator<EnrichedSuggestionResponseDto> {
     const userPrompt = buildSuggestionsUserPrompt(request);
     const existingDishes = buildExistingDishesBlock(
         await listCatalogDishes(userPrompt)
     );
 
-    const stream = await client.chat.completions.create({
-        model: "gpt-4.1",
-        messages: [
-            { role: "system", content: SUGGESTIONS_SYSTEM_PROMPT },
-            {
-                role: "user",
-                content: [userPrompt, existingDishes].filter(Boolean).join("\n"),
-            },
-        ],
-        stream: true,
+    const stream = generateStream({
+        model: { openai: "gpt-4.1" },
+        system: SUGGESTIONS_SYSTEM_PROMPT,
+        user: [userPrompt, existingDishes].filter(Boolean).join("\n"),
+        provider,
     });
 
     // Persist/dedup each suggestion CONCURRENTLY: kick off the work as soon as

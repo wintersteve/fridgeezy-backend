@@ -1,4 +1,4 @@
-import { openai } from "@fridgeezy/openai";
+import { generateCompletion } from "@fridgeezy/llm";
 
 export type IngredientDecision = "same" | "new" | "invalid";
 
@@ -95,17 +95,14 @@ export async function adjudicateIngredient(
         : `NAME: ${name}\nCANDIDATE: (none)`;
 
     try {
-        const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-                { role: "system", content: SYSTEM_PROMPT },
-                { role: "user", content: userPrompt },
-            ],
-            response_format: { type: "json_object" },
-            max_completion_tokens: 30,
+        const content = await generateCompletion({
+            model: { openai: "gpt-4o-mini" },
+            system: SYSTEM_PROMPT,
+            user: userPrompt,
+            json: true,
+            maxTokens: { openai: 30 },
         });
 
-        const content = response.choices[0]?.message?.content?.trim();
         if (!content) return { decision: "new" };
 
         const parsed = JSON.parse(content) as {

@@ -1,4 +1,4 @@
-import { openai } from "@fridgeezy/openai";
+import { generateStream, type LlmProvider } from "@fridgeezy/llm";
 import {
     MissingIngredientDto,
     SubstituteSuggestionDto,
@@ -8,7 +8,6 @@ import {
 } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { canonicalizeName } from "@fridgeezy/toolkit";
-import type OpenAI from "openai";
 
 import { fetchRecipeSummary, RecipeSummary } from "../../recipes/services";
 
@@ -137,7 +136,7 @@ const toSuggestion = (
  */
 export async function* generateSubstitutesStream(
     request: SuggestSubstitutesRequestDto,
-    client: OpenAI = openai
+    provider?: LlmProvider
 ): AsyncGenerator<SubstituteSuggestionDto> {
     // Deduped by canonical name, not just by id: the client keys its cards on
     // `ingredientName`, so two selections that read the same would collide there
@@ -152,21 +151,16 @@ export async function* generateSubstitutesStream(
     // row has gone missing still deserves an answer from the name alone.
     const recipe = await fetchRecipeSummary(request.recipeId);
 
-    const stream = await client.chat.completions.create({
-        model: "gpt-4.1",
-        messages: [
-            { role: "system", content: SUBSTITUTES_SYSTEM_PROMPT },
-            {
-                role: "user",
-                // Deduped list, so the model is asked for exactly the lines this
-                // stream will emit.
-                content: buildSubstitutesUserPrompt(
-                    { ...request, missingIngredients: requested },
-                    recipe
-                ),
-            },
-        ],
-        stream: true,
+    const stream = generateStream({
+        model: { openai: "gpt-4.1" },
+        system: SUBSTITUTES_SYSTEM_PROMPT,
+        // Deduped list, so the model is asked for exactly the lines this stream
+        // will emit.
+        user: buildSubstitutesUserPrompt(
+            { ...request, missingIngredients: requested },
+            recipe
+        ),
+        provider,
     });
 
     // 1:1 after the dedupe above, so a model line can only ever land on the one

@@ -1,4 +1,4 @@
-import { openai } from "@fridgeezy/openai";
+import { generateStream } from "@fridgeezy/llm";
 import {
     ModifyRecipeRequestSchema,
     HeaderSchema,
@@ -176,27 +176,18 @@ export const modifyRecipe = createStreamHandler({
         const unitsPrompt = formatUnitsForPrompt(metadata.units);
         const tagsPrompt = formatTagsForPrompt(metadata.tags);
 
-        // 3. Call OpenAI
-        const openaiStream = await openai.chat.completions.create({
-            model: "gpt-4.1",
-            messages: [
-                {
-                    role: "system",
-                    content: buildSystemPrompt(unitsPrompt, tagsPrompt),
-                },
-                {
-                    role: "user",
-                    content: buildUserPrompt(
-                        existingRecipe,
-                        body.instruction,
-                        body.dietaryRestrictions
-                    ),
-                },
-            ],
-            stream: true,
+        // 3. Call the model
+        const stream = generateStream({
+            model: { openai: "gpt-4.1" },
+            system: buildSystemPrompt(unitsPrompt, tagsPrompt),
+            user: buildUserPrompt(
+                existingRecipe,
+                body.instruction,
+                body.dietaryRestrictions
+            ),
         });
 
-        const recipeStream = createRecipeStream(openaiStream, {
+        const recipeStream = createRecipeStream(stream, {
             schemas: [
                 HeaderSchema,
                 NutritionSchema,

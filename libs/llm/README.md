@@ -40,9 +40,17 @@ eval harness runs both sides in one process.
 The facade is thin on purpose; where the providers genuinely differ it says so
 rather than pretending parity:
 
-- **`maxTokens` is Bedrock-only.** Bedrock requires an output cap; the OpenAI
-  branch is deliberately left uncapped because that is what production does
-  today, and the eval only means something if the baseline is untouched.
+- **`maxTokens` means different things on the two entry points.** On
+  `generateStream` it is Bedrock-only: Bedrock requires an output cap, and the
+  OpenAI branch is deliberately left uncapped because that is what production
+  does today, so the eval compares against an untouched baseline. On
+  `generateCompletion` it is a `TokenLimit` — **one cap per provider**, because
+  the two numbers are not conversions of each other. The adjudicators cap OpenAI
+  at 10-30 tokens, which is ample for `{"same":true}` from a model that answers
+  immediately but is spent by a thinking model before it emits any visible text
+  (and Anthropic rejects a cap that doesn't clear the thinking budget). Carrying
+  one number across would either truncate every Bedrock verdict or uncap every
+  OpenAI one.
 - **`json` is not enforced on Bedrock.** On OpenAI it sets
   `response_format: { type: "json_object" }`, which the API enforces. Bedrock has
   no equivalent field, so the *prompt* has to ask for JSON there.
@@ -52,15 +60,37 @@ rather than pretending parity:
   an OpenAI key a hard boot requirement for a function running entirely on
   Bedrock.
 
+## Who uses it
+
+Every text call site in `apps/api` routes through here as of the Phase 1 swap:
+
+| Entry point | Call sites |
+| --- | --- |
+| `generateStream` | suggestions (batch + single), recipe generate / modify / escalate, promote, compose, substitutes |
+| `generateCompletion` | the three adjudicators — dish dedup, ingredient validation, authenticity |
+
+Each streaming service that previously took a `client?: OpenAI` now takes an
+optional `provider` instead. That parameter existed as an A/B seam but could only
+ever inject an OpenAI client, so it could not express the comparison it was there
+for; no caller passed one.
+
 ## Not covered
 
-Two call sites need more than text-in/text-out and are left on the OpenAI SDK
-for now — both have their own checkbox in the migration plan:
+Three things still import `@fridgeezy/openai` directly, each with its own
+checkbox in the migration plan:
 
 - **Chat** (`create-chat-completion.ts`) — multi-turn plus tool calling, which
   has no shared shape between the two SDKs.
 - **Ingredient extraction** — image input, which Anthropic models take in a
   different message shape.
+- **Embeddings** (`generateEmbedding`) — Phase 4, and a corpus migration rather
+  than a code change.
+
+Because of those, `OPENAI_API_KEY` is still a hard boot requirement for the API:
+`libs/openai` throws at *import*, and the embedding call sites import it at top
+level. The lazy imports in this lib remove that requirement from the paths it
+covers, but not from the process as a whole — a Bedrock-only deployment needs
+those three ported first.
 
 ## Status
 
@@ -73,4 +103,6 @@ Verified against live providers:
 - the Bedrock branch reaches Bedrock and returns the account's use-case gate
 
 Not verified: anything past that gate on the Bedrock side. See
-`libs/bedrock/README.md`.
+`libs/bedrock/README.md`. In particular, **no Bedrock call site has run
+end-to-end** — the swap changes which code path production takes only when
+`LLM_PROVIDER=bedrock`, which nothing sets.

@@ -1,10 +1,13 @@
-import { openai } from "@fridgeezy/openai";
+import {
+    generateStream,
+    type CompletionChunk,
+    type LlmProvider,
+} from "@fridgeezy/llm";
 import {
     GenerateSuggestionRequestDto,
     GenerateSuggestionResponseSchema,
 } from "@fridgeezy/schemas";
 import { castArray } from "@fridgeezy/toolkit";
-import type OpenAI from "openai";
 
 import { extractStableJsonFields } from "./extract-stable-json-fields";
 import {
@@ -90,12 +93,60 @@ export interface PartialSuggestionFields {
 }
 
 export interface StreamSingleSuggestionOptions {
-    client?: OpenAI;
+    /**
+     * Overrides `LLM_PROVIDER` for this call only, so the two providers can be
+     * A/B'd in one process. Replaces the `client?: OpenAI` this took before,
+     * which could only inject an OpenAI client and so could not express the
+     * comparison it existed for.
+     */
+    provider?: LlmProvider;
     /**
      * Called each time a new top-level field finishes streaming, with every
      * field known so far. Lets a caller reveal the card field-by-field.
      */
     onField?: (fields: PartialSuggestionFields) => void;
+}
+
+/**
+ * Accumulate a streamed suggestion object, firing `onReveal` each time another
+ * top-level key finishes — with every key stable so far, so a consumer renders
+ * the latest state rather than diffing.
+ *
+ * Exported because the streaming-conformance check
+ * (`evals/model-migration/streaming-conformance.check.ts`) asserts this exact
+ * algorithm holds across chunking regimes — monotonic, never revised, complete,
+ * in prompt order. It used to keep a verbatim copy, which could drift silently
+ * from the code it claimed to verify; it can drive the real loop now that the
+ * stream is provider-neutral rather than a live OpenAI client.
+ *
+ * Returns the raw accumulated buffer, since the caller still has to parse and
+ * validate the completed object.
+ */
+export async function accumulateSuggestionReveals(
+    stream: AsyncIterable<CompletionChunk>,
+    onReveal?: (stable: Record<string, unknown>) => void
+): Promise<string> {
+    let buffer = "";
+    // Which top-level keys we've already surfaced, so we only emit on new ones.
+    let emittedKeys = 0;
+
+    for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content;
+        if (!content) continue;
+
+        buffer += content;
+
+        const stable = extractStableJsonFields(buffer);
+        const keyCount = Object.keys(stable).length;
+
+        // A new field finished — surface everything known so far.
+        if (keyCount > emittedKeys) {
+            emittedKeys = keyCount;
+            onReveal?.(stable);
+        }
+    }
+
+    return buffer;
 }
 
 /** Map the raw JSONL field names onto the enriched/DTO field names. */
@@ -137,43 +188,33 @@ function mapFields(stable: Record<string, unknown>): PartialSuggestionFields {
  * has — asking about a dish you own should get you that dish. Dedup instead
  * resolves it to the existing recipe (`existing_recipe`), which the caller
  * surfaces in place of the streamed card.
+ *
+ * **Reveal granularity is provider-dependent.** The conformance check
+ * (`evals/model-migration/streaming-conformance.check.ts`) measured Anthropic
+ * emitting larger deltas than OpenAI: 3 `onField` frames where OpenAI produces 6
+ * for the same object. The reveal stays correct either way — monotonic, never
+ * revised, in prompt order — but on Bedrock the card animates in fewer, bigger
+ * jumps. That is a product call to make at cutover, not a bug to fix here.
  */
 export async function streamSingleSuggestion(
     request: GenerateSuggestionRequestDto,
     options: StreamSingleSuggestionOptions = {}
 ): Promise<SuggestionOutcome> {
-    const { client = openai, onField } = options;
+    const { provider, onField } = options;
 
-    const stream = await client.chat.completions.create({
-        model: "gpt-4.1",
-        messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: buildUserPrompt(request) },
-        ],
-        stream: true,
+    const stream = generateStream({
+        model: { openai: "gpt-4.1" },
+        system: SYSTEM_PROMPT,
+        user: buildUserPrompt(request),
+        provider,
     });
 
-    let buffer = "";
-    // Which top-level keys we've already surfaced, so we only emit on new ones.
-    let emittedKeys = 0;
-
-    for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content;
-        if (!content) continue;
-
-        buffer += content;
-
-        const stable = extractStableJsonFields(buffer);
-        const keyCount = Object.keys(stable).length;
-
-        // A new field finished — surface everything known so far. Hold back the
-        // very first frame until the name lands so the card never renders empty.
-        if (keyCount > emittedKeys) {
-            emittedKeys = keyCount;
-            const fields = mapFields(stable);
-            if (onField && fields.name) onField(fields);
-        }
-    }
+    // Hold back the very first frame until the name lands, so the card never
+    // renders empty.
+    const buffer = await accumulateSuggestionReveals(stream, (stable) => {
+        const fields = mapFields(stable);
+        if (onField && fields.name) onField(fields);
+    });
 
     // Parse the completed object and validate it against the strict schema.
     // Slice to the outermost braces so stray prose or markdown fences the model

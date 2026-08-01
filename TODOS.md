@@ -193,13 +193,41 @@ change is validated in isolation before touching hosting.
       object. Still correct (monotonic, stable, ordered), but the single-suggestion
       card will animate in fewer, bigger jumps. A product call, not a bug —
       decide it when porting `streamSingleSuggestion`, not after.
-      **Blocker for the next checkbox:** `streamSingleSuggestion` takes
-      `client?: OpenAI` and calls `client.chat.completions.create` directly, so it
-      cannot accept a provider-agnostic stream. Its reveal loop is duplicated in
-      the conformance check for now; porting it must collapse the two.
-- [ ] Swap each text call site (table above) behind the flag. Keep system/user
+      **Blocker for the next checkbox — now resolved,** see below.
+- [x] Swap each text call site (table above) behind the flag. Keep system/user
       prompts **byte-identical** at first — change only the transport — so the
       eval isolates model behavior from prompt changes.
+      Done for all 11 text call sites: the 8 streaming ones (suggestions batch +
+      single, recipe generate/modify/escalate, promote, compose, substitutes) now
+      call `generateStream`, and the 3 one-shot adjudicators (dish dedup,
+      ingredient validation, authenticity) call `generateCompletion`. Prompts are
+      untouched. **`LLM_PROVIDER` still defaults to `openai`, so this moves no
+      traffic** — it only makes the Bedrock path reachable by env var.
+      **`generateCompletion` and `createCompletion` had to be written first.**
+      Both READMEs documented them as existing; neither did. Written now, with
+      `createCompletion` split into `toCompletionText` so the response transform
+      is drivable from a recorded response, mirroring `toCompletionChunks`.
+      **Found: the token cap does not carry across providers.** The adjudicators
+      cap OpenAI at 10-30 tokens — ample for `{"same":true}`, but a thinking model
+      spends that before emitting any visible text, and Anthropic rejects a cap
+      that doesn't clear the thinking budget. `generateCompletion` therefore takes
+      a `TokenLimit` (`{ openai?, bedrock? }`) rather than one number, the same way
+      `ModelSelection` already handles model IDs. **The Bedrock caps are unset and
+      unvalidated** — they fall back to `BEDROCK_MAX_TOKENS` (16k), which is far
+      too generous for a 10-token verdict and needs a real number once access
+      lands.
+      **The `client?: OpenAI` seam is gone**, replaced by an optional `provider`.
+      It could only ever inject an OpenAI client, so it could not express the A/B
+      it existed for; nothing passed one. That also resolves the previous
+      checkbox's blocker: `streamSingleSuggestion`'s reveal loop is now the
+      exported `accumulateSuggestionReveals`, and the conformance check drives
+      **that function** instead of a verbatim copy — 20/20 still pass, with
+      identical reveal counts, so the collapse changed no behaviour.
+      **`OPENAI_API_KEY` is still required to boot.** The lazy imports in
+      `@fridgeezy/llm` remove it from every path it covers, but chat, ingredient
+      extraction and the embedding call sites still import `libs/openai` at top
+      level, and it throws at import. A Bedrock-only Lambda needs the next two
+      checkboxes plus Phase 4 first.
 - [ ] Port the **vision** path (ingredient extraction) to the Bedrock vision model.
 - [ ] Run the Phase 0 eval harness on every path. Re-tune prompts only where the
       new model regresses; record before/after scores.

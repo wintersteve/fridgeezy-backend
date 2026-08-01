@@ -5,7 +5,7 @@ export { buildSuggestionSignature } from "@fridgeezy/toolkit";
 
 // Thresholds calibrated from real signature-similarity distributions (see
 // evals/calibrate-thresholds). Recalibrated 2026-07-31, after the signature moved
-// from `name_en` to the canonical `name` (20260731000005): CROSS-NAME same-dish
+// from `name_en` to the canonical `name`: CROSS-NAME same-dish
 // pairs now score 0.77–0.84 and different-dish pairs top out at 0.80, so the two
 // distributions still overlap and the LLM still has to resolve the middle.
 //

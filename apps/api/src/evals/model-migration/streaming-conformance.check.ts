@@ -48,7 +48,7 @@ const SINGLE_SUGGESTION =
 
 /**
  * Four-line JSONL, as the batch suggestions prompt demands. Three of the four
- * carry a null `name_alt` — the common case since 20260731000001, where a dish
+ * carry a null `name_alt` — the common case, where a dish
  * known by only one name must NOT echo it — so the parser is exercised on the
  * null branch as well as the populated one.
  */

@@ -182,7 +182,8 @@ Built on canonical ingredients from Phase 2.
   - Merge = reuse the existing dish and record the alternate name(s) as aliases.
 - [ ] Retire the single magic `0.95` name threshold.
 - [ ] **Backfill**: re-signature + dedupe existing `recipe_suggestions` (the
-      `20260727000011` migration already showed 15 suggestion/recipe name
+      dedupe-suggestions-against-recipes migration already showed 15
+      suggestion/recipe name
       collisions — expect cross-name dish duplicates too).
 
 **Acceptance (regression fixtures):** Papaya Salad ≡ Som Tam (merge); Som Tam ≡

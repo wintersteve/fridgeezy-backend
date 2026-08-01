@@ -50,9 +50,7 @@ export class UnitsRepository implements IUnitsRepository {
         canonicalId: string
     ): Promise<Result<Unit | null, DomainError>> {
         try {
-            // Note: canonical_id column added in migration 20260131000001
-            // After regenerating types, remove the type assertion
-            const { data, error } = await (supabase as any)
+            const { data, error } = await supabase
                 .from("units")
                 .select("*")
                 .eq("canonical_id", canonicalId)
@@ -100,9 +98,7 @@ export class UnitsRepository implements IUnitsRepository {
         embedding: number[]
     ): Promise<Result<UnitVectorMatch, DomainError>> {
         try {
-            // Note: search_units function added in migration 20260131000003
-            // After regenerating types, remove the type assertion
-            const { data, error } = await (supabase as any).rpc("search_units", {
+            const { data, error } = await supabase.rpc("search_units", {
                 query_embedding: JSON.stringify(embedding),
                 match_count: 1,
             });

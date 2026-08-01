@@ -7,9 +7,9 @@
  *
  * Keys on `name` and NOT on `name_en`. It used to prefer `name_en` back when that
  * column was defined as "the English translation" and `name` as "the source
- * language". Since 20260731000001 `name` IS the canonical, recognised name and
- * `name_en` is merely the alternate spelling — which for a dish like Butter
- * Chicken now holds "Murgh Makhani", so preferring it would embed the native
+ * language". Those meanings were swapped: `name` IS now the canonical, recognised
+ * name and `name_en` is merely the alternate spelling — which for a dish like
+ * Butter Chicken holds "Murgh Makhani", so preferring it would embed the native
  * spelling and invert the point of the signature.
  *
  * Shared so the app (store + query side) and the re-signature backfill build it

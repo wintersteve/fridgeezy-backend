@@ -11,8 +11,8 @@ config();
  * persist-or-reuse-suggestion can be set from real score distributions instead of
  * guessed. Prints both distributions and a suggested band.
  *
- * Every fixture pair here is deliberately CROSS-NAME — the hard case. Since
- * 20260731000005 the signature keys on the canonical `name` rather than a shared
+ * Every fixture pair here is deliberately CROSS-NAME — the hard case. The
+ * signature keys on the canonical `name` rather than a shared
  * `name_en`, so these no longer get a free ride from an identical English key and
  * have to match on name + tags + ingredients. Last run 2026-07-31: same-dish
  * 0.77–0.84, different-dish 0.63–0.80, still overlapping.

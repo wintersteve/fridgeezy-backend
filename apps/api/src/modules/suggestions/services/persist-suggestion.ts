@@ -1,11 +1,44 @@
 import { failure, PersistenceError, Result } from "@fridgeezy/domain";
 import { generateEmbedding } from "@fridgeezy/openai";
 import { GenerateSuggestionResponseDto } from "@fridgeezy/schemas";
-import { SuggestionsRepository } from "@fridgeezy/supabase";
+import { SuggestionsRepository, supabaseAdmin } from "@fridgeezy/supabase";
 
 import { matchIngredients, IngredientMatch } from "./match-ingredients";
 import { matchTags, TagInput, TagMatch } from "./match-tags";
 import { buildSuggestionSignature } from "./suggestion-signature";
+
+/**
+ * Reads the display names for a set of ids as a lookup.
+ *
+ * Matching returns ids plus whatever the model called each thing; the catalog's
+ * own name is not carried through (the alias branch never has it to hand), so
+ * it is read back here in one query rather than threaded through every match
+ * site.
+ */
+async function lookupNames(
+    table: "ingredients" | "tags",
+    ids: string[]
+): Promise<Map<string, string>> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return new Map();
+
+    const { data, error } = await supabaseAdmin
+        .from(table)
+        .select("id, name")
+        .in("id", unique);
+
+    if (error) {
+        // Non-fatal: the caller falls back to the model's spelling. The
+        // suggestion is already persisted by this point and must not be lost
+        // over a cosmetic lookup.
+        console.warn(
+            `[Suggestions] Could not read ${table} names: ${error.message}`
+        );
+        return new Map();
+    }
+
+    return new Map((data ?? []).map((row) => [row.id, row.name]));
+}
 
 export interface PersistSuggestionContext {
     /** The cuisine from the original request - will be marked as type: "cuisine" for auto-creation */
@@ -169,17 +202,37 @@ export async function persistSuggestion(
             }
         );
 
+        // Names come from the CATALOG rows, not from what the model called them.
+        // The id and the name have to describe the same thing: a match resolves
+        // "tomatoes" onto the existing `Tomato` row, and returning the model's
+        // spelling next to that row's id makes the pair incoherent. It also
+        // disagreed with the promote path — fetchEnrichedSuggestion joins
+        // `ingredients`/`tags` and returns their names — so the same suggestion
+        // reported different ingredients depending on which endpoint was called.
+        const [ingredientNames, tagNames] = await Promise.all([
+            lookupNames(
+                "ingredients",
+                ingredientMatches.map((m) => m.ingredientId)
+            ),
+            lookupNames(
+                "tags",
+                tagMatches.map((m) => m.tagId)
+            ),
+        ]);
+
         return {
             success: true,
             value: {
                 suggestionId: persistResult.value,
                 ingredients: ingredientMatches.map((m) => ({
                     id: m.ingredientId,
-                    name: m.originalName,
+                    // Falls back to the model's spelling only if the row somehow
+                    // could not be read back — better a stale name than none.
+                    name: ingredientNames.get(m.ingredientId) ?? m.originalName,
                 })),
                 tags: tagMatches.map((m) => ({
                     id: m.tagId,
-                    name: m.originalName,
+                    name: tagNames.get(m.tagId) ?? m.originalName,
                 })),
             },
         };

@@ -460,33 +460,4 @@ export class RecipesRepository implements IRecipesRepository {
         }
     }
 
-    /**
-     * Fold one recipe into another (repoint all references, delete the source)
-     * via the merge_recipe RPC. Driven by the dedupe-recipes backfill.
-     */
-    async mergeRecipe(
-        fromId: string,
-        intoId: string
-    ): Promise<Result<void, PersistenceError>> {
-        try {
-            const { error } = await (supabaseAdmin.rpc as any)("merge_recipe", {
-                p_from: fromId,
-                p_into: intoId,
-            });
-
-            if (error) {
-                return failure(
-                    new PersistenceError(`Database error: ${error.message}`)
-                );
-            }
-
-            return success(undefined);
-        } catch (error) {
-            return failure(
-                new PersistenceError(
-                    `Failed to merge recipe: ${error instanceof Error ? error.message : "Unknown error"}`
-                )
-            );
-        }
-    }
 }

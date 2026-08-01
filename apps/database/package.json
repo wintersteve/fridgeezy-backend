@@ -66,13 +66,6 @@
                     "cwd": "apps/database"
                 }
             },
-            "dedupe-recipes": {
-                "executor": "nx:run-commands",
-                "options": {
-                    "command": "npx jiti src/scripts/dedupe-recipes.ts",
-                    "cwd": "apps/database"
-                }
-            },
             "up": {
                 "executor": "nx:run-commands",
                 "options": {
@@ -97,7 +90,7 @@
             "generate-category-images": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti tools/generate-category-images.ts",
+                    "command": "npx jiti src/scripts/generate-category-images.ts",
                     "cwd": "apps/database"
                 }
             },

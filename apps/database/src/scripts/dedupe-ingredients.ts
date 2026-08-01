@@ -5,15 +5,34 @@ import { config } from "dotenv";
 config();
 
 /**
- * One-time (re-runnable) cleanup that dedupes the existing ingredient catalog:
- * finds near-duplicate rows (vector similarity >= DUP_THRESHOLD, confirmed by the
- * LLM), clusters them, and folds each cluster into its oldest member via the
- * merge_ingredient RPC (which atomically repoints every reference).
+ * Audits the ingredient catalog for SEMANTIC near-duplicates: rows that are the
+ * same thing under different words — "scallion" and "green onion", "aubergine"
+ * and "eggplant". Finds them by vector similarity (>= DUP_THRESHOLD), confirms
+ * each with the LLM, clusters them, and folds each cluster into its oldest
+ * member via merge_ingredient, which atomically repoints every reference.
+ *
+ * WHEN TO RUN THIS
+ * Rarely, and only on suspicion — when the catalog visibly contains two names
+ * for one thing. It is an audit, not part of any flow. Nothing calls it.
+ *
+ * Two other mechanisms already prevent most duplicates, which is why this stays
+ * a backstop rather than routine maintenance:
+ *   - match-ingredients resolves new names against the catalog by vector
+ *     similarity with LLM adjudication BEFORE creating anything, so the common
+ *     case never reaches here.
+ *   - canonical_id collapses spelling and plurality variants outright
+ *     (20260801000016), so "Tomatoes" can no longer become a second "Tomato".
+ * What neither catches is genuine synonymy, and no constraint can — hence this.
+ *
+ * Its sibling dedupe-recipes.ts was deleted: that one collapsed duplicate
+ * (canonical_id, difficulty) recipes purely to clear the way for the partial
+ * unique index that now enforces the same thing, so it could never find work
+ * again. This script has no such index behind it.
  *
  * DRY RUN by default — set DEDUP_APPLY=true to actually perform the merges.
  *
- * Note: O(N) embeddings + searches and up to ~5N LLM confirmations; intended for
- * periodic cleanup on a modest catalog, not a hot path.
+ * Note: O(N) embeddings + searches and up to ~5N LLM confirmations, so it costs
+ * real money on a large catalog. Intended for periodic cleanup, not a hot path.
  */
 const DUP_THRESHOLD = 0.9;
 const APPLY = process.env.DEDUP_APPLY === "true";

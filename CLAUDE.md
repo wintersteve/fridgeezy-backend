@@ -51,8 +51,21 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
   all five run one script, `src/scripts/generate-embeddings.ts <target>`. They
   backfill only rows missing a vector; append `-- --all` to re-embed everything,
   which is what you want after changing a text builder.
-- `seed-ingredients`, `generate-ingredient-seed`, `dedupe-ingredients`,
-  `dedupe-recipes`, `generate-category-images`
+- `seed-ingredients`, `generate-ingredient-seed`, `generate-category-images`
+- `dedupe-ingredients` — an audit, not routine. Nothing calls it; run it only
+  when the catalog visibly holds two names for one thing ("scallion" /
+  "green onion"). Dry run unless `DEDUP_APPLY=true`, and it costs ~5N LLM calls.
+
+Scripts sit in two directories, split by what they touch:
+
+- `apps/database/src/scripts/` — **changes the database or storage**, and most
+  cost money: seeding, embeddings, category images, the dedupe audit.
+- `apps/database/tools/` — **regenerates source files in this repo**:
+  `generate-types` (Supabase → `database.types.ts`) and `generate-entity-types`
+  (that file → the `entities/` wrappers). Deterministic, no production effects.
+
+Keep that line intact when adding a script — it is the difference between "safe
+to run any time" and "this writes to prod".
 
 The Supabase project root is **`apps/database/`**, not `apps/database/src/` —
 that is where `config.toml`, `migrations/` and `seeds/` live, and where the CLI

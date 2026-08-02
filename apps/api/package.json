@@ -19,7 +19,7 @@
                     "format": [
                         "cjs"
                     ],
-                    "bundle": false,
+                    "bundle": true,
                     "main": "apps/api/src/main.ts",
                     "tsConfig": "apps/api/tsconfig.app.json",
                     "assets": [
@@ -30,7 +30,10 @@
                         "outExtension": {
                             ".js": ".js"
                         }
-                    }
+                    },
+                    "additionalEntryPoints": [
+                        "apps/api/src/lambda.ts"
+                    ]
                 },
                 "configurations": {
                     "development": {},

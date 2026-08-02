@@ -31,8 +31,9 @@ data "archive_file" "api" {
     ".env.local",
   ]
 
-  # `@fridgeezy/api` builds unbundled, so the artifact is useless without its
-  # dependencies installed into it — and the failure is silent: Terraform will
+  # `@fridgeezy/api` bundles its own workspace libs but keeps third-party
+  # packages external, so the artifact is useless without them installed into
+  # it — and the failure is silent: Terraform will
   # happily zip ~600KB of JavaScript, deploy it, and the function then dies at
   # cold start with `Cannot find module 'cors'` while the Function URL still
   # answers 200. Worse, `nx run api:build` *recreates* dist/, so running a build

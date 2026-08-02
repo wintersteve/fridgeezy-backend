@@ -40,12 +40,19 @@ variable "artifact_dir" {
 variable "lambda_handler" {
   description = <<-EOT
     Handler entry point, relative to the artifact root — `apps/api/src/lambda.ts`
-    compiled. The path is nested because the api project builds unbundled and
-    esbuild preserves workspace-relative paths; only the declared `main` entry is
-    hoisted to the artifact root.
+    compiled.
+
+    Sits at the artifact root because the api project bundles: esbuild hoists
+    every declared entry point, and `lambda.ts` is declared via
+    `additionalEntryPoints`. It has to be declared explicitly — nothing reachable
+    from `main.ts` imports it, so a bundled build would otherwise not emit it at
+    all, and the function fails with `Cannot find module 'lambda'`.
+
+    Was `apps/api/src/lambda.handler` while the project built unbundled, because
+    esbuild then preserved workspace-relative paths for everything except `main`.
   EOT
   type        = string
-  default     = "apps/api/src/lambda.handler"
+  default     = "lambda.handler"
 }
 
 variable "lambda_runtime" {

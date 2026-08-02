@@ -145,8 +145,9 @@ workspace links, and verifies the result. Do not run the two underlying commands
 by hand: that sequence produced an artifact which booted perfectly locally and
 died on Lambda, twice.
 
-**Why it needs a script.** `@fridgeezy/api` builds unbundled, so `node_modules`
-has to be installed into `dist/` — and `nx run api:prune` *recreates* `dist/`,
+**Why it needs a script.** `@fridgeezy/api` bundles its own workspace libs but
+keeps third-party packages external, so `node_modules` still has to be installed
+into `dist/` — and `nx run api:prune` *recreates* `dist/`,
 so doing it in the wrong order silently deletes the install. Then `npm ci` links
 `@fridgeezy/*` according to the pruned lockfile, which resolves them to
 repo-relative paths like `libs/schemas`; inside `dist/` that lands on

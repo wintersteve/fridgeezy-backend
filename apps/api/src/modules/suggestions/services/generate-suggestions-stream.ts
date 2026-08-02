@@ -45,7 +45,7 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
   - Use the specific component type if it matches (e.g., roux for a roux, sauce for bechamel, stock for a stock)
   - Use "dish" for regular finished dishes/meals
 - EXACTLY 1 cuisine tag per recipe (the most accurate cuisine origin)
-- EXACTLY 1 course tag per recipe (the most accurate course type)
+- EXACTLY 1 course tag per recipe. The ONLY valid course tags are: appetizer, dessert, main, side. Pick exactly one of those four — a main dish is "main", a starter is "appetizer", an accompaniment is "side". Never omit it, and never invent another (not "dinner", "lunch", "breakfast", "entree" or "main course").
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free if the recipe qualifies)
 
 ## Ingredients

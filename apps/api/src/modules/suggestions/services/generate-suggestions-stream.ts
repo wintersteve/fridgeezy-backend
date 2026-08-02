@@ -1,6 +1,10 @@
+import { randomUUID } from "node:crypto";
+
 import { generateStream, type LlmProvider } from "@fridgeezy/llm";
 import {
-    EnrichedSuggestionResponseDto,
+    ProvisionalSuggestionDto,
+    StreamedSuggestionDto,
+    WithdrawnSuggestionDto,
     GenerateSuggestionRequestDto,
     GenerateSuggestionResponseDto,
     GenerateSuggestionResponseSchema,
@@ -69,10 +73,38 @@ Each recipe object must include:
  * before: that parameter could only ever inject an OpenAI client, so it was no
  * use for the Bedrock comparison it existed to enable.
  */
+/**
+ * The card as the model wrote it, before any database work.
+ *
+ * Ingredient and tag ids do not exist yet — the rows may not either. They are
+ * synthesised with a `temp:` prefix so the shape matches the enriched frame and
+ * the client needs one type, not two, and so React keys stay stable and unique
+ * within the card. Nothing should treat them as real ids; they are visibly not
+ * UUIDs, and the enriched frame replaces them a few seconds later.
+ */
+function provisionalCard(
+    suggestion: GenerateSuggestionResponseDto,
+    tempId: string
+): ProvisionalSuggestionDto {
+    const provisional = (name: string) => ({ id: `temp:${name}`, name });
+
+    return {
+        tempId,
+        name: suggestion.name,
+        nameEn: suggestion.name_alt,
+        description: suggestion.description,
+        difficulty: suggestion.difficulty,
+        ingredients: suggestion.ingredients.map(provisional),
+        tags: suggestion.tags.map(provisional),
+    };
+}
+
 export async function* generateSuggestionsStream(
     request: GenerateSuggestionRequestDto,
     provider?: LlmProvider
-): AsyncGenerator<EnrichedSuggestionResponseDto> {
+): AsyncGenerator<
+    ProvisionalSuggestionDto | StreamedSuggestionDto | WithdrawnSuggestionDto
+> {
     const userPrompt = buildSuggestionsUserPrompt(request);
     const existingDishes = buildExistingDishesBlock(
         await listCatalogDishes(userPrompt)
@@ -85,36 +117,106 @@ export async function* generateSuggestionsStream(
         provider,
     });
 
-    // Persist/dedup each suggestion CONCURRENTLY: kick off the work as soon as
-    // each JSONL line is parsed (rather than awaiting one before reading the
-    // next), then yield in generation order as they resolve. Each suggestion's
-    // dedup + authenticity + ingredient/tag matching is independent; the only
-    // shared writes are new ingredient/tag rows, and their creates are
-    // conflict-safe (reuse the row that wins a duplicate-key race).
-    const pending: Promise<SuggestionOutcome>[] = [];
-    for await (const { parsed } of processJsonlStream(stream, [
-        GenerateSuggestionResponseSchema,
-    ])) {
-        const suggestion = parsed as GenerateSuggestionResponseDto;
-        pending.push(persistOrReuseSuggestion(suggestion, request));
-    }
+    // Persist/dedup each suggestion CONCURRENTLY: the work starts as soon as its
+    // JSONL line is parsed, rather than one at a time. Each suggestion's dedup +
+    // authenticity + ingredient/tag matching is independent; the only shared
+    // writes are new ingredient/tag rows, and their creates are conflict-safe
+    // (reuse the row that wins a duplicate-key race).
+    //
+    // Consumption and yielding are interleaved. An earlier version drained the
+    // model stream completely before entering a second loop that yielded — so
+    // however concurrent the persistence was, the first card could not reach the
+    // client until the LAST suggestion had been generated. Measured, that put
+    // every card at ~9.9s when the first was ready at ~7.8s.
+    //
+    // Order is still generation order: `pending` is consumed from the front, so
+    // a fast fourth suggestion never overtakes a slow first one. That matters
+    // because the client renders the batch as an ordered list.
+    const pending: Promise<{ outcome: SuggestionOutcome; tempId: string }>[] = [];
+    const source = processJsonlStream(stream, [GenerateSuggestionResponseSchema]);
+    let done = false;
 
-    for (const persist of pending) {
-        const outcome = await persist;
-
-        // A dish the user already has as a recipe is dropped, not surfaced:
-        // this endpoint returns suggestion cards, and re-offering something
-        // already in the catalog is exactly the duplication being guarded
-        // against. The prompt exclusion above makes this a rare fallback.
+    const emit = function* (
+        outcome: SuggestionOutcome,
+        tempId: string
+    ): Generator<StreamedSuggestionDto | WithdrawnSuggestionDto> {
+        // A dish the user already has as a recipe is not surfaced: this endpoint
+        // returns suggestion cards, and re-offering something already in the
+        // catalog is exactly the duplication being guarded against. The prompt
+        // exclusion above makes this a rare fallback.
+        //
+        // Withdrawn rather than silently skipped, because its provisional card
+        // has already been sent — saying nothing would leave a card on screen
+        // that never resolves and cannot be opened.
         if (outcome.kind === "existing_recipe") {
             console.log(
-                `[Suggestions] Skipping "${outcome.recipe.name}" — already in the catalog as a recipe`
+                `[Suggestions] Withdrawing "${outcome.recipe.name}" — already in the catalog as a recipe`
             );
-            continue;
+            yield { tempId, withdrawn: true };
+            return;
         }
 
+        // Same for a dish the authenticity gate rejected.
+        if (outcome.kind === "dropped") {
+            yield { tempId, withdrawn: true };
+            return;
+        }
+
+        // Carries the same tempId as the provisional card, which is how the
+        // client replaces it rather than appending a second one.
         if (outcome.kind === "suggestion") {
-            yield outcome.suggestion;
+            yield { ...outcome.suggestion, tempId };
+        }
+    };
+
+    while (!done || pending.length > 0) {
+        if (!done) {
+            const next = await source.next();
+
+            if (next.done) {
+                done = true;
+            } else {
+                const suggestion = next.value.parsed as GenerateSuggestionResponseDto;
+                const tempId = randomUUID();
+
+                pending.push(
+                    persistOrReuseSuggestion(suggestion, request).then(
+                        (outcome) => ({ outcome, tempId })
+                    )
+                );
+
+                // The card the model just wrote, sent before any database work.
+                // Everything after this point — embedding, three dedup searches,
+                // ingredient/tag matching, the insert — takes ~3.5s and changes
+                // nothing the user can see except resolving ids. Holding the
+                // card back for it was most of the wait.
+                yield provisionalCard(suggestion, tempId);
+            }
+        }
+
+        // Drain everything already settled before reading more from the model,
+        // so a card is never held back behind a line still being generated.
+        while (
+            pending.length > 0 &&
+            (done || (await isSettled(pending[0])))
+        ) {
+            const settled = await pending.shift();
+
+            if (settled) yield* emit(settled.outcome, settled.tempId);
         }
     }
+}
+
+/**
+ * Whether a promise has already resolved, without waiting on it.
+ *
+ * Used to decide "is the next card ready *now*" while the model is still
+ * producing lines. `Promise.race` against an already-resolved sentinel settles
+ * in one microtask, so this never delays reading the next line.
+ */
+async function isSettled(promise: Promise<unknown>): Promise<boolean> {
+    const pendingMarker = Symbol("pending");
+
+    return (await Promise.race([promise, Promise.resolve(pendingMarker)])) !==
+        pendingMarker;
 }

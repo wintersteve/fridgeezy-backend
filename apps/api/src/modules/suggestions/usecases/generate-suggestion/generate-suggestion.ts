@@ -1,6 +1,8 @@
 import {
-    EnrichedSuggestionResponseSchema,
     GenerateSuggestionRequestSchema,
+    ProvisionalSuggestionSchema,
+    StreamedSuggestionSchema,
+    WithdrawnSuggestionSchema,
 } from "@fridgeezy/schemas";
 import { createStreamHandler } from "@fridgeezy/streaming-server";
 
@@ -8,7 +10,13 @@ import { generateSuggestionsStream } from "../../services";
 
 export const generateSuggestion = createStreamHandler({
     requestSchema: GenerateSuggestionRequestSchema,
-    responseSchema: EnrichedSuggestionResponseSchema,
+    // Two frame shapes: the provisional card sent as soon as the model
+    // writes it, then the persisted one carrying the same tempId.
+    responseSchema: [
+        ProvisionalSuggestionSchema,
+        StreamedSuggestionSchema,
+        WithdrawnSuggestionSchema,
+    ],
     handler: async ({ body }) => {
         const stream = generateSuggestionsStream({
             ingredients: body.ingredients || [],

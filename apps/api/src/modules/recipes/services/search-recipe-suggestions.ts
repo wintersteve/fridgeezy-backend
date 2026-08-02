@@ -492,6 +492,13 @@ export async function searchRecipeSuggestions(
                         break;
                     }
 
+                    // The generator emits each dish twice — a provisional card
+                    // the moment the model writes it, then the persisted one.
+                    // This caller returns rows the chat UI links to, so it needs
+                    // the id and skips the provisional frame; the streaming
+                    // caller above is the one that benefits from it.
+                    if (!("id" in suggestion)) continue;
+
                     suggestions.push({
                         id: suggestion.id,
                         name: suggestion.name,

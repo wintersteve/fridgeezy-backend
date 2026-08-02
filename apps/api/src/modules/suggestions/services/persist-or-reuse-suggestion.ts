@@ -62,6 +62,21 @@ export async function persistOrReuseSuggestion(
     request: Pick<GenerateSuggestionRequestDto, "cuisine">,
     suggestionsRepo: SuggestionsRepository = new SuggestionsRepository()
 ): Promise<SuggestionOutcome> {
+    // Started here rather than at its use site further down. It depends on
+    // nothing but the suggestion itself, so waiting until after three dedup
+    // round trips added its full latency (~0.8s) to every new dish for no
+    // reason. Kicked off now, it overlaps the embedding and both searches and
+    // is usually already settled by the time it is awaited.
+    //
+    // The cost of starting early is one wasted gpt-4o-mini call — capped at 20
+    // completion tokens — whenever dedup returns before reaching the gate.
+    // That is a fraction of a cent against ~0.8s off the common path.
+    //
+    // Safe to leave unawaited on the early-return paths:
+    // verifySuggestionAuthenticity catches its own errors and fails open, so
+    // this promise never rejects and cannot become an unhandled rejection.
+    const authenticity = verifySuggestionAuthenticity(suggestion);
+
     // Embed the dish SIGNATURE (canonical name + tags + ingredients) once, up
     // front: both halves of the catalog are searched with this same vector, so
     // the same dish under different names merges (Som Tam ≡ Green Papaya Salad)
@@ -158,10 +173,11 @@ export async function persistOrReuseSuggestion(
         }
     }
 
-    // Authenticity gate — only runs for genuinely new dishes (dedup already
-    // returned any existing, already-vetted one). Keep inventions and
-    // hallucinations out of the discovery catalog.
-    const isAuthentic = await verifySuggestionAuthenticity(suggestion);
+    // Authenticity gate — reached only by genuinely new dishes (dedup already
+    // returned any existing, already-vetted one). Keeps inventions and
+    // hallucinations out of the discovery catalog. Started at the top of this
+    // function, so this await is usually free.
+    const isAuthentic = await authenticity;
     if (!isAuthentic) {
         console.warn(
             `[Suggestions] Dropping unauthentic dish "${suggestion.name}" (not attested for discovery)`

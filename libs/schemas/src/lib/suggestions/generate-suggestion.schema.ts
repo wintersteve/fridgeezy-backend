@@ -90,6 +90,63 @@ export const EnrichedSuggestionResponseSchema = z.object({
     tags: z.array(SuggestionTagSchema),
 });
 
+/**
+ * The card as the model wrote it, emitted BEFORE any database work.
+ *
+ * `/suggestions/generate` sends each suggestion twice: this frame the moment the
+ * model finishes writing it, then {@link StreamedSuggestionSchema} once it is
+ * persisted. Everything between the two — embedding, dedup searches,
+ * ingredient/tag matching, the insert — takes several seconds and changes
+ * nothing visible except resolving ids, so holding the card back for it was
+ * most of the wait.
+ *
+ * It has no `id` because the row does not exist yet, and its ingredient/tag ids
+ * are synthesised with a `temp:` prefix. Never treat those as real.
+ */
+export const ProvisionalSuggestionSchema = z.object({
+    /** Matches the `tempId` on the enriched frame for the same dish. */
+    tempId: z.string(),
+    name: z.string(),
+    nameEn: z.string().nullable().optional(),
+    description: z.string().transform(clampToCardLength),
+    difficulty: z.enum(["easy", "medium", "hard"]),
+    ingredients: z.array(SuggestionIngredientSchema),
+    tags: z.array(SuggestionTagSchema),
+});
+
+/**
+ * The persisted card, carrying the `tempId` of the provisional frame it
+ * replaces. A client keying on `tempId` upgrades the card in place; one that
+ * ignores it renders the dish twice.
+ *
+ * Separate from {@link EnrichedSuggestionResponseSchema} so that type stays the
+ * shape of a persisted suggestion everywhere else in the app, with no `tempId`
+ * for callers that never stream.
+ */
+export const StreamedSuggestionSchema = EnrichedSuggestionResponseSchema.extend({
+    tempId: z.string(),
+});
+
+/**
+ * Withdraws a provisional card that will never be enriched.
+ *
+ * A dish can disappear after its provisional frame has already been sent: dedup
+ * may resolve it to a recipe the user already has, or the authenticity gate may
+ * reject it. Before provisional frames existed those outcomes were simply not
+ * emitted and nothing was ever shown. Now the card is already on screen, so
+ * silence would leave a dish the user can look at but never open.
+ */
+export const WithdrawnSuggestionSchema = z.object({
+    tempId: z.string(),
+    withdrawn: z.literal(true),
+});
+
+export type WithdrawnSuggestionDto = z.infer<typeof WithdrawnSuggestionSchema>;
+
+export type ProvisionalSuggestionDto = z.infer<typeof ProvisionalSuggestionSchema>;
+
+export type StreamedSuggestionDto = z.infer<typeof StreamedSuggestionSchema>;
+
 export type GenerateSuggestionRequestDto = z.infer<
     typeof GenerateSuggestionRequestSchema
 >;

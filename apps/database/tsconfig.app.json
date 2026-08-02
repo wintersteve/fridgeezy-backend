@@ -19,6 +19,9 @@
     ],
     "references": [
         {
+            "path": "../../libs/llm/tsconfig.lib.json"
+        },
+        {
             "path": "../../libs/genai/tsconfig.lib.json"
         },
         {

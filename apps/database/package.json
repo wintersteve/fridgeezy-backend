@@ -103,11 +103,19 @@
                     "command": "npx jiti operations/generate-category-images.ts",
                     "cwd": "apps/database"
                 }
+            },
+            "backfill-course-tags": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/backfill-course-tags.ts",
+                    "cwd": "apps/database"
+                }
             }
         }
     },
     "dependencies": {
         "@fridgeezy/genai": "0.0.1",
+        "@fridgeezy/llm": "0.0.1",
         "@fridgeezy/openai": "0.0.1",
         "@fridgeezy/supabase": "0.0.1",
         "@fridgeezy/toolkit": "0.0.1",

@@ -67,6 +67,10 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
   rows it creates, so anything the LLM added arrives without a vector and stays
   invisible to similarity matching until this runs.
 - `seed-ingredients`, `generate-ingredient-seed`, `generate-category-images`
+- `backfill-course-tags` — one-off repair, already run on 2026-08-02. Fills a
+  course tag on suggestions and recipes that have none, classifying each dish
+  with an LLM. Dry run unless `COURSE_APPLY=true`; idempotent, so it is safe
+  to re-run — rows that already carry a course are skipped.
 - `dedupe-ingredients` — an audit, not routine. Nothing calls it; run it only
   when the catalog visibly holds two names for one thing ("scallion" /
   "green onion"). Dry run unless `DEDUP_APPLY=true`, and it costs ~5N LLM calls.

@@ -1,4 +1,4 @@
-import { Tag, TagInsertPayload } from "@fridgeezy/types";
+import { Tag, TagInsertPayload, TagType } from "@fridgeezy/types";
 
 import { DomainError, Result } from "../../shared";
 
@@ -34,6 +34,24 @@ export interface ITagsRepository {
      */
     vectorSearch(
         embedding: number[],
+        threshold: number
+    ): Promise<Result<TagVectorMatch | null, DomainError>>;
+
+    /**
+     * Search for a tag using vector similarity within ONE tag type.
+     *
+     * Use when the type is already known and a hit of any other type would be
+     * wrong — {@link vectorSearch} returns the best match across all four, so a
+     * cuisine query can come back with a dietary tag that happened to embed
+     * closer.
+     * @param embedding Precomputed query embedding (text-embedding-3-small, 1536-dim)
+     * @param type The only tag type to consider
+     * @param threshold Similarity threshold (0.0-1.0)
+     * @returns Best matching tag of that type, or null if none above threshold
+     */
+    vectorSearchByType(
+        embedding: number[],
+        type: TagType,
         threshold: number
     ): Promise<Result<TagVectorMatch | null, DomainError>>;
 

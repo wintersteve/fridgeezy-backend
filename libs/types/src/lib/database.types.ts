@@ -95,6 +95,13 @@ export type Database = {
             foreignKeyName: "collection_recipes_recipe_id_fkey"
             columns: ["recipe_id"]
             isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "collection_recipes_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
             referencedRelation: "recipes"
             referencedColumns: ["id"]
           },
@@ -226,6 +233,21 @@ export type Database = {
           },
         ]
       }
+      dietary_rules: {
+        Row: {
+          diet_canonical_id: string
+          forbidden: Database["public"]["Enums"]["dietary_property"][]
+        }
+        Insert: {
+          diet_canonical_id: string
+          forbidden: Database["public"]["Enums"]["dietary_property"][]
+        }
+        Update: {
+          diet_canonical_id?: string
+          forbidden?: Database["public"]["Enums"]["dietary_property"][]
+        }
+        Relationships: []
+      }
       ingredient_aliases: {
         Row: {
           alias: string
@@ -262,6 +284,8 @@ export type Database = {
           created_at: string
           default_shelf_life_days: number | null
           description: string | null
+          dietary_classified_at: string | null
+          dietary_properties: Database["public"]["Enums"]["dietary_property"][]
           embedding: string | null
           expires_by_default: boolean
           id: string
@@ -278,6 +302,8 @@ export type Database = {
           created_at?: string
           default_shelf_life_days?: number | null
           description?: string | null
+          dietary_classified_at?: string | null
+          dietary_properties?: Database["public"]["Enums"]["dietary_property"][]
           embedding?: string | null
           expires_by_default?: boolean
           id?: string
@@ -294,6 +320,8 @@ export type Database = {
           created_at?: string
           default_shelf_life_days?: number | null
           description?: string | null
+          dietary_classified_at?: string | null
+          dietary_properties?: Database["public"]["Enums"]["dietary_property"][]
           embedding?: string | null
           expires_by_default?: boolean
           id?: string
@@ -427,6 +455,13 @@ export type Database = {
             foreignKeyName: "profile_recipe_interactions_recipe_id_fkey"
             columns: ["recipe_id"]
             isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "profile_recipe_interactions_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
             referencedRelation: "recipes"
             referencedColumns: ["id"]
           },
@@ -547,6 +582,13 @@ export type Database = {
             foreignKeyName: "recipe_ingredients_recipe_id_fkey"
             columns: ["recipe_id"]
             isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "recipe_ingredients_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
             referencedRelation: "recipes"
             referencedColumns: ["id"]
           },
@@ -563,37 +605,37 @@ export type Database = {
         Row: {
           cooking_action_id: string | null
           created_at: string
-          duration_minutes: number | null
+          duration_seconds: number | null
           id: string
           ingredient_refs: string[] | null
           instruction_text: string
           recipe_id: string
           step_number: number
-          temperature: Json | null
+          temperature_c: number | null
           tips: string | null
         }
         Insert: {
           cooking_action_id?: string | null
           created_at?: string
-          duration_minutes?: number | null
+          duration_seconds?: number | null
           id?: string
           ingredient_refs?: string[] | null
           instruction_text: string
           recipe_id: string
           step_number: number
-          temperature?: Json | null
+          temperature_c?: number | null
           tips?: string | null
         }
         Update: {
           cooking_action_id?: string | null
           created_at?: string
-          duration_minutes?: number | null
+          duration_seconds?: number | null
           id?: string
           ingredient_refs?: string[] | null
           instruction_text?: string
           recipe_id?: string
           step_number?: number
-          temperature?: Json | null
+          temperature_c?: number | null
           tips?: string | null
         }
         Relationships: [
@@ -603,6 +645,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "cooking_actions"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_instructions_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
           },
           {
             foreignKeyName: "recipe_instructions_recipe_id_fkey"
@@ -644,6 +693,13 @@ export type Database = {
             foreignKeyName: "recipe_suggestion_ingredients_recipe_suggestion_id_fkey"
             columns: ["recipe_suggestion_id"]
             isOneToOne: false
+            referencedRelation: "recipe_suggestion_dietary"
+            referencedColumns: ["recipe_suggestion_id"]
+          },
+          {
+            foreignKeyName: "recipe_suggestion_ingredients_recipe_suggestion_id_fkey"
+            columns: ["recipe_suggestion_id"]
+            isOneToOne: false
             referencedRelation: "recipe_suggestions"
             referencedColumns: ["id"]
           },
@@ -669,6 +725,13 @@ export type Database = {
           tag_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "recipe_suggestion_tags_recipe_suggestion_id_fkey"
+            columns: ["recipe_suggestion_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_suggestion_dietary"
+            referencedColumns: ["recipe_suggestion_id"]
+          },
           {
             foreignKeyName: "recipe_suggestion_tags_recipe_suggestion_id_fkey"
             columns: ["recipe_suggestion_id"]
@@ -742,6 +805,13 @@ export type Database = {
             foreignKeyName: "recipe_tags_recipe_id_fkey"
             columns: ["recipe_id"]
             isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "recipe_tags_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
             referencedRelation: "recipes"
             referencedColumns: ["id"]
           },
@@ -784,6 +854,13 @@ export type Database = {
             foreignKeyName: "recipe_variants_base_recipe_id_fkey"
             columns: ["base_recipe_id"]
             isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "recipe_variants_base_recipe_id_fkey"
+            columns: ["base_recipe_id"]
+            isOneToOne: false
             referencedRelation: "recipes"
             referencedColumns: ["id"]
           },
@@ -793,6 +870,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_variants_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
           },
           {
             foreignKeyName: "recipe_variants_recipe_id_fkey"
@@ -884,6 +968,13 @@ export type Database = {
             foreignKeyName: "recipes_base_recipe_id_fkey"
             columns: ["base_recipe_id"]
             isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "recipes_base_recipe_id_fkey"
+            columns: ["base_recipe_id"]
+            isOneToOne: false
             referencedRelation: "recipes"
             referencedColumns: ["id"]
           },
@@ -921,6 +1012,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_lists_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
           },
           {
             foreignKeyName: "shopping_lists_recipe_id_fkey"
@@ -1059,10 +1157,45 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      recipe_dietary: {
+        Row: {
+          diet_canonical_id: string | null
+          recipe_id: string | null
+        }
+        Relationships: []
+      }
+      recipe_display_tags: {
+        Row: {
+          id: string | null
+          name: string | null
+          recipe_id: string | null
+          type: Database["public"]["Enums"]["tag_type"] | null
+        }
+        Relationships: []
+      }
+      recipe_suggestion_dietary: {
+        Row: {
+          diet_canonical_id: string | null
+          recipe_suggestion_id: string | null
+        }
+        Relationships: []
+      }
+      recipe_suggestion_display_tags: {
+        Row: {
+          id: string | null
+          name: string | null
+          recipe_suggestion_id: string | null
+          type: Database["public"]["Enums"]["tag_type"] | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       delete_orphan_generated_recipes: { Args: never; Returns: number }
+      difficulty_preference_rank: {
+        Args: { difficulty: string; pref: string }
+        Returns: number
+      }
       find_recipes: {
         Args: {
           blacklist?: string[]
@@ -1222,12 +1355,34 @@ export type Database = {
         }[]
       }
       singularize_token: { Args: { tok: string }; Returns: string }
+      tag_subtree: {
+        Args: { root_ids: string[] }
+        Returns: {
+          root_id: string
+          tag_id: string
+        }[]
+      }
       title_case_name: { Args: { input: string }; Returns: string }
     }
     Enums: {
+      dietary_property:
+        | "meat"
+        | "fish"
+        | "shellfish"
+        | "dairy"
+        | "egg"
+        | "honey"
+        | "slaughter_derived"
+        | "gluten"
+        | "nuts"
+        | "soy"
+        | "grain"
+        | "legume"
+        | "refined_sugar"
+        | "sesame"
       difficulty_type: "easy" | "medium" | "hard"
       recipe_interaction_type: "viewed" | "favourite" | "cooked"
-      tag_type: "dietary" | "component" | "course" | "cuisine"
+      tag_type: "dietary" | "component" | "course" | "cuisine" | "dish_form"
       unit_system: "metric" | "imperial" | "universal"
       unit_type: "weight" | "volume" | "count"
     }
@@ -1371,9 +1526,25 @@ export const Constants = {
   },
   public: {
     Enums: {
+      dietary_property: [
+        "meat",
+        "fish",
+        "shellfish",
+        "dairy",
+        "egg",
+        "honey",
+        "slaughter_derived",
+        "gluten",
+        "nuts",
+        "soy",
+        "grain",
+        "legume",
+        "refined_sugar",
+        "sesame",
+      ],
       difficulty_type: ["easy", "medium", "hard"],
       recipe_interaction_type: ["viewed", "favourite", "cooked"],
-      tag_type: ["dietary", "component", "course", "cuisine"],
+      tag_type: ["dietary", "component", "course", "cuisine", "dish_form"],
       unit_system: ["metric", "imperial", "universal"],
       unit_type: ["weight", "volume", "count"],
     },

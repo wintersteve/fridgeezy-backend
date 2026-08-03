@@ -1,0 +1,20 @@
+-- Add a `dish_form` tag type: what shape the dish takes, as distinct from when
+-- it is served.
+--
+-- WHY NOT A COURSE
+-- Soups and salads keep being proposed as courses, and they cannot be. `course`
+-- answers "which slot in a meal does this fill", and its four values are
+-- mutually exclusive — the composition flow depends on that to request one
+-- appetizer, one main and one dessert without contradiction. A soup is an
+-- appetizer in one country and a main in another; a salad is a side or a meal.
+-- Adding them to `course` would make a dish need two courses at once and break
+-- the invariant composition rests on.
+--
+-- Form is orthogonal to slot: a dish has exactly one course AND may have one
+-- form. That also makes "soup" searchable, which it currently is not in any way
+-- — no tag type can express it today.
+--
+-- Separate migration from the tags that use the value: Postgres will not let a
+-- new enum value be USED in the transaction that adds it, and the CLI runs each
+-- migration file in one.
+alter type tag_type add value if not exists 'dish_form';

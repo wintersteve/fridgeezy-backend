@@ -62,6 +62,7 @@ values ('gluten free', 'gluten_free', 'dietary'),
        ('egg free', 'egg_free', 'dietary'),
        ('soy free', 'soy_free', 'dietary'),
        ('shellfish free', 'shellfish_free', 'dietary'),
+       ('sesame free', 'sesame_free', 'dietary'),
        ('low carb', 'low_carb', 'dietary'),
        ('low fat', 'low_fat', 'dietary'),
        ('low sodium', 'low_sodium', 'dietary'),
@@ -94,3 +95,31 @@ values ('appetizer', 'appetizer', 'course'),
        ('main', 'main', 'course'),
        ('side', 'side', 'course'),
        ('dessert', 'dessert', 'course') on conflict (name, type) do nothing;
+
+-- ============================================================================
+-- DISH FORM TAGS (what shape the dish takes — orthogonal to course)
+-- ============================================================================
+
+-- A soup can be an appetizer or a main, a salad a side or a meal, so form
+-- cannot live in `course` without breaking its mutually-exclusive slots.
+insert into tags (name, canonical_id, type)
+values ('soup', 'soup', 'dish_form'),
+       ('stew', 'stew', 'dish_form'),
+       ('salad', 'salad', 'dish_form'),
+       ('sandwich', 'sandwich', 'dish_form'),
+       ('wrap', 'wrap', 'dish_form'),
+       ('pizza', 'pizza', 'dish_form'),
+       ('pasta', 'pasta', 'dish_form'),
+       ('noodles', 'noodles', 'dish_form'),
+       ('curry', 'curry', 'dish_form'),
+       ('stir fry', 'stir_fry', 'dish_form'),
+       ('roast', 'roast', 'dish_form'),
+       ('bake', 'bake', 'dish_form'),
+       ('casserole', 'casserole', 'dish_form'),
+       ('grill', 'grill', 'dish_form'),
+       ('pie', 'pie', 'dish_form'),
+       ('dumpling', 'dumpling', 'dish_form'),
+       ('rice dish', 'rice_dish', 'dish_form'),
+       ('porridge', 'porridge', 'dish_form'),
+       ('pancake', 'pancake', 'dish_form'),
+       ('skewer', 'skewer', 'dish_form') on conflict (name, type) do nothing;

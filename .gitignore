@@ -53,3 +53,5 @@ ios/
 apps/database/supabase/.temp/
 # written by `db reset` against the local stack — per-machine, not shared state
 apps/database/supabase/.branches/
+# raw generations captured by the eval targets — a record of one run, not source
+apps/api/eval-output/

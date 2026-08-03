@@ -268,7 +268,7 @@ libs/supabase     Supabase client + repositories (categories, ingredients, recip
 libs/openai       OpenAI client + embeddings
 libs/bedrock      Anthropic-on-Bedrock streaming completions
 libs/llm          Provider seam: resolveProvider() / generateStream() over openai|bedrock
-libs/genai        @google/genai image generation
+libs/genai        @google/genai image generation + the shared food-illustration art direction
 libs/streaming-server   createStreamHandler, SSE plumbing, CORS, raw-body parsing
 libs/toolkit      Canonicalisation helpers (names, ingredient canonical ids, signatures)
 ```
@@ -364,7 +364,16 @@ those frames incrementally, which is why frame shapes are part of the contract.
   from every ported call site by setting `LLM_PROVIDER=bedrock`, but **has never
   run end-to-end** — Anthropic models are gated on this AWS account. Its streaming
   translation is covered offline by `check-streaming-conformance`.
-- **`@fridgeezy/genai`** (`@google/genai`) generates recipe images.
+- **`@fridgeezy/genai`** (`@google/genai`) generates recipe images. It also owns
+  `buildFoodIllustrationStyle` — the art direction shared by recipe heroes
+  (`create-recipe-image.ts`) and the home feed's cuisine tiles
+  (`operations/generate-category-images.ts`). Those two render on the same
+  screen and previously kept separate copies of the same paragraph, which
+  drifted: the recipe prompt lost the palette hex codes the cuisine one kept and
+  started producing a green plate on marble for one dish and a rustic speckled
+  bowl for the next. **Add a new image call site by composing its own subject
+  section around that builder** — only `framing` and `mood` are per-surface, and
+  the framing rule exists because each surface is cropped differently.
 
 ### Chat tool calling
 

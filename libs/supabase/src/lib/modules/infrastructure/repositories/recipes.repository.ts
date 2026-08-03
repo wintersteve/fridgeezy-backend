@@ -81,6 +81,12 @@ export class RecipesRepository implements IRecipesRepository {
                     step_number: idx + 1,
                     text: inst.text,
                     ingredients: inst.ingredients || [],
+                    // snake_case because this is the JSONB the SQL reads by key,
+                    // not a TS object — `persist_recipe` looks up
+                    // `duration_seconds`. Null rather than omitted so the shape
+                    // stays uniform across steps.
+                    duration_seconds: inst.durationSeconds ?? null,
+                    temperature_c: inst.temperatureC ?? null,
                 })),
                 p_tags: recipe.tags || [],
                 // Both omitted rather than nulled when absent, so the SQL
@@ -282,6 +288,10 @@ export class RecipesRepository implements IRecipesRepository {
                         step_number: idx + 1,
                         text: inst.text,
                         ingredient_ids: (inst as any).ingredientIds || [],
+                        // See the sibling mapping in persistWithRelations.
+                        duration_seconds:
+                            (inst as any).durationSeconds ?? null,
+                        temperature_c: (inst as any).temperatureC ?? null,
                     })),
                     p_tags: recipe.tags || [],
                     p_name_en: recipe.nameEn ?? null,

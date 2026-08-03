@@ -3,7 +3,12 @@ import { generateEmbedding } from "@fridgeezy/openai";
 import { TagsRepository } from "@fridgeezy/supabase";
 import { canonicalizeName } from "@fridgeezy/toolkit";
 
-export type TagType = "dietary" | "cuisine" | "component" | "course";
+export type TagType =
+    | "dietary"
+    | "cuisine"
+    | "component"
+    | "course"
+    | "dish_form";
 
 export interface TagInput {
     name: string;
@@ -16,6 +21,59 @@ export interface TagMatch {
     tagType: string;
     matchType: "canonical_id" | "vector" | "created";
     confidence?: number;
+}
+
+/**
+ * Where a newly invented cuisine belongs in the tree.
+ *
+ * Returns the id of the nearest sensible ancestor, or null when nothing is
+ * close enough — a null parent is still better than a wrong one, and it is
+ * logged so the tag can be placed by hand.
+ */
+const CUISINE_PARENT_THRESHOLD = 0.45;
+
+async function resolveCuisineParent(
+    tagsRepo: TagsRepository,
+    embedding: number[],
+    name: string
+): Promise<string | null> {
+    try {
+        const nearest = await tagsRepo.vectorSearchByType(
+            embedding,
+            "cuisine",
+            CUISINE_PARENT_THRESHOLD
+        );
+
+        if (nearest.success === false || !nearest.value) {
+            console.warn(
+                `[Tags] No cuisine near "${name}" — creating it outside the hierarchy, so only an exact selection will find it.`
+            );
+            return null;
+        }
+
+        const { tag } = nearest.value;
+
+        // A continental root adopts the tag directly, so it lands one level
+        // beneath. Anything deeper hands over its own parent instead, making the
+        // new tag a SIBLING of the match — "tex-mex" belongs beside "mexican",
+        // not under it.
+        //
+        // When the nearest hit is itself a region this sits one level higher
+        // than ideal (a specific cuisine ends up beside "east asian" rather than
+        // under it). Left that way on purpose: telling a region from a leaf
+        // needs a children lookup, and the placement only has to keep the tag
+        // inside the tree and reachable from the continental filters.
+        const parentId = tag.parent_id ?? tag.id;
+
+        console.log(
+            `[Tags] Placing new cuisine "${name}" under the parent of "${tag.name}" (similarity ${nearest.value.similarity.toFixed(2)})`
+        );
+
+        return parentId;
+    } catch (error) {
+        console.error(`[Tags] Failed to place cuisine "${name}":`, error);
+        return null;
+    }
 }
 
 /**
@@ -142,11 +200,32 @@ export async function matchTags(
                 // Generate embedding for the new tag
                 const embedding = await generateEmbedding(input.name);
 
+                // Place the new tag in the cuisine tree rather than beside it.
+                //
+                // Cuisine tags form a 3-level hierarchy, and since
+                // 20260803000002 a filter on "asian" matches everything BELOW
+                // it. A tag created with a null parent sits outside that tree:
+                // reachable only by selecting its own name, invisible to every
+                // regional and continental filter, and permanently so. Every
+                // cuisine invented at runtime used to land there.
+                //
+                // The nearest existing cuisine (searched at a threshold well
+                // below the 0.75 that just failed — this only has to be in the
+                // right part of the world, not a match) supplies the parent: its
+                // own parent when it is a leaf, or itself when it is already a
+                // root or region.
+                const parentId = await resolveCuisineParent(
+                    tagsRepo,
+                    embedding,
+                    input.name
+                );
+
                 const canonicalId = toCanonicalId(input.name);
                 const createResult = await tagsRepo.create({
                     name: input.name.toLowerCase(),
                     canonical_id: canonicalId,
                     type: "cuisine",
+                    parent_id: parentId,
                     embedding: JSON.stringify(embedding),
                 });
 

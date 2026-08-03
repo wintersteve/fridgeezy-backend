@@ -161,6 +161,13 @@
                     "command": "npx jiti operations/backfill-course-tags.ts",
                     "cwd": "apps/database"
                 }
+            },
+            "classify-ingredient-diet": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/classify-ingredient-diet.ts",
+                    "cwd": "apps/database"
+                }
             }
         }
     },

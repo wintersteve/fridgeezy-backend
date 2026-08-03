@@ -1,5 +1,6 @@
 import { generateCompletion } from "@fridgeezy/llm";
 import { supabaseAdmin } from "@fridgeezy/supabase";
+import { extractJsonObjects } from "@fridgeezy/toolkit";
 import { config } from "dotenv";
 
 config();
@@ -76,11 +77,10 @@ async function classify(rows: Row[]): Promise<Map<string, Course>> {
             maxTokens: { openai: 60 * batch.length, bedrock: 60 * batch.length },
         });
 
-        for (const line of text.split("\n")) {
-            const trimmed = line.trim();
-
-            if (!trimmed) continue;
-
+        // Brace-matched rather than split on newlines: the model sometimes runs
+        // several objects together on one line, and a line-based parse discards
+        // every dish on such a line instead of just the malformed one.
+        for (const trimmed of extractJsonObjects(text)) {
             try {
                 const parsed = JSON.parse(trimmed) as {
                     name?: string;
@@ -94,9 +94,9 @@ async function classify(rows: Row[]): Promise<Map<string, Course>> {
                     out.set(parsed.name, parsed.course as Course);
                 }
             } catch {
-                // A malformed line costs one dish, not the batch. Those rows
+                // A malformed object costs one dish, not the batch. Those rows
                 // simply stay unclassified and are reported at the end.
-                console.warn(`  [skip] unparseable line: ${trimmed.slice(0, 80)}`);
+                console.warn(`  [skip] unparseable object: ${trimmed.slice(0, 80)}`);
             }
         }
 

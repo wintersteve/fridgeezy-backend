@@ -1,4 +1,4 @@
-import { generateImage } from "@fridgeezy/genai";
+import { buildFoodIllustrationStyle, generateImage } from "@fridgeezy/genai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
 
 /**
@@ -30,25 +30,37 @@ export const getRecipeImagePublicUrl = (name: string): string =>
     supabaseAdmin.storage.from("recipes").getPublicUrl(imageStoragePath(name))
         .data.publicUrl;
 
+/**
+ * The plating half of the prompt. The style half is shared with the cuisine
+ * tiles via `buildFoodIllustrationStyle` — the two render side by side in the
+ * app, and keeping the contract in one place is what stops them drifting apart.
+ *
+ * "Complete, appetising portion … never deconstruct" is a guard, not filler:
+ * Michelin plating language on its own shrinks a Caesar salad to two leaves and
+ * a smear, which is art-directed but reads as no food at all on a recipe card.
+ *
+ * Garnish is constrained by course for the same reason — asked only for
+ * "a considered finishing garnish", the model put savoury herbs on a tiramisu.
+ */
 const buildPrompt = (
     name: string
-) => `An illustrated, bird's-eye (top-down) view of ${name}, presented simply and elegantly in its most natural serving vessel — whether that's a plate, bowl, jar, glass, or any other appropriate container for this type of food.
+) => `Editorial food illustration of ${name}, plated with the precision of a Michelin-starred kitchen.
 
-The food is centered in its proper serving context with subtle handmade ceramic or artisanal texture. No utensils, no background props, no clutter — the entire focus is on the food itself.
+PLATING
+- A complete, appetising restaurant portion — generous enough that a diner reads it as a real serving of ${name}. Refine and elevate the presentation; never deconstruct the dish into a sparse, abstract arrangement of a few isolated pieces.
+- Compose rather than pile: a clear centrepiece, components placed with intent, and the vessel's rim left clean so the food sits in a ring of calm negative space.
+- Add one controlled sauce element (a still pool, a single swoosh, or a few precise dots — never a flood) and one considered finishing garnish. Both must belong to this dish: savoury dishes take micro-herbs, toasted seeds, citrus zest, shaved cheese or a thin drizzle of oil; sweet dishes take fruit, berries, chocolate, caramel, cream, nuts or a dusting of sugar or cocoa — never savoury herbs or vegetables.
+- Build height, layering and textural contrast — crisp against soft, glossy against matte.
+- Unmistakably ${name}: every ingredient the dish is known for stays present and identifiable, in its own natural colour.
 
-Illustration style: refined, modern editorial food illustration with soft hand-drawn details; minimalistic but warm; not photorealistic.
-
-Color palette: warm, natural tones aligned with a soft culinary app aesthetic — soft peach, sage green, creamy off-white, muted beige and warm stone tones. Avoid harsh blacks; use deep charcoal only for subtle linework or contrast.
-
-Lighting and shading: gentle, diffuse light with soft shadows; calm, inviting atmosphere.
-
-Background: solid or lightly textured warm cream background, flat and unobtrusive.
-
-Composition: perfectly centered, balanced, and spacious, suitable for a recipe app hero image.
-
-Mood: authentic, comforting, artisanal, and timeless — evokes home cooking and cultural tradition without stereotypes.
-
-IMPORTANT: Generate only the illustration. Do not include any text, labels, codes, or annotations in the image.`;
+${buildFoodIllustrationStyle({
+    // The client crops this three ways — a 520px 3:4 hero, a 272x200 landscape
+    // card crop, and a square list thumb — so the vessel has to survive a centre
+    // crop to any of them.
+    framing:
+        "the vessel is complete and precisely centred both horizontally and vertically, filling about three quarters of the frame's width, with an even margin on all four sides — so the image still reads when cropped to a square or to a wide banner.",
+    mood: "calm, precise and appetising — the quiet confidence of a tasting menu.",
+})}`;
 
 export async function generateAndUploadRecipeImage(
     name: string

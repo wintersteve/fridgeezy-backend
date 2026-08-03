@@ -139,6 +139,16 @@ export async function* createRecipeStream(
                 ingredients: cleanedNames,
             };
 
+            // Only when present: the schema drops it for steps with no duration,
+            // and setting the key to undefined would still serialise into the
+            // RPC payload as an explicit null.
+            if (parsed.durationSeconds !== undefined) {
+                instruction.durationSeconds = parsed.durationSeconds;
+            }
+            if (parsed.temperatureC !== undefined) {
+                instruction.temperatureC = parsed.temperatureC;
+            }
+
             // Map ingredient names to IDs if map available
             if (config.ingredientIdMap && cleanedNames) {
                 const ingredientIds: string[] = [];

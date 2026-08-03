@@ -19,6 +19,8 @@ import {
     formatUnitsForPrompt,
     formatTagsForPrompt,
     HEADER_DESCRIPTION_RULES,
+    TEMPERATURE_RULES,
+    STEP_DURATION_RULES,
     INGREDIENT_CATEGORY_GUIDE,
 } from "../../services";
 import { generateAndUploadRecipeImage } from "../../services/create-recipe-image";
@@ -68,14 +70,19 @@ ${INGREDIENT_CATEGORY_GUIDE}
 
 ## Tagging Rules
 - EXACTLY 1 component tag per recipe (use "dish" for regular finished dishes/meals)
-- EXACTLY 1 cuisine tag per recipe (the most accurate cuisine origin)
-- At least 1 course tag (appetizer, starter, main, side, or dessert)
+- 1 OR 2 cuisine tags per recipe. One for almost every dish — its actual origin, as specific as the approved list allows. Add a SECOND only when the dish genuinely belongs to two traditions at once (Tex-Mex is american + mexican, Nikkei is japanese + peruvian). Never add a second merely to be broader — the region and continent a cuisine belongs to are already known, so "italian" must NOT also carry "mediterranean" or "european".
+- EXACTLY 1 course tag per recipe. The ONLY valid course tags are: appetizer, dessert, main, side. Pick exactly one of those four — a main dish is "main", a starter is "appetizer", an accompaniment is "side". Never omit it, and never invent another (not "dinner", "lunch", "breakfast", "entree" or "main course").
+- AT MOST 1 dish form tag per recipe, and only when the dish clearly IS one: soup, stew, salad, sandwich, wrap, pizza, pasta, noodles, curry, stir fry, roast, bake, casserole, grill, pie, dumpling, rice dish, porridge, pancake, skewer. This is the SHAPE of the dish, not when it is served — a soup served first is still course "appetizer" and form "soup". Omit it entirely for a dish that is simply a plate of food; most dishes have no form.
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free if the recipe qualifies)
 
 ## Difficulty Levels
 - "easy": Beginner-friendly version of the dish, using simple techniques while keeping ingredients authentic.
 - "medium": The standard authentic recipe with its usual techniques.
 - "hard": Elevated or advanced version of the dish, which may include optional ingredients or more complex techniques.
+
+${TEMPERATURE_RULES}
+
+${STEP_DURATION_RULES}
 
 ## Output Format (JSONL - one JSON object per line)
 Output the recipe as multiple JSON lines in this exact order:
@@ -99,7 +106,7 @@ Then one line per ingredient (use approved unit abbreviations only):
 Note: The "name" must be the plain ingredient only — NEVER include parentheses or qualifiers in the name (write "chicken breast", NOT "chicken breast (boneless)"). Any qualifier, preparation, or note MUST go in the "comment" field instead. The "comment" field is optional but should be included when the ingredient requires preparation or has a qualifier (e.g., "boneless", "peeled", "deveined", "crushed", "finely chopped", "at room temperature"). Omit if none is needed.
 
 Then one line per instruction step (include ingredients array with names of ingredients used in this step):
-{"type":"instruction","text":"Step description without number prefix","ingredients":["ingredient1","ingredient2"]}
+{"type":"instruction","text":"Step description without number prefix","durationSeconds":600,"temperatureC":180,"ingredients":["ingredient1","ingredient2"]}
 
 No markdown, no code blocks, just JSONL.`;
 

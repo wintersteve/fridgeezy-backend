@@ -1,0 +1,17 @@
+-- Add `sesame` to the ingredient dietary properties.
+--
+-- Sesame is one of the major declarable allergens, and the classifier reached for
+-- it unprompted: asked to label Tahini it returned a `sesame` property, which the
+-- unknown-property guard refused — correctly, since silently dropping it would
+-- have made tahini look cleaner than it is. That refusal is what surfaced the
+-- gap.
+--
+-- It also fixes a misfiling. With nowhere else to put it, sesame was landing
+-- under `nuts` (Sesame Seed was classified `{nuts}`), which is wrong in both
+-- directions: sesame is neither a tree nut nor a peanut, so nut-free searches
+-- lost sesame dishes, and anyone avoiding sesame had nothing to filter on at all.
+--
+-- Separate migration from the rule and the tag that use it: Postgres will not
+-- let a new enum value be USED in the same transaction that adds it, and the
+-- CLI runs each migration file in one.
+alter type dietary_property add value if not exists 'sesame';

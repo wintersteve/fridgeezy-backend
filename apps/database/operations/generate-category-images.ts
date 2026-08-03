@@ -1,9 +1,17 @@
 // Load environment variables first (auto-loads when imported)
 import "dotenv/config";
 
-import { generateImage } from "@fridgeezy/genai";
+import { buildFoodIllustrationStyle, generateImage } from "@fridgeezy/genai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
 
+/**
+ * One representative dish per cuisine, keyed by the *curated spelling* — the
+ * client builds each tile's URL as `cuisine_images/<label>.png` from its own
+ * TOP_CUISINES list, so these keys and that list have to agree exactly.
+ *
+ * Greek is generated but never rendered: TOP_CUISINES has no Greek entry. Kept
+ * so the tile is one config line away rather than one image generation away.
+ */
 const CUISINES = {
     Italian: "Pizza",
     Chinese: "Fried Rice",
@@ -16,8 +24,38 @@ const CUISINES = {
     Greek: "Gyro",
     Korean: "Bibimbap",
 };
+
+/**
+ * Shares its style contract with the recipe hero images
+ * (`buildFoodIllustrationStyle`) because the two render on the same screen —
+ * the home feed stacks recipe cards directly above the cuisine tiles. Keeping
+ * two copies is exactly how these drifted apart before: this prompt held the
+ * palette hex codes while the recipe one had decayed to "soft peach" in words.
+ *
+ * The subject half is deliberately *not* the recipe prompt's. These are browse
+ * tiles roughly 110px tall on a phone, where a Michelin plate's micro-herbs,
+ * sauce dots and generous negative space resolve to nothing — the tile has to
+ * read as "Thai food" at a glance, so it asks for the iconic form of the dish,
+ * filling the frame, rather than a restrained chef's portion.
+ */
 const buildPrompt = (name: string) =>
-    `An illustrated, bird’s-eye (top-down) view of ${name}, presented simply and elegantly. The dish is centered on a clean, neutral plate with subtle handmade ceramic texture. No utensils, no background props, no clutter — the entire focus is on the food itself. Illustration style: refined, modern editorial food illustration with soft hand-drawn details; minimalistic but warm; not photorealistic. Color palette: warm, natural tones including peach (#F4A67A), sage green (#93C5A8), creamy off-white (#FFF5EE), and muted beige and stone tones (#FDFBF9, #FAF8F6). Use deep charcoal (#060606) only for subtle linework or contrast. Lighting and shading: gentle, diffuse light with soft shadows; calm, inviting atmosphere. Background: solid or lightly textured off-white/cream background (#FDFBF9 or #FAF8F6), flat and unobtrusive. Composition: perfectly centered, balanced, and spacious, suitable for a recipe app hero image.`;
+    `Editorial food illustration of ${name}, the single most recognisable dish of its cuisine.
+
+SUBJECT
+- Show ${name} in its iconic, immediately readable form — the silhouette someone would recognise at a glance, at thumbnail size.
+- A generous, appetising portion that fills the vessel. Bold, simple shapes and clear colour blocking; skip fine detail that would disappear when the image is shown small.
+- Every ingredient the dish is known for stays present, identifiable and in its own natural colour.
+- Beautifully composed and freshly finished, but not fussy: no scattered micro-garnish, no delicate sauce dotting.
+
+${buildFoodIllustrationStyle({
+    // These tiles are cropped far harder than a recipe hero — the client lays
+    // the square image out 260px tall inside a 110px card with overflow hidden,
+    // so a plate floating in a wide margin would leave the tile mostly empty
+    // background. Fill the frame instead of centring with air around it.
+    framing:
+        "the vessel is centred and fills the frame edge to edge, leaving only a slim, even margin of background — the food must still dominate when the image is cropped to a narrow strip or a small square.",
+    mood: "warm, inviting and unmistakably of its cuisine — appetising at a glance.",
+})}`;
 
 async function generateAndUploadCategoryImage(
     cuisine: string,

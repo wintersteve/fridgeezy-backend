@@ -7,7 +7,7 @@ import {
     Result,
     success,
 } from "@fridgeezy/domain";
-import { Tag, TagInsertPayload } from "@fridgeezy/types";
+import { Tag, TagInsertPayload, TagType } from "@fridgeezy/types";
 
 import { supabase } from "../../client";
 
@@ -67,6 +67,59 @@ export class TagsRepository implements ITagsRepository {
             return failure(
                 new PersistenceError(
                     `Failed to find tags by canonical IDs: ${error instanceof Error ? error.message : String(error)}`
+                )
+            );
+        }
+    }
+
+    /**
+     * Nearest tag of ONE type, rather than the best across all four.
+     *
+     * `vectorSearch` deliberately searches every type and returns the single
+     * best hit, which is right when resolving a tag name of unknown type. It is
+     * wrong when the type is already known and only that type will do — placing
+     * a new cuisine under a parent must not match a dietary or course tag just
+     * because it embedded closer.
+     */
+    async vectorSearchByType(
+        embedding: number[],
+        type: TagType,
+        threshold: number
+    ): Promise<Result<TagVectorMatch | null, DomainError>> {
+        try {
+            const { data, error } = await supabase.rpc("search_tags", {
+                query_embedding: JSON.stringify(embedding),
+                match_type: type,
+                match_threshold: threshold,
+                match_count: 1,
+            });
+
+            if (error) {
+                return failure(new PersistenceError(error.message));
+            }
+
+            if (!data || data.length === 0) {
+                return success(null);
+            }
+
+            const { data: tagData, error: tagError } = await supabase
+                .from("tags")
+                .select("*")
+                .eq("id", data[0].id)
+                .single();
+
+            if (tagError) {
+                return failure(new PersistenceError(tagError.message));
+            }
+
+            return success({
+                tag: tagData as Tag,
+                similarity: data[0].similarity,
+            });
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to search ${type} tags: ${error instanceof Error ? error.message : String(error)}`
                 )
             );
         }

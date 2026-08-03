@@ -51,8 +51,9 @@ const SYSTEM_PROMPT = `You are a recipe composition assistant. Generate compleme
 
 ## Tagging Rules (CRITICAL)
 - EXACTLY 1 component tag per recipe (use "dish" for finished dishes)
-- EXACTLY 1 cuisine tag per recipe (the most accurate cuisine origin)
-- EXACTLY 1 course tag per recipe (the course type being suggested)
+- 1 OR 2 cuisine tags per recipe. One for almost every dish — its actual origin. Add a SECOND only when the dish genuinely belongs to two traditions at once (Tex-Mex is american + mexican, Nikkei is japanese + peruvian). Never add a second merely to be broader — the region and continent a cuisine belongs to are already known, so "italian" must NOT also carry "mediterranean" or "european".
+- EXACTLY 1 course tag per recipe: the course type being suggested. The ONLY valid course tags are: appetizer, dessert, main, side. Never omit it, and never invent another (not "starter", "dinner", "entree" or "main course") — a starter is "appetizer".
+- AT MOST 1 dish form tag per recipe, and only when the dish clearly IS one: soup, stew, salad, sandwich, wrap, pizza, pasta, noodles, curry, stir fry, roast, bake, casserole, grill, pie, dumpling, rice dish, porridge, pancake, skewer. This is the SHAPE of the dish, not when it is served — a soup served first is still course "appetizer" and form "soup". Omit it entirely for a dish that is simply a plate of food; most dishes have no form.
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free)
 
 ## Ingredients
@@ -74,7 +75,8 @@ Each recipe object must include:
 const buildUserPrompt = (
     baseRecipe: GenerateRecipeResponseDto & { imageUrl?: string },
     request: ComposeRecipeRequestDto,
-    courseTagNames: string[]
+    courseTagNames: string[],
+    cuisineTagNames: string[]
 ): string => {
     // Extract course tags from base recipe using DB course tags
     const baseCourses = baseRecipe.tags.filter((tag) =>
@@ -91,12 +93,15 @@ const buildUserPrompt = (
             )
     );
 
-    // Extract cuisine tag (find tag that is NOT a course tag and NOT "dish")
-    const cuisineTag = baseRecipe.tags.find(
-        (tag) =>
-            !courseTagNames.some((course) =>
-                tag.toLowerCase().includes(course.toLowerCase())
-            ) && tag.toLowerCase() !== "dish"
+    // Matched against the actual cuisine vocabulary. This used to take the first
+    // tag that was neither a course nor "dish", which also matches DIETARY tags —
+    // a vegan Italian dish could send the model "Cuisine: vegan". A recipe may
+    // now carry two cuisines (a genuine fusion dish), and both are worth sending:
+    // the complementary course should fit the whole dish, not half its heritage.
+    const cuisineTags = baseRecipe.tags.filter((tag) =>
+        cuisineTagNames.some(
+            (cuisine) => tag.toLowerCase() === cuisine.toLowerCase()
+        )
     );
 
     const parts = [
@@ -108,8 +113,8 @@ const buildUserPrompt = (
             .join(", ")}`,
     ];
 
-    if (request.matchCuisine && cuisineTag) {
-        parts.push(`Cuisine: ${cuisineTag}`);
+    if (request.matchCuisine && cuisineTags.length > 0) {
+        parts.push(`Cuisine: ${cuisineTags.join(", ")}`);
     }
 
     if (request.matchDifficulty) {
@@ -147,6 +152,9 @@ export async function* generateComposeRecipes(
     const courseTagNames = metadata.tags
         .filter((tag) => tag.type === "course")
         .map((tag) => tag.name);
+    const cuisineTagNames = metadata.tags
+        .filter((tag) => tag.type === "cuisine")
+        .map((tag) => tag.name);
 
     // Validate that we have allowed courses
     const baseCourses = baseRecipe.tags.filter((tag) =>
@@ -178,7 +186,12 @@ export async function* generateComposeRecipes(
     const stream = generateStream({
         model: { openai: "gpt-4.1" },
         system: SYSTEM_PROMPT,
-        user: buildUserPrompt(baseRecipe, request, courseTagNames),
+        user: buildUserPrompt(
+            baseRecipe,
+            request,
+            courseTagNames,
+            cuisineTagNames
+        ),
         provider,
     });
 

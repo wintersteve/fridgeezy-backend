@@ -148,6 +148,9 @@ export async function* createRecipeStream(
             if (parsed.temperatureC !== undefined) {
                 instruction.temperatureC = parsed.temperatureC;
             }
+            if (parsed.equipment !== undefined) {
+                instruction.equipment = parsed.equipment;
+            }
 
             // Map ingredient names to IDs if map available
             if (config.ingredientIdMap && cleanedNames) {

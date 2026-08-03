@@ -81,7 +81,7 @@ Then one line per ingredient (use approved unit abbreviations only):
 {"type":"ingredient","name":"ingredient_name","category":"meat","parent":"lamb","quantity":100,"unit":"g"}
 
 Then one line per instruction step (include ingredients array with names of ingredients used in this step):
-{"type":"instruction","text":"Step description without number prefix","durationSeconds":600,"temperatureC":180,"ingredients":["ingredient1","ingredient2"]}
+{"type":"instruction","text":"Step description without number prefix","durationSeconds":600,"temperatureC":180,"equipment":["oven"],"ingredients":["ingredient1","ingredient2"]}
 
 No markdown, no code blocks, just JSONL.`;
 

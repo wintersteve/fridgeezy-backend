@@ -94,6 +94,21 @@ export const InstructionSchema = z.object({
         .optional()
         .catch(undefined)
         .describe("Cooking temperature in °C; omit when the step has none"),
+    /**
+     * Main tools the step needs, lowercase. Display-only chips, title-cased at
+     * render like ingredient names.
+     *
+     * `.catch()` for the same reason as the two above — a malformed value must
+     * not fail the line and take the whole step with it. An empty array is
+     * folded to undefined so "no equipment" has one representation rather than
+     * two, matching what the SQL stores.
+     */
+    equipment: z
+        .array(z.string().trim().min(1))
+        .transform((value) => (value.length > 0 ? value : undefined))
+        .optional()
+        .catch(undefined)
+        .describe("Main tools this step needs; omit when nothing notable"),
     ingredients: z
         .array(z.string())
         .optional()

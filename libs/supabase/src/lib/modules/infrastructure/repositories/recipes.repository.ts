@@ -87,6 +87,7 @@ export class RecipesRepository implements IRecipesRepository {
                     // stays uniform across steps.
                     duration_seconds: inst.durationSeconds ?? null,
                     temperature_c: inst.temperatureC ?? null,
+                    equipment: inst.equipment ?? null,
                 })),
                 p_tags: recipe.tags || [],
                 // Both omitted rather than nulled when absent, so the SQL
@@ -292,6 +293,7 @@ export class RecipesRepository implements IRecipesRepository {
                         duration_seconds:
                             (inst as any).durationSeconds ?? null,
                         temperature_c: (inst as any).temperatureC ?? null,
+                        equipment: (inst as any).equipment ?? null,
                     })),
                     p_tags: recipe.tags || [],
                     p_name_en: recipe.nameEn ?? null,

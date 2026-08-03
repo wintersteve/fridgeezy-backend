@@ -49,4 +49,11 @@ export const STEP_DURATION_RULES = `## Step Duration
 - An instruction line that sets or depends on a temperature MUST carry "temperatureC": that temperature in whole degrees CELSIUS, as a number (180, not "180°C").
 - This covers oven settings, oil and water temperatures, and a target internal doneness.
 - OMIT the field entirely for a step with no temperature. Never write 0 to mean "none".
-- The step's "text" MUST still state the temperature in words, in Celsius, exactly as the Temperature Rules require.`;
+- The step's "text" MUST still state the temperature in words, in Celsius, exactly as the Temperature Rules require.
+
+## Step Equipment
+- An instruction line MAY carry "equipment": an array of the main tools that step needs, e.g. ["oven","roasting tin"].
+- Name only what the cook has to have ready: pans, pots, trays, ovens, blenders, thermometers. NOT everyday hand tools such as a spoon, knife, bowl or whisk.
+- Write them lowercase and singular ("dutch oven", not "Dutch Ovens").
+- List at most two per step, most important first.
+- OMIT the field entirely when the step needs nothing worth naming. Never write an empty array.`;

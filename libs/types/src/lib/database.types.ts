@@ -606,6 +606,7 @@ export type Database = {
           cooking_action_id: string | null
           created_at: string
           duration_seconds: number | null
+          equipment: string[] | null
           id: string
           ingredient_refs: string[] | null
           instruction_text: string
@@ -618,6 +619,7 @@ export type Database = {
           cooking_action_id?: string | null
           created_at?: string
           duration_seconds?: number | null
+          equipment?: string[] | null
           id?: string
           ingredient_refs?: string[] | null
           instruction_text: string
@@ -630,6 +632,7 @@ export type Database = {
           cooking_action_id?: string | null
           created_at?: string
           duration_seconds?: number | null
+          equipment?: string[] | null
           id?: string
           ingredient_refs?: string[] | null
           instruction_text?: string

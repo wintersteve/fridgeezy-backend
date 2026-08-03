@@ -75,6 +75,29 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
   when the catalog visibly holds two names for one thing ("scallion" /
   "green onion"). Dry run unless `DEDUP_APPLY=true`, and it costs ~5N LLM calls.
 
+### Embeddings: one model, and why 1536 dimensions
+
+Every vector column in this database is **`text-embedding-3-small` (1536d)**,
+and every `search_*` function takes a **precomputed** vector — Postgres makes no
+outbound HTTP calls (the old in-DB `generate_embedding`, which called OpenAI
+through the `http` extension from inside a query, is gone).
+
+The dimension is not a preference, it is a **hard pgvector limit**: HNSW and
+IVFFlat cannot index above 2000 dims. A 3072-dim column (`text-embedding-3-large`)
+is therefore un-indexable and every search over it is a sequential scan — the
+recipe index was literally commented out for this reason before the migration to
+1536. Anything larger than 2000 dims silently costs you every vector index in the
+schema, so **an embedding model that emits more than 1536 dims is not a candidate
+here** regardless of its quality scores. This is also why `TODOS.md` picks Cohere
+Embed v4 for the Bedrock migration: it emits 1536, so the columns stay as they are.
+
+Changing the model at all means migrating column dimensions and re-embedding the
+whole corpus — the `embed-*` targets with `-- --all`. The same applies to a change
+in any *text builder*: stored vectors must be built by the same code as the query
+vectors, or they stop being comparable and similarity silently degrades rather
+than erroring. Dish signatures are the live case — `buildSuggestionSignature` in
+the API and `embed-suggestions` must agree.
+
 Scripts sit in two directories, and the split is a safety boundary — the names
 say which is which:
 
@@ -301,3 +324,34 @@ This crosses many files; missing one silently drops the value. Touch:
 4. `createRecipeStream()` accumulates the streamed recipe;
    `persistRecipe()` / `persistRecipeWithIngredientIds()` write it, with image
    generation kicked off as a tracked background task.
+
+### Deliberate gaps in that pipeline
+
+Built and closed 2026-08-03 (`git log RECIPE_QUALITY_PLAN.md` for the full
+design). These look like oversights and are not — each was measured, deferred,
+and left alone on purpose. Don't "fix" one without the trigger next to it:
+
+- **Dish identity keys off the native name**, not the canonical English one
+  (`findSuggestionByName(suggestion.name)`; `name_alt` is display-only). The
+  signature embedding catches the cross-name cases instead — Som Tam ≡ Green
+  Papaya Salad merges on ingredients. There is no suggestion alias table, so a
+  merge drops the alternate name. *Revisit when* alternate names go user-visible.
+- **No dish-family (`parent_dish`) link.** Som Tam Thai and Som Tam Lao both
+  persist and stay correctly distinct, but as unrelated rows. *Revisit when*
+  variants should be grouped in discovery rather than competing for slots.
+- **Two ingredient pipelines**: `persist_recipe` (SQL) and `matchIngredients`
+  (TS). Only the TS one has the gray-band creation gate, alias learning and LLM
+  categories. *Revisit when* a category bug reproduces through recipe
+  persistence but not through suggestions — that is this divergence failing.
+- **Ingredient names aren't grounded by retrieval** (dish names are, via
+  `listCatalogDishes`): the generator free-texts them and `matchIngredients`
+  reconciles after the fact. *Revisit when* the `[Ingredients]` logs show the
+  gate rejecting or duplicating often.
+- **No feature flags.** Dedup and authenticity ship straight to the live path;
+  `LLM_PROVIDER` is the only runtime switch. The eval targets are the safety net
+  instead. Build a flag scoped to a risky change, not as a standing fixture.
+
+Thresholds (`SIGNATURE_HIGH/LOW_THRESHOLD`, the authenticity confidence floor)
+are fitted by the `calibrate*` eval targets. **Re-run the matching target rather
+than hand-nudging a constant** — a nudge unfits it from the distribution it was
+measured against, and nothing will fail to tell you.

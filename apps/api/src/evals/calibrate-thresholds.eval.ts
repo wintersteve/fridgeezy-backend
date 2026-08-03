@@ -5,11 +5,12 @@ import { config } from "dotenv";
 config();
 
 /**
- * Threshold calibration (RECIPE_QUALITY_PLAN.md, Phase 5 tuning). Measures the
- * actual signature-embedding cosine similarity for known same-dish and
- * different-dish pairs, so SIGNATURE_HIGH_THRESHOLD / SIGNATURE_LOW_THRESHOLD in
+ * Threshold calibration. Measures the actual signature-embedding cosine
+ * similarity for known same-dish and different-dish pairs, so
+ * SIGNATURE_HIGH_THRESHOLD / SIGNATURE_LOW_THRESHOLD in
  * persist-or-reuse-suggestion can be set from real score distributions instead of
- * guessed. Prints both distributions and a suggested band.
+ * guessed. Prints both distributions and a suggested band. Re-run this rather
+ * than hand-nudging the constants — a nudge unfits them from the distribution.
  *
  * Every fixture pair here is deliberately CROSS-NAME — the hard case. The
  * signature keys on the canonical `name` rather than a shared

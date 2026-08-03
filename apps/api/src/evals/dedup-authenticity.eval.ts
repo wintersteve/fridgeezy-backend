@@ -8,11 +8,11 @@ import { verifySuggestionAuthenticity } from "../modules/suggestions/services/ve
 config();
 
 /**
- * Eval harness (RECIPE_QUALITY_PLAN.md, Phase 5). Exercises the two LLM decision
- * points that Phase 3/4 rely on — the dish-dedup adjudicator and the authenticity
- * gate — against the plan's acceptance fixtures. Hits OpenAI, so results can vary
- * run to run; treat a failure as a signal to re-check prompts/thresholds. Exits
- * non-zero if any fixture fails.
+ * Eval harness. Exercises the two LLM decision points the suggestion pipeline
+ * rests on — the dish-dedup adjudicator and the authenticity gate — against the
+ * acceptance fixtures below. Hits OpenAI, so results can vary run to run; treat
+ * a failure as a signal to re-check prompts/thresholds. Exits non-zero if any
+ * fixture fails.
  */
 interface DishFixture {
     name: string;

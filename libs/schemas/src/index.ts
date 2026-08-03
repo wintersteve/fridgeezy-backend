@@ -5,6 +5,7 @@
  * Platform-agnostic - works in Node.js and React Native.
  */
 
+export * from "./lib/text";
 export * from "./lib/suggestions";
 export * from "./lib/recipes";
 export * from "./lib/chat";

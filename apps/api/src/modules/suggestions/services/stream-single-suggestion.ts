@@ -9,7 +9,13 @@ import {
 } from "@fridgeezy/schemas";
 
 import { buildSuggestionsUserPrompt } from "./build-suggestions-user-prompt";
+import { ADAPTED_FOR_RULE, BLACKLIST_RULE } from "./constraint-rules";
 import { extractStableJsonFields } from "./extract-stable-json-fields";
+import {
+    DISH_GLOSS_RULE,
+    DISH_NAME_ALT_RULE,
+    DISH_NAME_RULE,
+} from "./naming-rules";
 import {
     persistOrReuseSuggestion,
     SuggestionOutcome,
@@ -31,9 +37,10 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 - AUTHENTICITY IS PARAMOUNT: Only suggest a real, well-documented recipe that exists in a culinary tradition.
 - The recipe MUST be a genuine, documented dish — never an invented or descriptive name (e.g., NOT "Indian Tomato Butter Chicken"). Do NOT add alternative names in parenthesis.
 - Include ALL essential ingredients that define the dish. Never omit core ingredients that make the recipe authentic.
-- DIETARY RESTRICTIONS (if provided) are mandatory: the dish MUST genuinely satisfy every one of them.
-- BLACKLIST (if provided): never suggest a recipe where a blacklisted item is normally present.
 - If the request cannot be satisfied authentically under these constraints, pick the closest authentic dish that does satisfy them.
+
+## Constraints
+${BLACKLIST_RULE}
 
 ## Difficulty Levels
 - "easy": The standard, most authentic version of the dish with all traditional techniques and essential ingredients.
@@ -52,12 +59,13 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 ## Output Format
 Output EXACTLY ONE JSON object. No markdown, no code blocks, no extra text.
 Emit the keys in EXACTLY this order:
-- name (the name an English-speaking home cook would most commonly recognise the dish by — keep the NATIVE name when that is what people actually say in English: Pho, Ramen, Paella, Kimchi, Gyoza, Coq au Vin, Pad Thai, Tiramisu, Risotto; use the ENGLISH name when that is the common one: "Butter Chicken" not "Murgh Makhani", "Apple Strudel" not "Apfelstrudel". Judge the whole name, not the parts: "Kimchi" stays Kimchi, but "Kimchi Jjigae" is usually met as "Kimchi Stew")
-- description (ONE complete phrase, max 60 characters — it is shown on a single-line card, so it must not read as a cut-off sentence)
+- ${DISH_NAME_RULE}
+- ${DISH_GLOSS_RULE}
 - difficulty (easy, medium, or hard)
 - ingredients (array of strings)
 - tags (array of strings with component, cuisine, and dietary tags)
-- name_alt (the OTHER name: the native spelling if \`name\` is English, the English translation if \`name\` is native. Use null when the dish is only ever known by one name — do NOT echo \`name\`, and do NOT invent a translation nobody uses)`;
+- ${DISH_NAME_ALT_RULE}
+- ${ADAPTED_FOR_RULE}`;
 
 /**
  * The subset of a suggestion's raw fields that have streamed in so far. Fields

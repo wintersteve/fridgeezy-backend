@@ -1,4 +1,5 @@
 export * from "./create-recipe-stream";
+export * from "./description-rules";
 export * from "./ingredient-categories";
 export * from "./fetch-recipe-metadata";
 export * from "./fetch-recipe";

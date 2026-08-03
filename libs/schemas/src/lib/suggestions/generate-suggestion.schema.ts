@@ -1,28 +1,6 @@
 import { z } from "zod/v4";
 
 /**
- * Card descriptions are capped, but at a word boundary — the previous
- * `slice(0, 50)` cut mid-word ("...with fresh basil and par").
- */
-const CARD_DESCRIPTION_MAX = 60;
-
-const clampToCardLength = (value: string): string => {
-    const trimmed = value.trim();
-
-    if (trimmed.length <= CARD_DESCRIPTION_MAX) {
-        return trimmed;
-    }
-
-    const cut = trimmed.slice(0, CARD_DESCRIPTION_MAX);
-    const lastSpace = cut.lastIndexOf(" ");
-
-    // A space this early means one very long word: keep the hard cut.
-    const clamped = lastSpace > 20 ? cut.slice(0, lastSpace) : cut;
-
-    return `${clamped.replace(/[\s,;:-]+$/, "")}…`;
-};
-
-/**
  * Request schema for generating a recipe suggestion.
  * Used by the API to validate incoming requests.
  */
@@ -50,10 +28,19 @@ export const GenerateSuggestionRequestSchema = z.object({
 export const GenerateSuggestionResponseSchema = z.object({
     name: z.string(),
     name_alt: z.string().nullable().optional(),
-    description: z.string().transform(clampToCardLength),
+    description: z.string().trim(),
     difficulty: z.enum(["easy", "medium", "hard"]),
     ingredients: z.array(z.string()),
     tags: z.array(z.string()),
+    /**
+     * Blacklisted ingredients this dish was adapted around — the model swapped
+     * each one for an authentic substitute instead of dropping the dish.
+     *
+     * Optional because it is a per-REQUEST fact, not a property of the dish: the
+     * suggestion row is shared by dedup, so this is carried on the stream frames
+     * and never persisted. A user with no blacklist gets an empty one.
+     */
+    adaptedFor: z.array(z.string()).optional(),
 });
 
 /**
@@ -84,7 +71,7 @@ export const EnrichedSuggestionResponseSchema = z.object({
     id: z.uuid(),
     name: z.string(),
     nameEn: z.string().nullable().optional(),
-    description: z.string().transform(clampToCardLength),
+    description: z.string().trim(),
     difficulty: z.enum(["easy", "medium", "hard"]),
     ingredients: z.array(SuggestionIngredientSchema),
     tags: z.array(SuggestionTagSchema),
@@ -108,10 +95,12 @@ export const ProvisionalSuggestionSchema = z.object({
     tempId: z.string(),
     name: z.string(),
     nameEn: z.string().nullable().optional(),
-    description: z.string().transform(clampToCardLength),
+    description: z.string().trim(),
     difficulty: z.enum(["easy", "medium", "hard"]),
     ingredients: z.array(SuggestionIngredientSchema),
     tags: z.array(SuggestionTagSchema),
+    /** @see GenerateSuggestionResponseSchema.adaptedFor */
+    adaptedFor: z.array(z.string()).optional(),
 });
 
 /**
@@ -125,6 +114,13 @@ export const ProvisionalSuggestionSchema = z.object({
  */
 export const StreamedSuggestionSchema = EnrichedSuggestionResponseSchema.extend({
     tempId: z.string(),
+    /**
+     * Repeated from the provisional frame so the card keeps its "adapted"
+     * marker when this frame replaces it. Not read back from the database —
+     * the row has no such column, deliberately (@see
+     * GenerateSuggestionResponseSchema.adaptedFor).
+     */
+    adaptedFor: z.array(z.string()).optional(),
 });
 
 /**

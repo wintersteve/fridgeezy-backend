@@ -95,7 +95,7 @@ export function avoidsIngredients(
 export async function isRealDish(
     suggestion: GenerateSuggestionResponseDto
 ): Promise<boolean> {
-    return verifySuggestionAuthenticity(suggestion);
+    return (await verifySuggestionAuthenticity(suggestion)).authentic;
 }
 
 /**

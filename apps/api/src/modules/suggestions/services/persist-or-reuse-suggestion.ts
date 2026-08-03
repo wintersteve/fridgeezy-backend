@@ -177,33 +177,62 @@ export async function persistOrReuseSuggestion(
     // returned any existing, already-vetted one). Keeps inventions and
     // hallucinations out of the discovery catalog. Started at the top of this
     // function, so this await is usually free.
-    const isAuthentic = await authenticity;
-    if (!isAuthentic) {
+    const review = await authenticity;
+    if (!review.authentic) {
         console.warn(
             `[Suggestions] Dropping unauthentic dish "${suggestion.name}" (not attested for discovery)`
         );
         return { kind: "dropped", reason: "unauthentic" };
     }
 
+    // The same pass may have corrected the dish's NAME (see
+    // verifySuggestionAuthenticity). Everything above ran under the name the
+    // generator chose, which is deliberate — the signature embedding is built
+    // from name + tags + ingredients and is robust to a translation, and waiting
+    // for the review would put its full latency back on every dish. What is NOT
+    // safe is persisting under the new name without re-checking it: a rename can
+    // land on a row that already exists, which the unique index rejects and the
+    // card is lost.
+    const dish = review.name
+        ? { ...suggestion, name: review.name, name_alt: review.nameAlt }
+        : suggestion;
+
+    if (review.name) {
+        const renamedMatch = await findSuggestionByName(dish.name);
+        if (renamedMatch) {
+            return { kind: "suggestion", suggestion: renamedMatch };
+        }
+    }
+
     // No similar suggestion found or fetch failed, persist new suggestion.
-    // Reuse the signature embedding we already computed for the dedup search.
-    const persistResult = await persistSuggestion(suggestion, {
+    // Reuse the signature embedding we already computed for the dedup search —
+    // unless the name changed under it, in which case the stored vector would
+    // describe a dish by a name nothing will ever search for.
+    const persistResult = await persistSuggestion(dish, {
         cuisineTag: request.cuisine,
-        nameEn: suggestion.name_alt,
-        signatureEmbedding,
+        nameEn: dish.name_alt,
+        signatureEmbedding: review.name
+            ? await generateEmbedding(
+                  buildSuggestionSignature({
+                      name: dish.name,
+                      tags: dish.tags,
+                      ingredients: dish.ingredients,
+                  })
+              )
+            : signatureEmbedding,
     });
 
     if (!persistResult.success) {
         // A concurrent request may have inserted the same canonical_id between
         // our layer-1 check and this insert (duplicate-key). Reuse the row that
         // won the race rather than failing the turn.
-        const raced = await findSuggestionByName(suggestion.name);
+        const raced = await findSuggestionByName(dish.name);
         if (raced) {
             return { kind: "suggestion", suggestion: raced };
         }
 
         console.error(
-            `[Suggestions] Failed to persist: ${suggestion.name}`,
+            `[Suggestions] Failed to persist: ${dish.name}`,
             persistResult.error
         );
         return { kind: "dropped", reason: "persist_failed" };
@@ -213,10 +242,10 @@ export async function persistOrReuseSuggestion(
         kind: "suggestion",
         suggestion: {
             id: persistResult.value.suggestionId,
-            name: suggestion.name,
-            nameEn: suggestion.name_alt,
-            description: suggestion.description,
-            difficulty: suggestion.difficulty,
+            name: dish.name,
+            nameEn: dish.name_alt,
+            description: dish.description,
+            difficulty: dish.difficulty,
             ingredients: persistResult.value.ingredients,
             tags: persistResult.value.tags,
         },

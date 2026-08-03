@@ -9,6 +9,11 @@ import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { z } from "zod/v4";
 
 import { findSuggestionByName } from "../../suggestions/services/find-suggestion-by-name";
+import {
+    DISH_GLOSS_RULE,
+    DISH_NAME_ALT_RULE,
+    DISH_NAME_RULE,
+} from "../../suggestions/services/naming-rules";
 import { persistSuggestion } from "../../suggestions/services/persist-suggestion";
 
 import { fetchRecipeMetadata } from "./fetch-recipe-metadata";
@@ -21,7 +26,7 @@ import { searchRecipes } from "./search-recipes";
 const ComposeRecipeSuggestionSchema = z.object({
     name: z.string(),
     name_alt: z.string().nullable().optional(),
-    description: z.string().transform((s) => s.slice(0, 100)),
+    description: z.string().trim(),
     difficulty: z.enum(["easy", "medium", "hard"]),
     course: z.string(),
     ingredients: z.array(z.string().min(1)),
@@ -34,8 +39,7 @@ const SYSTEM_PROMPT = `You are a recipe composition assistant. Generate compleme
 
 ## Rules
 - Suggest authentic, real-world recipes that complement the base recipe
-- Each recipe MUST be a real dish (not invented, must be authentic) with their real name
-- The name must be the authentic name (e.g., Murgh Makhani, NOT Indian Tomato Butter Chicken)
+- Each recipe MUST be a real dish (not invented, must be authentic), named by the rule under "Output Format" below
 - Do NOT suggest recipes of excluded course types
 - If cuisine matching is requested, suggest recipes from the same cuisine
 - If difficulty matching is requested, suggest recipes of similar difficulty
@@ -59,9 +63,9 @@ const SYSTEM_PROMPT = `You are a recipe composition assistant. Generate compleme
 Output one JSON object per line (JSONL format). No markdown, no code blocks, no extra text.
 
 Each recipe object must include:
-- name (the name an English-speaking home cook would most commonly recognise the dish by — keep the NATIVE name when that is what people actually say in English: Pho, Ramen, Paella, Kimchi, Gyoza, Coq au Vin, Pad Thai, Tiramisu, Risotto; use the ENGLISH name when that is the common one: "Butter Chicken" not "Murgh Makhani", "Apple Strudel" not "Apfelstrudel")
-- name_alt (the OTHER name: the native spelling if \`name\` is English, the English translation if \`name\` is native. Use null when the dish is only ever known by one name)
-- description (max 100 characters)
+- ${DISH_NAME_RULE}
+- ${DISH_NAME_ALT_RULE}
+- ${DISH_GLOSS_RULE}
 - difficulty (easy, medium, or hard)
 - course (the course type)
 - ingredients (array of key ingredient strings)

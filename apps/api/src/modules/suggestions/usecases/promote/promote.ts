@@ -18,6 +18,7 @@ import {
     fetchRecipeMetadata,
     formatUnitsForPrompt,
     formatTagsForPrompt,
+    HEADER_DESCRIPTION_RULES,
     INGREDIENT_CATEGORY_GUIDE,
 } from "../../../recipes/services";
 import { generateAndUploadRecipeImage } from "../../../recipes/services/create-recipe-image";
@@ -31,7 +32,8 @@ import { fetchEnrichedSuggestion } from "../../services";
 const buildSystemPrompt = (
     units: string,
     tags: string,
-    ingredientNames: string[]
+    ingredientNames: string[],
+    blacklist: string[]
 ) => `Generate exactly an authentic, real-world recipe based on the provided ingredients
 
 ## CRITICAL: Ingredient Constraints
@@ -41,7 +43,17 @@ ${ingredientNames.map((name) => `- ${name}`).join("\n")}
 When outputting ingredients, use the EXACT names from the list above.
 Every instruction step should reference only ingredients from this list.
 You MUST provide quantity and unit for EACH ingredient above.
-
+${
+    blacklist.length > 0
+        ? `
+The user cannot eat the following, and the ingredient list above has already been
+adapted around them. NEVER reintroduce one — not as an ingredient, not in an
+instruction step, not as a garnish, seasoning or serving suggestion, and not in a
+tip:
+${blacklist.map((name) => `- ${name}`).join("\n")}
+`
+        : ""
+}
 ## Rules
 - For each instruction step, include an "ingredients" array listing the ingredient names used in that specific step
 - Each step MUST be authentic
@@ -77,10 +89,8 @@ ${INGREDIENT_CATEGORY_GUIDE}
 Output the recipe as multiple JSON lines in this exact order:
 
 Line 1 - Header with basic info:
-{"type":"header","name":"Recipe Name","description":"Brief description","shortDescription":"One-line card description","difficulty":"easy","servings":4,"prepTime":15,"cookTime":30,"tags":["tag1","tag2"]}
-The two description fields are different lengths and both are required:
-- "description": 2-3 sentences for the recipe detail screen.
-- "shortDescription": ONE short sentence (max 60 characters) for recipe cards, which show a single line. Must read as a complete phrase, never a truncation of "description".
+{"type":"header","name":"Recipe Name","description":"One sentence saying what the dish is","shortDescription":"Short card gloss","difficulty":"easy","servings":4,"prepTime":15,"cookTime":30,"tags":["tag1","tag2"]}
+${HEADER_DESCRIPTION_RULES}
 
 
 Line 2 - Nutrition information (per serving):
@@ -101,17 +111,42 @@ Then one line per instruction step (include ingredients array with names of ingr
 
 No markdown, no code blocks, just JSONL.`;
 
+interface UserPromptInput {
+    name: string;
+    difficulty: string;
+    ingredientNames: string[];
+    servings: number;
+    /**
+     * The suggestion's own card description — the gloss the user read before
+     * tapping.
+     *
+     * Passed in so the recipe is written to the promise the card made: without
+     * it, the model re-decides what the dish is from the name and ingredients
+     * alone, and the detail screen can end up describing a different take than
+     * the card that led there. It also anchors the header's `shortDescription`,
+     * which is the same field one step later.
+     */
+    gloss?: string | null;
+}
+
 /**
  * Build user prompt using suggestion data.
  */
-const buildUserPrompt = (
-    name: string,
-    difficulty: string,
-    ingredientNames: string[],
-    servings: number
-) => `Generate a detailed ${difficulty} level recipe for: ${name}
-Use ONLY these ingredients: ${ingredientNames.join(", ")}
-Servings: ${servings}`;
+const buildUserPrompt = ({
+    name,
+    difficulty,
+    ingredientNames,
+    servings,
+    gloss,
+}: UserPromptInput) =>
+    [
+        `Generate a detailed ${difficulty} level recipe for: ${name}`,
+        gloss ? `The dish was offered to the user as: "${gloss}" — write the recipe for THAT dish, and keep "shortDescription" consistent with it.` : "",
+        `Use ONLY these ingredients: ${ingredientNames.join(", ")}`,
+        `Servings: ${servings}`,
+    ]
+        .filter(Boolean)
+        .join("\n");
 
 export const promoteSuggestion = createStreamHandler({
     requestSchema: PromoteSuggestionRequestSchema,
@@ -240,13 +275,19 @@ export const promoteSuggestion = createStreamHandler({
         // 6. Call the model
         const stream = generateStream({
             model: { openai: "gpt-4.1" },
-            system: buildSystemPrompt(unitsPrompt, tagsPrompt, ingredientNames),
-            user: buildUserPrompt(
-                suggestion.name,
-                suggestion.difficulty,
+            system: buildSystemPrompt(
+                unitsPrompt,
+                tagsPrompt,
                 ingredientNames,
-                body.servings
+                body.blacklist ?? []
             ),
+            user: buildUserPrompt({
+                name: suggestion.name,
+                difficulty: suggestion.difficulty,
+                ingredientNames,
+                servings: body.servings,
+                gloss: suggestion.description,
+            }),
         });
 
         // 7. Create recipe stream with ingredient ID map

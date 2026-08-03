@@ -1,5 +1,7 @@
 import { z } from "zod/v4";
 
+import { clampToDetailLength } from "../text/clamp-description";
+
 /**
  * Shared Zod schemas for recipe generation and manipulation.
  * Single source of truth used by all recipe-related use-cases.
@@ -8,10 +10,10 @@ import { z } from "zod/v4";
 // Schema for header section
 export const HeaderSchema = z.object({
     type: z.literal("header"),
-    description: z.string(),
+    description: z.string().transform(clampToDetailLength),
     // One-sentence version for recipe cards. Optional: the client falls back to
     // `description`.
-    shortDescription: z.string().optional(),
+    shortDescription: z.string().trim().optional(),
     prepTime: z.number(),
     cookTime: z.number(),
 });

@@ -122,12 +122,12 @@ async function main() {
 
     console.log("\nAuthenticity — should PASS:");
     for (const d of AUTHENTIC_DISHES) {
-        check(d.name, await verifySuggestionAuthenticity(toDto(d)), true);
+        check(d.name, (await verifySuggestionAuthenticity(toDto(d))).authentic, true);
     }
 
     console.log("\nAuthenticity — should be DROPPED:");
     for (const d of INVENTION_DISHES) {
-        check(d.name, await verifySuggestionAuthenticity(toDto(d)), false);
+        check(d.name, (await verifySuggestionAuthenticity(toDto(d))).authentic, false);
     }
 
     console.log("\n" + "=".repeat(40));

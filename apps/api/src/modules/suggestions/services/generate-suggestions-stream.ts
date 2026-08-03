@@ -12,10 +12,16 @@ import {
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 
 import { buildSuggestionsUserPrompt } from "./build-suggestions-user-prompt";
+import { ADAPTED_FOR_RULE, BLACKLIST_RULE } from "./constraint-rules";
 import {
     buildExistingDishesBlock,
     listCatalogDishes,
 } from "./list-catalog-dishes";
+import {
+    DISH_GLOSS_RULE,
+    DISH_NAME_ALT_RULE,
+    DISH_NAME_RULE,
+} from "./naming-rules";
 import {
     persistOrReuseSuggestion,
     SuggestionOutcome,
@@ -36,8 +42,10 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 - Each recipe MUST be a genuine, documented dish — never an invented or descriptive name (e.g., NOT "Indian Tomato Butter Chicken"). Do NOT add alternative names in parenthesis.
 - Include ALL essential ingredients that define the dish. Never omit core ingredients that make the recipe authentic.
 - Only return an empty array when the request genuinely cannot be satisfied authentically — a truly incompatible INGREDIENT combination (e.g., rosemary in Thai cuisine) or nonsensical input. A real dish name, cuisine, or meal/course concept is ALWAYS satisfiable, so NEVER return an empty array for those.
-- Do NOT include recipes where a blacklisted item is normally present.
 - If an "Already in the catalog" list is given, NEVER suggest a dish on it, nor a translation or spelling variant of one — the user already has those. Suggest a different authentic dish that still fits the request.
+
+## Constraints
+${BLACKLIST_RULE}
 
 ## Difficulty Levels
 - "easy": The standard, most authentic version of the dish with all traditional techniques and essential ingredients.
@@ -60,12 +68,13 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 Output EXACTLY 4 recipes, one JSON object per line (JSONL format). No markdown, no code blocks, no extra text.
 
 Each recipe object must include:
-- name (the name an English-speaking home cook would most commonly recognise the dish by — keep the NATIVE name when that is what people actually say in English: Pho, Ramen, Paella, Kimchi, Gyoza, Coq au Vin, Pad Thai, Tiramisu, Risotto; use the ENGLISH name when that is the common one: "Butter Chicken" not "Murgh Makhani", "Apple Strudel" not "Apfelstrudel". Judge the whole name, not the parts: "Kimchi" stays Kimchi, but "Kimchi Jjigae" is usually met as "Kimchi Stew")
-- name_alt (the OTHER name: the native spelling if \`name\` is English, the English translation if \`name\` is native. Use null when the dish is only ever known by one name — do NOT echo \`name\`, and do NOT invent a translation nobody uses)
-- description (ONE complete phrase, max 60 characters — it is shown on a single-line card, so it must not read as a cut-off sentence)
+- ${DISH_NAME_RULE}
+- ${DISH_NAME_ALT_RULE}
+- ${DISH_GLOSS_RULE}
 - difficulty (easy, medium, or hard)
 - ingredients (array of strings)
-- tags (array of strings with component, cuisine, and dietary tags)`;
+- tags (array of strings with component, cuisine, and dietary tags)
+- ${ADAPTED_FOR_RULE}`;
 
 /**
  * `provider` overrides `LLM_PROVIDER` for this call only, which is how the two
@@ -96,6 +105,7 @@ function provisionalCard(
         difficulty: suggestion.difficulty,
         ingredients: suggestion.ingredients.map(provisional),
         tags: suggestion.tags.map(provisional),
+        adaptedFor: suggestion.adaptedFor,
     };
 }
 
@@ -132,13 +142,19 @@ export async function* generateSuggestionsStream(
     // Order is still generation order: `pending` is consumed from the front, so
     // a fast fourth suggestion never overtakes a slow first one. That matters
     // because the client renders the batch as an ordered list.
-    const pending: Promise<{ outcome: SuggestionOutcome; tempId: string }>[] = [];
+    const pending: Promise<{
+        outcome: SuggestionOutcome;
+        tempId: string;
+        /** Per-request, so it can only come from the frame the model wrote. */
+        adaptedFor?: string[];
+    }>[] = [];
     const source = processJsonlStream(stream, [GenerateSuggestionResponseSchema]);
     let done = false;
 
     const emit = function* (
         outcome: SuggestionOutcome,
-        tempId: string
+        tempId: string,
+        adaptedFor?: string[]
     ): Generator<StreamedSuggestionDto | WithdrawnSuggestionDto> {
         // A dish the user already has as a recipe is not surfaced: this endpoint
         // returns suggestion cards, and re-offering something already in the
@@ -165,7 +181,9 @@ export async function* generateSuggestionsStream(
         // Carries the same tempId as the provisional card, which is how the
         // client replaces it rather than appending a second one.
         if (outcome.kind === "suggestion") {
-            yield { ...outcome.suggestion, tempId };
+            // `adaptedFor` rides along from the model's frame rather than the
+            // persisted row: the row is shared by dedup, the adaptation is not.
+            yield { ...outcome.suggestion, tempId, adaptedFor };
         }
     };
 
@@ -181,7 +199,11 @@ export async function* generateSuggestionsStream(
 
                 pending.push(
                     persistOrReuseSuggestion(suggestion, request).then(
-                        (outcome) => ({ outcome, tempId })
+                        (outcome) => ({
+                            outcome,
+                            tempId,
+                            adaptedFor: suggestion.adaptedFor,
+                        })
                     )
                 );
 
@@ -202,7 +224,13 @@ export async function* generateSuggestionsStream(
         ) {
             const settled = await pending.shift();
 
-            if (settled) yield* emit(settled.outcome, settled.tempId);
+            if (settled) {
+                yield* emit(
+                    settled.outcome,
+                    settled.tempId,
+                    settled.adaptedFor
+                );
+            }
         }
     }
 }

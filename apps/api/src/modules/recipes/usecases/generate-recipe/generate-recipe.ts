@@ -18,6 +18,7 @@ import {
     fetchRecipeMetadata,
     formatUnitsForPrompt,
     formatTagsForPrompt,
+    HEADER_DESCRIPTION_RULES,
     INGREDIENT_CATEGORY_GUIDE,
 } from "../../services";
 import { generateAndUploadRecipeImage } from "../../services/create-recipe-image";
@@ -80,10 +81,8 @@ ${INGREDIENT_CATEGORY_GUIDE}
 Output the recipe as multiple JSON lines in this exact order:
 
 Line 1 - Header with basic info:
-{"type":"header","name":"Recipe Name","description":"Brief description","shortDescription":"One-line card description","difficulty":"easy","servings":4,"prepTime":15,"cookTime":30,"tags":["tag1","tag2"]}
-The two description fields are different lengths and both are required:
-- "description": 2-3 sentences for the recipe detail screen.
-- "shortDescription": ONE short sentence (max 60 characters) for recipe cards, which show a single line. Must read as a complete phrase, never a truncation of "description".
+{"type":"header","name":"Recipe Name","description":"One sentence saying what the dish is","shortDescription":"Short card gloss","difficulty":"easy","servings":4,"prepTime":15,"cookTime":30,"tags":["tag1","tag2"]}
+${HEADER_DESCRIPTION_RULES}
 
 
 Line 2 - Nutrition information (per serving):

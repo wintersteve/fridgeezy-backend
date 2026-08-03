@@ -386,3 +386,65 @@ data migration, not just a code edit.
 - Moving images off Gemini (keep unless a reason emerges — see Phase 0).
 - Any prompt rewrite beyond what evals prove is needed for the model swap.
 - Multi-region / HA — single region first.
+
+---
+
+# Auth — unrelated to the migration above
+
+Kept in this file because it is the repo's TODO list, not because it belongs to
+the Lambda/Bedrock work. Nothing here is started.
+
+**First, the thing that makes both items confusing:** `supabase/config.toml`
+`[auth]` configures the **local** stack only. The hosted project's auth is
+configured in the Supabase dashboard and does *not* read this file, so a setting
+can be correct locally and absent in production with nothing to flag the drift.
+(Newer CLI versions can push config; this repo's pinned 2.72.2 predates relying
+on that.) Treat every item below as two pieces of work — local `config.toml`
+and the dashboard — until that changes.
+
+## Email confirmations
+
+`enable_confirmations = false` (`config.toml:203`). Sign-up returns a session
+immediately with no verified email, which is deliberate and right for local:
+there is no real inbox, and anything sent lands in Mailpit on `:54324`.
+
+It means the address on an account is **unverified** — nobody has proven they
+own it — so anything built on "the user's email" (password reset, transactional
+mail, account recovery, support identity) rests on nothing until this changes.
+
+- [ ] Turn confirmations on for the hosted project (dashboard).
+- [ ] Configure SMTP — `[auth.email.smtp]` is commented out, and without a real
+      sender, enabling confirmations locks people out rather than verifying them.
+- [ ] Decide the local story: leaving it `false` locally is fine and convenient,
+      but then the confirmation flow is only ever exercised in production. If
+      that flow gets non-trivial, enable it locally and read the mail in Mailpit.
+- [ ] Check the client handles the unconfirmed state — a sign-up that returns no
+      session because confirmation is pending is a different branch from a
+      sign-up that returns one, and today only the second exists
+      (`features/auth/screens/sign-up/password/password-screen.tsx`).
+
+## OpenID Connect / social sign-in (Google, Apple, …)
+
+Not wired up anywhere: `[auth.external.apple]`, `[auth.external.google]` and
+`[auth.external.facebook]` all sit at `enabled = false` (`config.toml:299-325`),
+and the client offers email/password only.
+
+- [ ] Pick the providers. **Apple is not optional if any other social login
+      ships on iOS** — App Store review requires Sign in with Apple alongside
+      third-party sign-in, so "just add Google" is really "add Google and Apple".
+- [ ] Provider setup: OAuth client IDs, and secrets via env substitution —
+      `secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"` is the pattern
+      already in the file. Secrets never go in `config.toml`.
+- [ ] Redirect handling. The app's scheme is `fridgeezy` (`app.json`), so the
+      callback is `fridgeezy://…` and must be added to
+      `additional_redirect_urls` locally **and** to the dashboard's allow-list.
+      `site_url` is still the CLI default `http://127.0.0.1:3000`.
+- [ ] `skip_nonce_check` — the comment in `config.toml` notes it is required for
+      local Google sign-in. Set it locally only; never in the hosted project.
+- [ ] Account linking. `enable_manual_linking = false` today, so a user who signs
+      up with email and later uses Google with the same address gets a **second
+      account**, silently. Decide the policy before shipping the first provider,
+      because retrofitting a merge across existing rows is far worse than
+      choosing up front.
+- [ ] Client UI + the `signInWithOAuth` flow, which needs an in-app browser
+      session rather than the current password screens.

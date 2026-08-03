@@ -126,6 +126,41 @@ This CLI version issues `sb_publishable_…` / `sb_secret_…` rather than the l
 anon/service-role JWTs; supabase-js ≥ 2.90 accepts both, and they still go in the
 `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` variables.
 
+### Writing the .env files
+
+Don't hand-edit the Supabase trio — `env-local` / `env-remote` derive it:
+
+```bash
+npx nx run @fridgeezy/database:env-local              # LAN IP (device default)
+npx nx run @fridgeezy/database:env-local -- --simulator   # 127.0.0.1
+npx nx run @fridgeezy/database:env-remote            # from SSM
+```
+
+Both rewrite `apps/api/.env` and `apps/database/.env` **in place, touching only
+`SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`** — your LLM
+keys, `SUPABASE_PROJECT_ID`, comments and commented-out blocks all survive, so
+it is safe to re-run and needs no AWS credentials in local mode.
+
+Nothing is templated. Local values come from `supabase status -o json` and
+remote ones from SSM, which `infra/put-secrets.sh` already treats as the source
+of truth for the deployed function — so a CLI upgrade that changes the key
+format (this one moved off anon JWTs) flows through instead of leaving a stale
+literal behind, and no remote secret has to live in a committed file. The remote
+mode reads the Function URL from `terraform output` for the same reason.
+
+The client is a **separate repo**, so its four `EXPO_PUBLIC_*` lines are printed
+to stdout to paste rather than written — a hardcoded cross-repo path is exactly
+what breaks on someone else's machine.
+
+`--simulator` exists because the default is the LAN IP: on a physical device
+`localhost` means *the device*, so loopback reaches nothing and every request
+fails with a bare "could not connect". On a simulator loopback is both fine and
+more stable, since it survives the router handing out a new lease.
+
+After changing the client's `.env`, restart Expo with `npx expo start --clear` —
+`EXPO_PUBLIC_*` values are inlined at build time, so a running Metro keeps
+serving the old ones however many times you edit the file.
+
 Two things that will waste your time otherwise:
 
 - **A running API server does not pick up an `.env` change.** `nx serve` dedupes,

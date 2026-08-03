@@ -118,6 +118,22 @@
                     "cwd": "apps/database"
                 }
             },
+            "env-local": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti codegen/generate-env.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
+            "env-remote": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti codegen/generate-env.ts --remote",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
             "types": {
                 "executor": "nx:run-commands",
                 "options": {

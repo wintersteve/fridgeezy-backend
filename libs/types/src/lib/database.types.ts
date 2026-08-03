@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.1"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -1042,7 +1062,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      bytea_to_text: { Args: { data: string }; Returns: string }
       delete_orphan_generated_recipes: { Args: never; Returns: number }
       find_recipes: {
         Args: {
@@ -1061,131 +1080,6 @@ export type Database = {
         }
       }
       has_user: { Args: { email: string }; Returns: boolean }
-      http: {
-        Args: { request: Database["public"]["CompositeTypes"]["http_request"] }
-        Returns: Database["public"]["CompositeTypes"]["http_response"]
-        SetofOptions: {
-          from: "http_request"
-          to: "http_response"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      http_delete:
-        | {
-            Args: { uri: string }
-            Returns: Database["public"]["CompositeTypes"]["http_response"]
-            SetofOptions: {
-              from: "*"
-              to: "http_response"
-              isOneToOne: true
-              isSetofReturn: false
-            }
-          }
-        | {
-            Args: { content: string; content_type: string; uri: string }
-            Returns: Database["public"]["CompositeTypes"]["http_response"]
-            SetofOptions: {
-              from: "*"
-              to: "http_response"
-              isOneToOne: true
-              isSetofReturn: false
-            }
-          }
-      http_get:
-        | {
-            Args: { uri: string }
-            Returns: Database["public"]["CompositeTypes"]["http_response"]
-            SetofOptions: {
-              from: "*"
-              to: "http_response"
-              isOneToOne: true
-              isSetofReturn: false
-            }
-          }
-        | {
-            Args: { data: Json; uri: string }
-            Returns: Database["public"]["CompositeTypes"]["http_response"]
-            SetofOptions: {
-              from: "*"
-              to: "http_response"
-              isOneToOne: true
-              isSetofReturn: false
-            }
-          }
-      http_head: {
-        Args: { uri: string }
-        Returns: Database["public"]["CompositeTypes"]["http_response"]
-        SetofOptions: {
-          from: "*"
-          to: "http_response"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      http_header: {
-        Args: { field: string; value: string }
-        Returns: Database["public"]["CompositeTypes"]["http_header"]
-        SetofOptions: {
-          from: "*"
-          to: "http_header"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      http_list_curlopt: {
-        Args: never
-        Returns: {
-          curlopt: string
-          value: string
-        }[]
-      }
-      http_patch: {
-        Args: { content: string; content_type: string; uri: string }
-        Returns: Database["public"]["CompositeTypes"]["http_response"]
-        SetofOptions: {
-          from: "*"
-          to: "http_response"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      http_post:
-        | {
-            Args: { content: string; content_type: string; uri: string }
-            Returns: Database["public"]["CompositeTypes"]["http_response"]
-            SetofOptions: {
-              from: "*"
-              to: "http_response"
-              isOneToOne: true
-              isSetofReturn: false
-            }
-          }
-        | {
-            Args: { data: Json; uri: string }
-            Returns: Database["public"]["CompositeTypes"]["http_response"]
-            SetofOptions: {
-              from: "*"
-              to: "http_response"
-              isOneToOne: true
-              isSetofReturn: false
-            }
-          }
-      http_put: {
-        Args: { content: string; content_type: string; uri: string }
-        Returns: Database["public"]["CompositeTypes"]["http_response"]
-        SetofOptions: {
-          from: "*"
-          to: "http_response"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      http_reset_curlopt: { Args: never; Returns: boolean }
-      http_set_curlopt: {
-        Args: { curlopt: string; value: string }
-        Returns: boolean
-      }
       ingredient_canonical_id: { Args: { input_text: string }; Returns: string }
       merge_ingredient: {
         Args: { p_from: string; p_into: string }
@@ -1221,48 +1115,27 @@ export type Database = {
         }
         Returns: string
       }
-      persist_recipe_with_ingredient_ids:
-        | {
-            Args: {
-              p_carbs: number
-              p_cook_time: string
-              p_description: string
-              p_difficulty: Database["public"]["Enums"]["difficulty_type"]
-              p_fat: number
-              p_image: string
-              p_ingredients: Json
-              p_instructions: Json
-              p_kcal: number
-              p_name: string
-              p_prep_time: string
-              p_protein: number
-              p_servings: number
-              p_tags: string[]
-              p_tips: string[]
-            }
-            Returns: string
-          }
-        | {
-            Args: {
-              p_carbs: number
-              p_cook_time: string
-              p_description: string
-              p_difficulty: Database["public"]["Enums"]["difficulty_type"]
-              p_fat: number
-              p_image: string
-              p_ingredients: Json
-              p_instructions: Json
-              p_kcal: number
-              p_name: string
-              p_name_en?: string
-              p_prep_time: string
-              p_protein: number
-              p_servings: number
-              p_tags: string[]
-              p_tips: string[]
-            }
-            Returns: string
-          }
+      persist_recipe_with_ingredient_ids: {
+        Args: {
+          p_carbs: number
+          p_cook_time: string
+          p_description: string
+          p_difficulty: Database["public"]["Enums"]["difficulty_type"]
+          p_fat: number
+          p_image: string
+          p_ingredients: Json
+          p_instructions: Json
+          p_kcal: number
+          p_name: string
+          p_name_en?: string
+          p_prep_time: string
+          p_protein: number
+          p_servings: number
+          p_tags: string[]
+          p_tips: string[]
+        }
+        Returns: string
+      }
       persist_suggestion: {
         Args: {
           p_description: string
@@ -1349,22 +1222,7 @@ export type Database = {
         }[]
       }
       singularize_token: { Args: { tok: string }; Returns: string }
-      text_to_bytea: { Args: { data: string }; Returns: string }
       title_case_name: { Args: { input: string }; Returns: string }
-      urlencode:
-        | { Args: { data: Json }; Returns: string }
-        | {
-            Args: { string: string }
-            Returns: {
-              error: true
-            } & "Could not choose the best candidate function between: public.urlencode(string => bytea), public.urlencode(string => varchar). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
-          }
-        | {
-            Args: { string: string }
-            Returns: {
-              error: true
-            } & "Could not choose the best candidate function between: public.urlencode(string => bytea), public.urlencode(string => varchar). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
-          }
     }
     Enums: {
       difficulty_type: "easy" | "medium" | "hard"
@@ -1385,23 +1243,6 @@ export type Database = {
         ingredients: Json | null
         tags: Json | null
         source: string | null
-      }
-      http_header: {
-        field: string | null
-        value: string | null
-      }
-      http_request: {
-        method: unknown
-        uri: string | null
-        headers: Database["public"]["CompositeTypes"]["http_header"][] | null
-        content_type: string | null
-        content: string | null
-      }
-      http_response: {
-        status: number | null
-        content_type: string | null
-        headers: Database["public"]["CompositeTypes"]["http_header"][] | null
-        content: string | null
       }
     }
   }
@@ -1525,6 +1366,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       difficulty_type: ["easy", "medium", "hard"],
@@ -1535,3 +1379,4 @@ export const Constants = {
     },
   },
 } as const
+

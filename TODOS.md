@@ -302,18 +302,52 @@ change is validated in isolation before touching hosting.
   That route was dropped when Phase 3 merged into a main where the MCP transport
   had already been removed (Phase 2, resolved by removal), so `createApp` now
   mounts `/rest` only.
-- [ ] IAM role for the function: `bedrock:InvokeModel` /
-      `bedrock:InvokeModelWithResponseStream`, Supabase access (via env), and
-      S3/Supabase storage for images.
-- [ ] Port env/config: `GOOGLE_API_KEY` (if keeping Gemini), Supabase keys,
-      `GENAI_IMAGE_MODEL`, region, Bedrock model IDs. Move secrets to SSM
-      Parameter Store / Secrets Manager (no `dotenv` in Lambda).
+- [x] IAM role for the function — `iam.tf`: CloudWatch Logs, Bedrock invoke
+      (both streaming and not), SSM parameter read, and `kms:Decrypt` for the
+      SecureString parameters. Supabase is reached over HTTPS with keys from env,
+      so it needs no IAM.
+- [x] Port env/config — five SSM parameters (`OPENAI_API_KEY`, `GOOGLE_API_KEY`,
+      `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) loaded by
+      `put-secrets.sh` and injected as Lambda env vars (`lambda.tf:26-38`). No
+      `dotenv` in Lambda. **Caveat:** Terraform reads these at apply time, so the
+      values land in state in plaintext — see the follow-up below.
 - [x] IaC: **Terraform**, checked in at [`infra/`](infra/README.md). Defines the
       function, Function URL (`RESPONSE_STREAM`), IAM (logs + Bedrock + SSM),
-      log group, and per-environment tfvars. Still open: the session store
-      (blocked on Phase 2) and the S3 state backend (state is local today).
-- [ ] Set `max` timeout headroom for the longest stream (recipe generation) and a
-      sane memory size; measure cold-start latency on the SSE paths.
+      log group, and per-environment tfvars. The session-store item is gone with
+      Phase 2 (resolved by removal); the S3 state backend is still open.
+- [x] Set `max` timeout headroom and a sane memory size — 300s / 1024 MB,
+      `nodejs22.x` on arm64. Cold start measured on the deployed function:
+      **~1.0–1.9s** to first byte, ~70–120ms warm.
+- [x] Reserved concurrency as a **spend** ceiling, not a capacity plan — the
+      Function URL is unauthenticated and every route behind it costs OpenAI and
+      Gemini credits, so an uncapped function bills without limit if the URL
+      leaks. dev = 5 (applied), prod = 50 (config only; prod has never been
+      applied — state contains `fridgeezy-dev-api` alone).
+
+**Verified against real AWS on 2026-08-03** — this was the open question behind
+the whole `lambda.ts` loopback design, and it holds. Chunks surface at the
+producer's cadence through the Function URL, not batched at the end:
+
+| Endpoint | Observed |
+| --- | --- |
+| `/rest/chat` | first byte 1.865s cold, then deltas 30–40ms apart |
+| `/rest/suggestions/generate` | cards at 3.18 / 3.62 / 4.21 / 5.01s, `[DONE]` 5.87s |
+
+Test it by timestamping each SSE line (`curl -sN` piped through a read loop) — a
+buffered response puts every line at the same offset, a real stream spreads them.
+
+Still open on hosting, neither blocking:
+
+- [ ] **S3 state backend.** State is local, so the only record of a live
+      deployment is one gitignored file on one laptop. `versions.tf:19` has the
+      block commented and `infra/README.md` has the bootstrap commands.
+- [ ] **Secrets out of Terraform state.** Have the app read SSM at cold start
+      instead of Terraform baking values into env vars. `iam.tf` already grants
+      the permission, so this is app-side only — and it should land *before* the
+      state file moves to S3.
+- [ ] **Auth on the Function URL.** `AuthType: NONE` in both environments; the
+      concurrency cap bounds the damage but does not prevent it. Switch to
+      `AWS_IAM` once the client can sign requests.
 
 ---
 

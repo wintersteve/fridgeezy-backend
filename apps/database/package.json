@@ -76,14 +76,42 @@
                     "cwd": "apps/database"
                 }
             },
-            "up": {
+            "start": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "supabase start",
+                    "cwd": "apps/database"
+                }
+            },
+            "stop": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "supabase stop",
+                    "cwd": "apps/database"
+                }
+            },
+            "status": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "supabase status",
+                    "cwd": "apps/database"
+                }
+            },
+            "reset": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "supabase db reset",
+                    "cwd": "apps/database"
+                }
+            },
+            "up-remote": {
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "supabase migration up --linked",
                     "cwd": "apps/database"
                 }
             },
-            "reset": {
+            "reset-remote": {
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "supabase db reset --linked",
@@ -91,6 +119,13 @@
                 }
             },
             "types": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti codegen/generate-types.ts --local && npx jiti codegen/generate-entity-types.ts",
+                    "cwd": "apps/database"
+                }
+            },
+            "types-remote": {
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "npx jiti codegen/generate-types.ts && npx jiti codegen/generate-entity-types.ts",

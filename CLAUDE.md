@@ -57,8 +57,12 @@ npx tsc --noEmit -p apps/api/tsconfig.app.json    # type check the API
 
 Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
 
-- `up` / `reset` — `supabase migration up --linked` / `db reset --linked`
-- `types` — regenerate `database.types.ts` **and** the derived entity types
+- `start` / `stop` / `status` — the **local** Docker stack (see below)
+- `reset` — `supabase db reset` against **local**
+- `types` — regenerate `database.types.ts` + entity types from **local**
+- `up-remote` / `reset-remote` — the `--linked` versions, against the live dev
+  project
+- `types-remote` — generate types from the linked project instead
 - `embed-ingredients|embed-categories|embed-units|embed-tags|embed-suggestions|embed-recipes`
   — all six run one script, `operations/generate-embeddings.ts <target>`. They
   backfill only rows missing a vector; append `-- --all` to re-embed everything,
@@ -74,6 +78,66 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
 - `dedupe-ingredients` — an audit, not routine. Nothing calls it; run it only
   when the catalog visibly holds two names for one thing ("scallion" /
   "green onion"). Dry run unless `DEDUP_APPLY=true`, and it costs ~5N LLM calls.
+
+### Local Supabase is the default for development
+
+`apps/api/.env` and `apps/database/.env` both point at the **local** stack, with
+the remote values commented directly beneath. Develop against local; switch to
+remote only for a deliberate remote operation, and switch back after.
+
+The reason is blast radius, not convenience. Every script in `operations/` writes
+to whatever `SUPABASE_URL` says, and the remote dev project is the **same
+database the deployed Lambda serves** — there is no separate staging. A stray
+`seed-ingredients`, `embed-* -- --all` or `reset-remote` against it is a
+production incident. Pointed at local, the worst case is rebuilding a database
+that `reset` rebuilds in a minute.
+
+That is also why the target names are shaped the way they are: the short,
+easy-to-type ones (`reset`, `types`) are **local**, and reaching the live project
+takes a deliberately longer name (`reset-remote`, `up-remote`, `types-remote`).
+`up` no longer exists — it used to mean `migration up --linked`, so a leftover
+muscle-memory `up` now fails loudly instead of quietly migrating the live project.
+
+Bringing a local stack up from nothing:
+
+```bash
+npx nx run @fridgeezy/database:start     # Docker must be running
+npx nx run @fridgeezy/database:reset     # 17 migrations + 6 seeds
+npx nx run @fridgeezy/database:embed-categories
+npx nx run @fridgeezy/database:embed-units
+npx nx run @fridgeezy/database:embed-tags
+```
+
+**The three `embed-*` runs are not optional.** The seeds insert categories, units
+and tags as plain rows with no vectors, and ingredient matching resolves a
+category by vector search — so on a freshly reset database every suggestion dies
+with `No categories found - ensure category embeddings are populated`, surfacing
+to the client as cards that appear and are immediately withdrawn. They cost a
+fraction of a cent (265 short rows through text-embedding-3-small).
+
+Optionally `seed-ingredients` then `embed-ingredients` for a realistic ingredient
+catalog. Without it the pipeline still works — unmatched ingredients are simply
+created on the fly — but every dish pays LLM adjudication for ingredients a
+seeded catalog would have matched outright.
+
+Local keys are the CLI's fixed values, identical on every machine and not
+secrets: URL `http://127.0.0.1:54321`, Studio on `:54323`, Postgres on `:54322`.
+This CLI version issues `sb_publishable_…` / `sb_secret_…` rather than the legacy
+anon/service-role JWTs; supabase-js ≥ 2.90 accepts both, and they still go in the
+`SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` variables.
+
+Two things that will waste your time otherwise:
+
+- **A running API server does not pick up an `.env` change.** `nx serve` dedupes,
+  so a second `npm run api` attaches to the existing process rather than starting
+  a fresh one — it prints "Waiting for @fridgeezy/api:serve:development in
+  another nx process" and you end up testing the old configuration. Restart the
+  server itself, or run `PORT=8001 node apps/api/dist/main.js` for a throwaway
+  instance on another port.
+- **Stale stacks squat on the ports.** A pre-`apps/database/` layout stack still
+  exists under project id `src` and Docker Desktop restarts it on launch, which
+  fails our `start` with `Bind for 0.0.0.0:54322 failed`. Clear it with
+  `npx supabase stop --project-id src`.
 
 ### Embeddings: one model, and why 1536 dimensions
 

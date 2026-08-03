@@ -51,3 +51,5 @@ android/
 ios/
 # supabase CLI temp artifacts
 apps/database/supabase/.temp/
+# written by `db reset` against the local stack — per-machine, not shared state
+apps/database/supabase/.branches/

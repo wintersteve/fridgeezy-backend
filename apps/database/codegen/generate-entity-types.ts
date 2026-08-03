@@ -50,8 +50,30 @@ const projectRoot = findProjectRoot(__dirname);
 const databaseTypesPath = join(projectRoot, INPUT_PATH);
 const outputDir = join(projectRoot, OUTPUT_PATH);
 
+/**
+ * The `public` schema block only.
+ *
+ * `Tables:` appears once per schema, and the generator does not emit them in a
+ * fixed order — the local stack puts `graphql_public` first, the linked project
+ * puts `public` first. Matching the first `Tables:` in the file therefore picked
+ * up `graphql_public`'s `[_ in never]: never`, yielded zero tables, and rewrote
+ * entities/index.ts as an empty file. Nothing threw: an empty schema block is
+ * structurally valid, just empty.
+ */
+function publicSchema(content: string) {
+    const match = content.match(/\n {2}public: \{\n([\s\S]*?)\n {2}\}/);
+    if (!match) {
+        throw new Error(
+            "Could not find the `public` schema in database.types.ts"
+        );
+    }
+    return match[1];
+}
+
 function extractTableNames(content: string) {
-    const tablesMatch = content.match(/Tables:\s*\{([\s\S]*?)\n\s{4}\}/);
+    const tablesMatch = publicSchema(content).match(
+        /Tables:\s*\{([\s\S]*?)\n\s{4}\}/
+    );
     if (!tablesMatch) {
         throw new Error(
             "Could not find Tables definition in database.types.ts"
@@ -81,7 +103,9 @@ function extractTableNames(content: string) {
 }
 
 function extractEnumNames(content: string) {
-    const enumsMatch = content.match(/Enums:\s*\{([\s\S]*?)\n\s{4}\}/);
+    const enumsMatch = publicSchema(content).match(
+        /Enums:\s*\{([\s\S]*?)\n\s{4}\}/
+    );
     if (!enumsMatch) {
         // Enums are optional, return empty array if not found
         return [];

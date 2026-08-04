@@ -6,6 +6,7 @@ import {
     composeRecipe,
     modifyRecipe,
     recipeChat,
+    shareRecipe,
 } from "./usecases";
 
 export class RecipesController {
@@ -64,6 +65,18 @@ export class RecipesController {
     ) => {
         try {
             return recipeChat(req, res);
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    /**
+     * The only GET on this router, and the only route that answers with HTML
+     * rather than SSE — it is fetched by link-preview crawlers, not the app.
+     */
+    static share = async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            return await shareRecipe(req, res);
         } catch (err) {
             next(err);
         }

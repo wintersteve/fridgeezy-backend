@@ -22,12 +22,15 @@ export const ComposeRecipeRequestSchema = z.object({
         .int()
         .default(1)
         .describe("Suggestions per course type"),
-    matchThreshold: z
-        .number()
-        .min(0)
-        .max(1)
-        .default(0.75)
-        .describe("Vector search similarity threshold"),
+    exclude: z
+        .array(z.string())
+        .default([])
+        .describe(
+            "Dish names already offered for these courses. Lets a client ask " +
+                "for another option without being handed the same dish back — " +
+                "dedup is deterministic, so without this a re-request returns " +
+                "exactly what it returned the first time."
+        ),
 });
 
 export type ComposeRecipeRequestDto = z.infer<
@@ -43,7 +46,11 @@ const ComposeItemSchema = z.object({
 });
 
 /**
- * Result DTO for an existing recipe match
+ * Result DTO for an existing recipe match.
+ *
+ * `image` matters more than it looks: without it the client cannot tell a
+ * sourced recipe from a fresh suggestion, because the card falls back to its
+ * "NEW" plate and a dish that is already in the catalogue reads as generated.
  */
 export const ComposeRecipeExistingResultSchema = z.object({
     type: z.literal("result"),
@@ -55,7 +62,7 @@ export const ComposeRecipeExistingResultSchema = z.object({
     difficulty: z.enum(["easy", "medium", "hard"]),
     ingredients: z.array(ComposeItemSchema),
     tags: z.array(ComposeItemSchema),
-    matchScore: z.number().describe("Vector search similarity score"),
+    image: z.string().nullable().optional().describe("Hero image URL"),
 });
 
 /**

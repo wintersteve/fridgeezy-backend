@@ -8,17 +8,14 @@ import {
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { z } from "zod/v4";
 
-import { findSuggestionByName } from "../../suggestions/services/find-suggestion-by-name";
 import {
     DISH_GLOSS_RULE,
     DISH_NAME_ALT_RULE,
     DISH_NAME_RULE,
 } from "../../suggestions/services/naming-rules";
-import { persistSuggestion } from "../../suggestions/services/persist-suggestion";
+import { persistOrReuseSuggestion } from "../../suggestions/services/persist-or-reuse-suggestion";
 
 import { fetchRecipeMetadata } from "./fetch-recipe-metadata";
-import { fetchRecipeSummary } from "./fetch-recipe-summary";
-import { searchRecipes } from "./search-recipes";
 
 /**
  * Schema for LLM-generated composition suggestions (JSONL format)
@@ -128,6 +125,13 @@ const buildUserPrompt = (
     }
 
     parts.push(`Max Suggestions: ${request.maxSuggestions} per course type`);
+
+    if (request.exclude.length > 0) {
+        parts.push(
+            `\nAlready offered — do NOT suggest these or a variant of them: ${request.exclude.join(", ")}`
+        );
+    }
+
     parts.push(`\nGenerate authentic complementary dishes.`);
 
     return parts.join("\n");
@@ -183,6 +187,10 @@ export async function* generateComposeRecipes(
         message: `Generating ${allowedCourses.length} course type(s)`,
     };
 
+    const excluded = new Set(
+        request.exclude.map((name) => name.toLowerCase().trim())
+    );
+
     const stream = generateStream({
         model: { openai: "gpt-4.1" },
         system: SYSTEM_PROMPT,
@@ -201,6 +209,17 @@ export async function* generateComposeRecipes(
     ])) {
         const suggestion = parsed as ComposeRecipeSuggestion;
 
+        // The prompt asks for these to be avoided; enforce it too, so a model
+        // that ignores the instruction can't hand a client back the dish it
+        // explicitly asked to move on from.
+        if (
+            excluded.has(suggestion.name.toLowerCase().trim()) ||
+            (suggestion.name_alt &&
+                excluded.has(suggestion.name_alt.toLowerCase().trim()))
+        ) {
+            continue;
+        }
+
         // Yield search progress
         yield {
             type: "progress",
@@ -209,100 +228,67 @@ export async function* generateComposeRecipes(
             message: `Searching for "${suggestion.name}"`,
         };
 
-        // Search for existing recipes
-        const searchResults = await searchRecipes(
-            suggestion.name,
-            request.matchThreshold,
-            1 // Only need top match
-        );
+        // Identity is decided exactly as it is for the discovery feed. This used
+        // to run its own weaker chain — a vector search on the BARE DISH NAME,
+        // then an exact-name lookup among suggestions. Both were broken:
+        //
+        //  - `recipes.embedding` holds a dish SIGNATURE ("name | tags |
+        //    ingredients", see persist-recipe), so querying it with a bare-name
+        //    vector compares two different kinds of text. Real matches scored
+        //    below the caller's threshold and the dish was regenerated, which is
+        //    why a course whose recipe plainly existed was never reused.
+        //  - There was no exact-name layer over `recipes` at all, so not even a
+        //    literal name match could rescue it.
+        //
+        // `persistOrReuseSuggestion` already does the whole thing: recipes by
+        // exact name then signature similarity, suggestions by exact name then
+        // the calibrated band with LLM adjudication, plus the authenticity gate.
+        const outcome = await persistOrReuseSuggestion(suggestion, {
+            // The cuisine tag the model gave this dish — not a course, not the
+            // "dish" component marker.
+            cuisine: suggestion.tags.find(
+                (tag) =>
+                    !courseTagNames.some((course) =>
+                        tag.toLowerCase().includes(course.toLowerCase())
+                    ) && tag.toLowerCase() !== "dish"
+            ),
+        });
 
-        if (
-            searchResults.length > 0 &&
-            searchResults[0].score >= request.matchThreshold
-        ) {
-            // Found existing recipe - fetch full summary with ingredients/tags
-            const match = searchResults[0];
-            const recipeSummary = await fetchRecipeSummary(match.id);
-
-            if (!recipeSummary) {
-                console.error(
-                    `[Compose] Recipe not found: ${match.id}, searching suggestions instead`
-                );
-                // Fall through to search suggestions
-            } else {
-                yield {
-                    type: "result",
-                    source: "existing",
-                    id: recipeSummary.id,
-                    name: recipeSummary.name,
-                    nameEn: recipeSummary.nameEn,
-                    description: recipeSummary.description,
-                    difficulty: recipeSummary.difficulty,
-                    ingredients: recipeSummary.ingredients,
-                    tags: recipeSummary.tags,
-                    matchScore: match.score,
-                };
-                continue; // Move to next suggestion
-            }
-        }
-
-        // No recipe match found - search for existing suggestion by exact name
-        const existingSuggestion = await findSuggestionByName(suggestion.name);
-
-        if (existingSuggestion) {
-            yield {
-                type: "result",
-                source: "suggestion",
-                id: existingSuggestion.id,
-                name: existingSuggestion.name,
-                nameEn: existingSuggestion.nameEn,
-                description: existingSuggestion.description,
-                difficulty: existingSuggestion.difficulty,
-                ingredients: existingSuggestion.ingredients,
-                tags: existingSuggestion.tags,
-            };
-            continue; // Move to next suggestion
-        }
-
-        // No match found - create new suggestion
-        // Extract cuisine tag from suggestion tags (not a course, not "dish")
-        const suggestionCuisine = suggestion.tags.find(
-            (tag) =>
-                !courseTagNames.some((course) =>
-                    tag.toLowerCase().includes(course.toLowerCase())
-                ) && tag.toLowerCase() !== "dish"
-        );
-
-        const persistResult = await persistSuggestion(
-            {
-                name: suggestion.name,
-                name_alt: suggestion.name_alt,
-                description: suggestion.description,
-                difficulty: suggestion.difficulty,
-                ingredients: suggestion.ingredients,
-                tags: suggestion.tags,
-            },
-            { cuisineTag: suggestionCuisine, nameEn: suggestion.name_alt }
-        );
-
-        if (!persistResult.success) {
-            console.error(
-                `[Compose] Failed to persist suggestion: ${suggestion.name}`,
-                persistResult.error
+        if (outcome.kind === "dropped") {
+            console.warn(
+                `[Compose] Dropped "${suggestion.name}" (${outcome.reason})`
             );
             continue;
         }
 
+        if (outcome.kind === "existing_recipe") {
+            const recipe = outcome.recipe;
+            yield {
+                type: "result",
+                source: "existing",
+                id: recipe.id,
+                name: recipe.name,
+                nameEn: recipe.nameEn,
+                description: recipe.description,
+                difficulty: recipe.difficulty,
+                ingredients: recipe.ingredients,
+                tags: recipe.tags,
+                image: recipe.image,
+            };
+            continue;
+        }
+
+        const reused = outcome.suggestion;
         yield {
             type: "result",
             source: "suggestion",
-            id: persistResult.value.suggestionId,
-            name: suggestion.name,
-            nameEn: suggestion.name_alt,
-            description: suggestion.description,
-            difficulty: suggestion.difficulty,
-            ingredients: persistResult.value.ingredients,
-            tags: persistResult.value.tags,
+            id: reused.id,
+            name: reused.name,
+            nameEn: reused.nameEn,
+            description: reused.description,
+            difficulty: reused.difficulty,
+            ingredients: reused.ingredients,
+            tags: reused.tags,
         };
     }
 

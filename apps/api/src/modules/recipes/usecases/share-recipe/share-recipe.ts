@@ -106,11 +106,12 @@ ${image ? `<meta name="twitter:image" content="${escapeHtml(image)}">` : ""}
  * The "Open in Fridgeezy" button is a plain link rather than an automatic
  * redirect. Redirecting on load fires for crawlers and for people who do not
  * have the app, and a failed scheme navigation shows a browser error dialog —
- * a worse first impression than a page that simply offers the button. Real
- * universal links (tapping the https URL opening the app directly) need an
- * `associatedDomains` entitlement and an apple-app-site-association file served
- * from this same origin, which wants a custom domain rather than the Lambda
- * Function URL host.
+ * a worse first impression than a page that simply offers the button.
+ *
+ * Tapping the https link itself does NOT open the app: that needs universal
+ * links, which need a domain we control. Deferred deliberately — see "Deferred
+ * — universal links for recipe sharing" in the client repo's TODOS.md for the
+ * full list of what it takes.
  */
 export async function shareRecipe(req: Request, res: Response) {
     const { recipeId } = req.params;

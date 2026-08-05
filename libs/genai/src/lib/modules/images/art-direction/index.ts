@@ -109,6 +109,32 @@ export interface FoodIllustrationStyleOptions {
      */
     camera?: "three-quarter" | "overhead";
     /**
+     * The colour the scene is painted on. Defaults to the app's `#FDFBF9`
+     * ground, which is what every surface but one wants.
+     *
+     * The exception is the cuisine collection cards, where the illustration is
+     * the lower half of a *tinted* card and has to sit on that tint rather than
+     * in a cream rectangle inside it. There is no transparency in the pipeline —
+     * the model returns an opaque PNG — so the only way to make the picture and
+     * the card one surface is to paint the picture on the card's colour.
+     *
+     * Pass a token the client actually has (`primaryContainer`, `roseContainer`,
+     * `secondaryContainer`), never a colour invented for an image: the card's
+     * `backgroundColor` and this hex have to be the same paint, or the seam
+     * shows exactly where the illustration ends.
+     *
+     * Both halves are needed. `Background` names the colour in words *and* in
+     * hex, because naming it in words alone is what let the palette drift in the
+     * first place; `Palette` pins the bare hex. Templating only one of the two
+     * leaves them disagreeing.
+     *
+     * It rewrites the ground in both the `Background` and `Palette` lines. Only
+     * changing one leaves the palette pinning a cream the background no longer
+     * is, and the model splits the difference — a tinted scene with a cream
+     * halo around the vessel.
+     */
+    ground?: { name: string; hex: string };
+    /**
      * How the subject sits in the frame. The one genuinely per-surface rule: a
      * 3:4 recipe hero is centre-cropped three ways by the client and needs an
      * even margin to survive, while a small cuisine tile is cropped hard enough
@@ -158,14 +184,22 @@ const CAMERA_RULE: Record<CameraMode, string> = {
     overhead: `- Camera: perfectly overhead bird's-eye, 90 degrees, straight down. No perspective tilt at all: a round vessel reads as a true circle, a rectangular one as a true rectangle, and nothing shows a side wall or a front face. Every vessel lies flat to the picture plane.`,
 };
 
-const BACKGROUND_RULE: Record<VesselMode, string> = {
-    ceramic: `- Background: flat, lightly textured warm cream (#FDFBF9), completely empty. No table surface, marble, wood grain, cloth, cutlery, napkins, hands, or stray garnish outside the vessel. No borders, frames or inset panels — the background runs to all four edges of the image.`,
-    none: `- Background: no table surface, marble, wood grain, cloth, cutlery, napkins or hands, ever. Wherever the subject does not reach, the ground is flat, lightly textured warm cream (#FDFBF9) — but the subject is expected to cover the frame, so little or none of it may show. No borders, frames or inset panels — the image runs to all four edges.`,
-};
+/**
+ * A function of the ground, not a constant table, because the colour varies per
+ * surface. `VESSEL_RULE` above stays a table: it names no colour that moves.
+ */
+const backgroundRule = (
+    vessel: VesselMode,
+    ground: { name: string; hex: string }
+) =>
+    vessel === "ceramic"
+        ? `- Background: flat, lightly textured ${ground.name} (${ground.hex}), completely empty. No table surface, marble, wood grain, cloth, cutlery, napkins, hands, or stray garnish outside the vessel. No borders, frames or inset panels — the background runs to all four edges of the image.`
+        : `- Background: no table surface, marble, wood grain, cloth, cutlery, napkins or hands, ever. Wherever the subject does not reach, the ground is flat, lightly textured ${ground.name} (${ground.hex}) — but the subject is expected to cover the frame, so little or none of it may show. No borders, frames or inset panels — the image runs to all four edges.`;
 
 export const buildFoodIllustrationStyle = ({
     vessel = "ceramic",
     camera = "three-quarter",
+    ground = { name: "warm cream", hex: "#FDFBF9" },
     framing,
     mood,
     renderingEmphasis,
@@ -174,9 +208,9 @@ export const buildFoodIllustrationStyle = ({
 ${CAMERA_RULE[camera]}
 ${VESSEL_RULE[vessel]}
 - Framing: ${framing}
-${BACKGROUND_RULE[vessel]}
+${backgroundRule(vessel, ground)}
 - Light: soft diffuse studio daylight from the upper left, casting exactly one gentle, soft-edged, low-contrast shadow from the ${vessel === "none" ? "subject" : "vessel"} toward the lower right. No other shadows anywhere — no dappled light, no foliage or window patterns, no shadows from objects outside the frame. No hard specular highlights.
-- Palette: the vessel, background and linework are fixed — cream #FFF5EE, warm stone #FAF8F6, ground #FDFBF9, with warm grey #5C5450 only as sparse, fine linework — never a near-black outline; peach #F4A67A and sage green #93C5A8 are the accent tones. The food keeps its own true hues, rendered in the same warm register. No saturated primaries, no neon, no pure black.
+- Palette: the vessel, background and linework are fixed — cream #FFF5EE, warm stone #FAF8F6, ground ${ground.hex}, with warm grey #5C5450 only as sparse, fine linework — never a near-black outline; peach #F4A67A and sage green #93C5A8 are the accent tones. The food keeps its own true hues, rendered in the same warm register. No saturated primaries, no neon, no pure black.
 - Tone: high-key, pastel and softly washed throughout. Every value sits in the upper, lighter half of the range, as if a thin veil of warm cream were laid over the whole image — colours are chalky, faded and gently muted rather than rich, punchy or glossy. Even the darkest element stays a soft warm mid-tone; contrast between light and dark is low and edges between colours are soft. This is a treatment of saturation and value only: it must never change *which* colour a food is, only how pale and quiet it reads.
 - Rendering: refined modern editorial illustration — delicate hand-drawn linework, gentle gouache and watercolour-like washes with soft, slightly bleeding edges, clean flat-leaning shapes; minimal, airy and warm.${renderingEmphasis ? ` ${renderingEmphasis}` : ""} Not photorealistic, not 3D-rendered, not cartoonish, not high-contrast.
 

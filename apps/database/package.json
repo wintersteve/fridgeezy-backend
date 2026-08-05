@@ -156,6 +156,22 @@
                     "forwardAllArgs": true
                 }
             },
+            "generate-cuisine-banners": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/generate-cuisine-banners.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
+            "generate-cuisine-cards": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/generate-cuisine-cards.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
             "generate-dish-tiles": {
                 "executor": "nx:run-commands",
                 "options": {

@@ -18,10 +18,32 @@ export interface GeneratedImage {
 }
 
 /**
- * Default image model. Flash is markedly cheaper and faster than the Pro
- * preview and is plenty for the stylised recipe illustrations we generate.
- * Override with GENAI_IMAGE_MODEL (e.g. "gemini-3-pro-image-preview") to A/B
- * quality without a code change.
+ * Default image model. Flash at ~$0.039/image against Pro's ~$0.14 — a
+ * deliberate cost choice made with the quality gap measured, not assumed.
+ *
+ * What the 2026-08-04 sweeps found, so nobody re-runs them: Pro is genuinely
+ * better. In a blind head-to-head (five dishes, models unlabelled) Pro was
+ * rated YES under both surviving prompts while Flash came in GOOD and MEH.
+ * Flash tends to render this art direction flatter and more hard-outlined than
+ * the style block describes. It was chosen anyway, at GOOD, because the gap did
+ * not justify 3.6x at this catalogue's volume.
+ *
+ * That trade is volume-dependent, and the cost is bounded per *dish* rather
+ * than per view — `generateAndUploadRecipeImage` short-circuits on an existing
+ * object at the deterministic storage path, so a dish renders once, ever. At
+ * ~150 new dishes/month the difference is ~$16/month and Pro is easily
+ * affordable; at 10,000 it is ~$1,000/month and it is not. **Revisit this line
+ * if image quality starts mattering more than image spend** — the switch is
+ * GENAI_IMAGE_MODEL=gemini-3-pro-image-preview, no deploy needed, and Pro is
+ * the known-better answer waiting there.
+ *
+ * The recipe prompt's restraint rules exist partly to hold this up: they are
+ * the variant that degraded best on Flash. Loosening them makes Flash worse,
+ * not just different.
+ *
+ * Imagen 4 and OpenAI's gpt-image-1 were in the same sweep and were both worse
+ * for this style — Imagen 4 put people in frame instead of food; gpt-image-1
+ * shifted the palette and only offers 2:3, not our 3:4.
  */
 const DEFAULT_IMAGE_MODEL: NonNullable<GenerateImageOptions["model"]> =
     (process.env.GENAI_IMAGE_MODEL as GenerateImageOptions["model"]) ??

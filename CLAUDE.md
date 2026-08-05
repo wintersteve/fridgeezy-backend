@@ -71,6 +71,18 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
   rows it creates, so anything the LLM added arrives without a vector and stays
   invisible to similarity matching until this runs.
 - `seed-ingredients`, `generate-ingredient-seed`, `generate-category-images`
+- `generate-dish-tiles` — the plated tiles behind the compose card, plus the
+  abstract `bowl-placeholder` the suggestion cards use as their "no photo yet"
+  state, into the `dish_tiles` bucket. Generated at the aspect they are
+  displayed at (`9:16`), so they are deliberately **not** padded — see below.
+  **Skips anything already in the bucket** unless you pass `-- --force`: these
+  are curated generations, and a re-roll gives a different picture for the same
+  prompt, so a routine re-run must not silently replace art someone chose.
+
+  The bucket was `ingredient_tiles` until 2026-08-05, back when the tiles were
+  raw ingredients and only the compose card read them. Buckets cannot be renamed
+  in place, so `20260805000001_dish_tiles_bucket.sql` creates the new one and the
+  old is left standing until any client holding the previous URLs has aged out.
 - `backfill-course-tags` — one-off repair, already run on 2026-08-02. Fills a
   course tag on suggestions and recipes that have none, classifying each dish
   with an LLM. Dry run unless `COURSE_APPLY=true`; idempotent, so it is safe
@@ -372,8 +384,52 @@ those frames incrementally, which is why frame shapes are part of the contract.
   drifted: the recipe prompt lost the palette hex codes the cuisine one kept and
   started producing a green plate on marble for one dish and a rustic speckled
   bowl for the next. **Add a new image call site by composing its own subject
-  section around that builder** — only `framing` and `mood` are per-surface, and
-  the framing rule exists because each surface is cropped differently.
+  section around that builder** — only `framing`, `mood`, `renderingEmphasis`
+  and `vessel` are per-surface, and each exists because the surfaces differ
+  concretely: they are cropped differently, and a recipe hero wants detail
+  concentrated on the centrepiece while a 110px cuisine tile needs it spread
+  evenly to read at all.
+
+  `vessel` is the newest and the sharpest-edged. It defaults to `"ceramic"`;
+  `"none"` is for a surface whose subject is raw ingredients rather than a
+  plated dish (`generate-dish-tiles`). It swaps the `Vessel` **and**
+  `Background` lines together, because dropping the plate alone leaves
+  "completely empty … no stray garnish outside the vessel" governing a
+  composition with no vessel, which reads as an instruction to shrink the
+  subject back to the middle. Everything else — camera, light, palette, tone,
+  rendering — stays shared, which is the point: a tile and a hero on the same
+  screen still have to look like one kitchen. The `"ceramic"` output is
+  byte-identical to what the 2026-08-04 A/B rounds were run against; if you
+  touch this builder again, check that it still is.
+
+  **`padPngToSquare` is not a step every image takes.** It exists because one
+  recipe asset is cropped three ways, and it works by shrinking the subject
+  relative to the frame. An asset generated at the aspect it is displayed at
+  must skip it — `generate-dish-tiles` renders 9:16 for a 9:16 slot, and
+  padding would undo the framing it asks for.
+
+  The default image model is `gemini-3-pro-image-preview`, picked by a blind A/B
+  on 2026-08-04 rather than by preference. Flash renders this art direction as
+  flat, hard-outlined cel shading whatever the prompt says, and six prompt
+  rewrites failed to close the gap — the model was the ceiling, not the wording.
+  Pro costs ~$0.14/image against Flash's ~$0.039, bounded per *dish* rather than
+  per view because `generateAndUploadRecipeImage` short-circuits on an existing
+  object at the deterministic storage path. `GENAI_IMAGE_MODEL` overrides it
+  without a deploy, which matters — Pro is a **preview** endpoint and can be
+  renamed or repriced. The recipe prompt's restraint rules are the variant that
+  degraded best on Flash, so that fallback stays viable.
+
+  Recipe images are **padded to a square by `padPngToSquare` before upload**.
+  The client shows one asset in boxes from 0.62 to 1.36 aspect, all cropping to
+  fill, and a 3:4 render loses 45% of its height in the widest of them — it cut
+  through the plate on every dish measured. Padding shrinks the plate relative
+  to the frame without touching the artwork, so one asset survives all three
+  crops while staying full-bleed. Note what this rules out: asking the model for
+  a smaller plate does not work (measured — plate size swings 51–87% of frame
+  height on an identical prompt), and `contentFit="contain"` in the client is
+  wrong because these surfaces are full-bleed. `libs/genai` therefore
+  externalises `node:` builtins in its vite config; the padder uses `zlib` to
+  avoid a native image dependency on Lambda.
 
 ### Chat tool calling
 

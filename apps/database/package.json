@@ -155,6 +155,14 @@
                     "cwd": "apps/database"
                 }
             },
+            "generate-dish-tiles": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/generate-dish-tiles.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
             "backfill-course-tags": {
                 "executor": "nx:run-commands",
                 "options": {

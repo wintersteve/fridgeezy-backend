@@ -82,12 +82,32 @@ export interface FoodIllustrationStyleOptions {
      * cloth, cutlery or hands is what keeps these out of stock-photography
      * territory, and it holds whether or not a plate is present.
      *
-     * Everything else — palette, the single upper-left light, tone, rendering,
-     * camera — is deliberately untouched. That is the whole point of doing this
-     * as an option rather than a second style block: a tile and a hero on the
-     * same screen still have to look like one kitchen.
+     * Everything else — palette, the single upper-left light, tone, rendering —
+     * is deliberately untouched. That is the whole point of doing this as an
+     * option rather than a second style block: a tile and a hero on the same
+     * screen still have to look like one kitchen.
      */
     vessel?: "ceramic" | "none";
+    /**
+     * Where the camera stands. `"three-quarter"` (the default) is the 45-degree
+     * editorial angle every plated surface shares.
+     *
+     * `"overhead"` exists for one surface and one reason. The cuisine tiles show
+     * several dishes at once in a 110pt square, and a table seen from 45 degrees
+     * cannot be read at that size — the vessels occlude each other and the near
+     * rims eat the frame. Measured over 24 renders on 2026-08-05: every
+     * three-quarter arrangement of multiple dishes either centred itself in a
+     * wide margin or lost its back row entirely.
+     *
+     * **This is the option the comment above warns about, and adopting it is a
+     * real trade.** Recipe cards and cuisine tiles sit on the same home feed, so
+     * a 45-degree hero now sits directly above a 90-degree tile. That was
+     * accepted deliberately: at 110pt the tile reads as a pattern of colour
+     * rather than as a photographed scene, and the two do not compete the way
+     * two dish photographs would. If the tiles ever grow, revisit this — the
+     * larger they get, the more they look like a different kitchen.
+     */
+    camera?: "three-quarter" | "overhead";
     /**
      * How the subject sits in the frame. The one genuinely per-surface rule: a
      * 3:4 recipe hero is centre-cropped three ways by the client and needs an
@@ -130,6 +150,14 @@ const VESSEL_RULE: Record<VesselMode, string> = {
     none: `- Vessel: none. There is no plate, bowl, board, tray, glass, pan or dish of any kind anywhere in the image, and no surface for one to stand on. The ingredients are the whole subject and are shown as themselves.`,
 };
 
+/** Where the camera stands — see `camera`, and the trade it carries. */
+type CameraMode = NonNullable<FoodIllustrationStyleOptions["camera"]>;
+
+const CAMERA_RULE: Record<CameraMode, string> = {
+    "three-quarter": `- Camera: the classic editorial three-quarter angle — about 45 degrees — looking down and across at the dish. A round plate reads as a pronounced ellipse, the vessel's near rim and outer side wall are clearly visible, and the food shows its full height and its own front faces. Never a flat top-down view, and never so low that it becomes side-on or eye-level: you are still looking distinctly downward into the dish. This applies to bowls exactly as much as to flat plates — a bowl is not an excuse to look straight down. A bowl is seen at the same angle, so its rim is a wide ellipse and a band of its far inner wall stays visible behind the food.`,
+    overhead: `- Camera: perfectly overhead bird's-eye, 90 degrees, straight down. No perspective tilt at all: a round vessel reads as a true circle, a rectangular one as a true rectangle, and nothing shows a side wall or a front face. Every vessel lies flat to the picture plane.`,
+};
+
 const BACKGROUND_RULE: Record<VesselMode, string> = {
     ceramic: `- Background: flat, lightly textured warm cream (#FDFBF9), completely empty. No table surface, marble, wood grain, cloth, cutlery, napkins, hands, or stray garnish outside the vessel. No borders, frames or inset panels — the background runs to all four edges of the image.`,
     none: `- Background: no table surface, marble, wood grain, cloth, cutlery, napkins or hands, ever. Wherever the subject does not reach, the ground is flat, lightly textured warm cream (#FDFBF9) — but the subject is expected to cover the frame, so little or none of it may show. No borders, frames or inset panels — the image runs to all four edges.`,
@@ -137,12 +165,13 @@ const BACKGROUND_RULE: Record<VesselMode, string> = {
 
 export const buildFoodIllustrationStyle = ({
     vessel = "ceramic",
+    camera = "three-quarter",
     framing,
     mood,
     renderingEmphasis,
 }: FoodIllustrationStyleOptions): string =>
     `FIXED STYLE — identical in every image
-- Camera: the classic editorial three-quarter angle — about 45 degrees — looking down and across at the dish. A round plate reads as a pronounced ellipse, the vessel's near rim and outer side wall are clearly visible, and the food shows its full height and its own front faces. Never a flat top-down view, and never so low that it becomes side-on or eye-level: you are still looking distinctly downward into the dish. This applies to bowls exactly as much as to flat plates — a bowl is not an excuse to look straight down. A bowl is seen at the same angle, so its rim is a wide ellipse and a band of its far inner wall stays visible behind the food.
+${CAMERA_RULE[camera]}
 ${VESSEL_RULE[vessel]}
 - Framing: ${framing}
 ${BACKGROUND_RULE[vessel]}

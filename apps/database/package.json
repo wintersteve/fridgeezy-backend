@@ -152,7 +152,8 @@
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "npx jiti operations/generate-category-images.ts",
-                    "cwd": "apps/database"
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
                 }
             },
             "generate-dish-tiles": {

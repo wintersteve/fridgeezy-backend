@@ -276,11 +276,14 @@ change is validated in isolation before touching hosting.
       exported `accumulateSuggestionReveals`, and the conformance check drives
       **that function** instead of a verbatim copy — 20/20 still pass, with
       identical reveal counts, so the collapse changed no behaviour.
-      **`OPENAI_API_KEY` is still required to boot.** The lazy imports in
-      `@fridgeezy/llm` remove it from every path it covers, but chat, ingredient
-      extraction and the embedding call sites still import `libs/openai` at top
-      level, and it throws at import. A Bedrock-only Lambda needs the next two
-      checkboxes plus Phase 4 first.
+      **`OPENAI_API_KEY` is still required to boot** — but by 2026-08-06 only
+      because of **embeddings**. Chat and ingredient extraction were both ported
+      (chat calls `generateChatStream` from `@fridgeezy/llm`; extraction calls
+      `generateCompletion`), so the only production code left importing
+      `libs/openai` at top level is `generateEmbedding` / `generateBatchEmbeddings`
+      — which throws at import. That is Phase 4, and Phase 4 is recommended cut,
+      so **the key cannot be dropped without reversing that decision.** See the
+      note at the head of Phase 4.
 - [x] Port the **vision** path (ingredient extraction) to the Bedrock vision model.
       Extraction is one-shot, so it runs through `generateCompletion` with an
       `image` parameter rather than needing its own entry point. The providers
@@ -409,10 +412,16 @@ Still open on hosting, neither blocking:
 > code as query vectors — so `buildSuggestionSignature` and `embed-suggestions`
 > have to move together or similarity silently degrades rather than erroring.
 >
-> The only benefit is dropping the OpenAI key, and **chat tool calling still holds
-> it anyway** (`create-chat-completion.ts` imports the OpenAI client directly).
-> Leave embeddings on OpenAI; revisit only if that key becomes the last thing
-> standing.
+> The only benefit is dropping the OpenAI key — and **embeddings are now the ONLY
+> thing holding it.** Chat and ingredient extraction are both ported, so this
+> phase is no longer one of several blockers, it is the last one.
+>
+> That cuts both ways and the tension is worth stating plainly: cutting Phase 4
+> means `OPENAI_API_KEY` stays a hard boot requirement forever, so the "one
+> credential, one bill" benefit that motivates the whole Bedrock migration is
+> unreachable. Either accept that the migration buys only *text inference* on IAM
+> and the AWS bill, or reverse this and do the corpus re-embed. Do not carry both
+> positions at once.
 
 Switching off `text-embedding-3-small` changes vector dimensions, so this is a
 data migration, not just a code edit.
@@ -472,11 +481,39 @@ data migration, not just a code edit.
       so ~90% of calls share a prefix and only the rare top-up diverges. Not worth
       a prompt change. `escalate-difficulty`'s two difficulty strings are likewise
       low-cardinality (at most 6 prefixes) and cache per-combination.
+- [x] **Prompt caching on the Bedrock branch** (2026-08-06). The two providers do
+      not meet in the middle: OpenAI caches prefixes automatically — which is why
+      the `buildRecipeSystemPrompt` reorder paid off with no further code — while
+      Anthropic requires **explicit `cache_control` breakpoints** and Bedrock does
+      not offer the automatic kind at all. Without this, flipping
+      `LLM_PROVIDER=bedrock` lost every cache hit the OpenAI branch gets free, so
+      any cost comparison would have measured Bedrock at its worst.
+      `buildParams` now sends `system` as a content block carrying
+      `cache_control: {type: "ephemeral"}` instead of a bare string. **One
+      breakpoint is all there is to place:** render order is
+      `tools` → `system` → `messages`, this client sends no tools, and the user
+      turn is per-request by definition — so the end of `system` is the end of
+      everything cacheable, and the other three breakpoints the API allows have
+      nothing to mark.
+      **5-minute TTL over the 1-hour one**, deliberately: the hour doubles the
+      write premium and needs three reads rather than two to break even, which
+      suits steady traffic. This runs on Lambda behind bursty session-shaped
+      usage — a batch's calls land seconds apart, the next batch may be hours off.
+      Covered offline by `check-streaming-conformance` (50 assertions, up from
+      45): the breakpoint is on the system block, the text survives the wrapping,
+      the **user turn carries none**, and a call with no system omits the field
+      rather than sending an empty block. Confirmed to fail when it should —
+      reverting to the bare string turns 3 red.
+      **A prefix below the model's minimum silently does not cache** (1024 tokens
+      on Sonnet 4.6/5, 512 on Opus 5, 4096 on Opus 4.6 and Haiku 4.5) — no error,
+      and no write either, so marking the short adjudicator prompts costs nothing
+      and simply does nothing on most models.
 - [ ] Set a cost baseline: compare Bedrock token spend + Lambda compute vs the
       current OpenAI + Gemini bill on representative volume. **The logging above
       is the input to this** — read real `[LLM]` totals per `label` rather than
       estimating from prompt length, and note that Bedrock is priced separately
-      from the first-party Anthropic API.
+      from the first-party Anthropic API. Half of this is measurable today: the
+      OpenAI side needs no account access.
 - [ ] Roll out behind the provider flag: shadow / percentage cutover, watch eval
       scores and error rates, keep OpenAI as instant rollback.
 - [ ] Decommission OpenAI paths once Bedrock is stable and validated.

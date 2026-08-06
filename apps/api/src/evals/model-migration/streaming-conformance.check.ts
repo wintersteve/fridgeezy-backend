@@ -2,6 +2,7 @@ import {
     AnthropicChatEvent,
     AnthropicStreamEvent,
     ChatStreamEvent,
+    buildParams,
     toAnthropicMessages,
     toAnthropicImageBlock,
     toChatStreamEvents,
@@ -229,6 +230,60 @@ async function checkUsageReporting(): Promise<void> {
         `${"isolation".padEnd(17)} no usage event became text`,
         text.join("") === "hi",
         `got ${JSON.stringify(text.join(""))}`
+    );
+}
+
+/**
+ * The prompt-caching breakpoint lands on the system block and nowhere else.
+ *
+ * Worth asserting rather than eyeballing because every failure mode here is
+ * silent and costs money rather than correctness. A missing marker caches
+ * nothing and bills full price; a marker on the user turn caches a prefix that
+ * changes every request, paying the ~1.25x write premium for a read that never
+ * comes. Neither raises an error, and neither shows up anywhere except a bill
+ * nobody reads per-request.
+ */
+function checkCacheBreakpoints(): void {
+    console.log("\nPrompt caching — breakpoint on the stable prefix:");
+
+    const withSystem = buildParams({
+        system: "You verify dishes.",
+        user: "Ceviche de Mariscos",
+    }) as {
+        system?: { type: string; text: string; cache_control?: unknown }[];
+        messages: { role: string; content: unknown }[];
+    };
+
+    check(
+        `${"system".padEnd(17)} sent as content blocks, not a bare string`,
+        Array.isArray(withSystem.system),
+        `got ${typeof withSystem.system}`
+    );
+    check(
+        `${"breakpoint".padEnd(17)} marks the system block`,
+        withSystem.system?.[0]?.cache_control != null,
+        "no cache_control on the system block"
+    );
+    check(
+        `${"text".padEnd(17)} survives the wrapping`,
+        withSystem.system?.[0]?.text === "You verify dishes.",
+        `got ${JSON.stringify(withSystem.system?.[0]?.text)}`
+    );
+    // The user turn is per-request by definition. A breakpoint here would write
+    // a fresh cache entry on every call and read none of them back.
+    check(
+        `${"user turn".padEnd(17)} carries NO breakpoint`,
+        !JSON.stringify(withSystem.messages).includes("cache_control"),
+        "cache_control leaked into the user turn"
+    );
+
+    // Nothing stable to cache, so the field must stay absent rather than become
+    // an empty block the API would reject.
+    const noSystem = buildParams({ user: "Ceviche" }) as { system?: unknown };
+    check(
+        `${"no system".padEnd(17)} omits the field entirely`,
+        noSystem.system === undefined,
+        `got ${JSON.stringify(noSystem.system)}`
     );
 }
 
@@ -772,6 +827,7 @@ async function main() {
     );
     await checkIncrementalReveal();
     await checkUsageReporting();
+    checkCacheBreakpoints();
     await checkToolCallStreaming();
     checkFinishReasonMapping();
     checkMessageTranslation();

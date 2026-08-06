@@ -375,15 +375,33 @@ those frames incrementally, which is why frame shapes are part of the contract.
   `generateCompletion()` dispatch accordingly. **Route new completion call sites
   through here** — never import a provider SDK directly.
 - **OpenAI** (`@fridgeezy/openai`) still serves every production request, because
-  the default provider is `openai`. Three things bypass the facade and import it
-  directly, each still an open checkbox in `TODOS.md`: chat
-  (`create-chat-completion.ts`, tool calling), ingredient extraction (image
-  input), and embeddings (Phase 4). Because `libs/openai` throws at *import* on a
-  missing key, those keep `OPENAI_API_KEY` a hard boot requirement for the API.
+  the default provider is `openai`. **Exactly one thing bypasses the facade now:
+  embeddings** (`generateEmbedding` / `generateBatchEmbeddings`, Phase 4). Chat
+  and ingredient extraction were both ported and go through `@fridgeezy/llm`.
+  Because `libs/openai` throws at *import* on a missing key, that one remaining
+  import keeps `OPENAI_API_KEY` a hard boot requirement — so the key cannot be
+  dropped while Phase 4 stays cut.
 - **Bedrock** (`@fridgeezy/bedrock`, `@anthropic-ai/bedrock-sdk`) is reachable
   from every ported call site by setting `LLM_PROVIDER=bedrock`, but **has never
   run end-to-end** — Anthropic models are gated on this AWS account. Its streaming
-  translation is covered offline by `check-streaming-conformance`.
+  translation and usage accounting are covered offline by
+  `check-streaming-conformance`.
+
+  **Prompt caching is opt-in here and automatic on OpenAI** — the one place the
+  two providers genuinely differ rather than just spelling something differently.
+  OpenAI caches prefixes with no code at all, which is why the
+  `buildRecipeSystemPrompt` reorder paid off on its own; Anthropic needs explicit
+  `cache_control` breakpoints, and Bedrock does not offer the automatic kind.
+  `buildParams` therefore sends `system` as a content block with
+  `cache_control: {type: "ephemeral"}` rather than as a bare string.
+
+  **One breakpoint, on `system`, and nothing volatile may move above it.** Render
+  order is `tools` → `system` → `messages`; this client sends no tools and the
+  user turn changes every request, so the end of `system` is the end of
+  everything cacheable. The failure modes are silent and cost money rather than
+  correctness — a missing marker bills full price, a marker on the user turn pays
+  the ~1.25x write premium for a read that never comes — which is why
+  `check-streaming-conformance` asserts both.
 - **`@fridgeezy/genai`** (`@google/genai`) generates recipe images. It also owns
   `buildFoodIllustrationStyle` — the art direction shared by recipe heroes
   (`create-recipe-image.ts`) and the home feed's cuisine tiles

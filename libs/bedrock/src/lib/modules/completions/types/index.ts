@@ -20,9 +20,23 @@ export interface CompletionChunk {
  * corrupts the JSONL line they land on — and a corrupt line is silently
  * dropped, so the failure shows up as missing content, not as an error. Prefer
  * adaptive thinking at low/medium effort.
+ *
+ * **Leaving this unset is not a neutral choice.** `buildParams` sends an
+ * explicit value on every request rather than omitting the field, because the
+ * models disagree about what the absence means — Sonnet 4.6 reads it as off,
+ * Sonnet 5 as adaptive. See `DEFAULT_THINKING` for the default and why the
+ * omission was worth closing.
  */
 export type ThinkingType = "adaptive" | "enabled" | "disabled";
 
+/**
+ * Thinking depth and overall token spend.
+ *
+ * Unset is **not** cheap — the API's own default is `high`, which is why
+ * `buildParams` names one explicitly (`DEFAULT_EFFORT`). `low` is the setting
+ * for the short adjudicator verdicts, where the judgement is one bit and the
+ * budget exists only to clear the thinking allowance.
+ */
 export type ThinkingEffort = "low" | "medium" | "high";
 
 /**
@@ -54,9 +68,34 @@ export interface CompletionResult {
     finishReason: string | null;
 }
 
+/**
+ * Token counts as Anthropic reports them, before `@fridgeezy/llm` normalises
+ * them against OpenAI's differently-named equivalents.
+ *
+ * `inputTokens` here excludes the cached portion — Anthropic reports the two as
+ * disjoint, where OpenAI folds cache hits into its prompt total. That difference
+ * is reconciled in `fromOpenAiUsage`, not here.
+ */
+export interface BedrockUsage {
+    inputTokens: number;
+    cachedInputTokens: number;
+    outputTokens: number;
+}
+
 export interface BedrockCompletionParams {
     /** Inference profile ID. Defaults to {@link BEDROCK_MODEL}. */
     model?: string;
+    /**
+     * Called once with the token counts for this request.
+     *
+     * A callback rather than a return value because the streaming path has no
+     * return value to put it on: usage arrives split across two events —
+     * `message_start` carries the input side, the final `message_delta` the
+     * output side — and both land while the generator is still yielding text.
+     * Invoked after the last one, so a reader gets one complete record rather
+     * than two partial ones.
+     */
+    onUsage?: (usage: BedrockUsage) => void;
     /** System prompt. Anthropic takes this as a top-level field, not a message. */
     system?: string;
     /** The user turn. */

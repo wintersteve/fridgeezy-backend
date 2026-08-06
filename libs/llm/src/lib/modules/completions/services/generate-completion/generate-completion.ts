@@ -1,4 +1,5 @@
 import { resolveProvider } from "../../../provider";
+import { fromOpenAiUsage, reportUsage } from "../../../usage";
 import type { CompletionResult, GenerateCompletionParams } from "../../types";
 
 /**
@@ -25,7 +26,10 @@ import type { CompletionResult, GenerateCompletionParams } from "../../types";
 export async function generateCompletion(
     params: GenerateCompletionParams
 ): Promise<CompletionResult> {
-    if (resolveProvider(params.provider) === "bedrock") {
+    const provider = resolveProvider(params.provider);
+    const startedAt = Date.now();
+
+    if (provider === "bedrock") {
         const { createCompletion } = await import("@fridgeezy/bedrock");
 
         return createCompletion({
@@ -36,6 +40,15 @@ export async function generateCompletion(
             maxTokens: params.maxTokens?.bedrock,
             thinking: params.thinking,
             effort: params.effort,
+            onUsage: (usage) =>
+                reportUsage({
+                    provider,
+                    model: params.model.bedrock ?? "(BEDROCK_MODEL_ID)",
+                    label: params.label,
+                    latencyMs: Date.now() - startedAt,
+                    streamed: false,
+                    ...usage,
+                }),
         });
     }
 
@@ -77,6 +90,15 @@ export async function generateCompletion(
     });
 
     const choice = response.choices[0];
+
+    reportUsage({
+        provider,
+        model: params.model.openai,
+        label: params.label,
+        latencyMs: Date.now() - startedAt,
+        streamed: false,
+        ...fromOpenAiUsage(response.usage),
+    });
 
     return {
         text: choice?.message?.content?.trim() ?? "",

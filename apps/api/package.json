@@ -143,6 +143,13 @@
                     "command": "npx jiti src/evals/model-migration/streaming-conformance.check.ts",
                     "cwd": "apps/api"
                 }
+            },
+            "check-batch-dedup": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/batch-dedup.check.ts",
+                    "cwd": "apps/api"
+                }
             }
         }
     },

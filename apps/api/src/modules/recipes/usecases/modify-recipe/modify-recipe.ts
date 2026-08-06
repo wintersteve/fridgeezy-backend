@@ -184,6 +184,7 @@ export const modifyRecipe = createStreamHandler({
         // 3. Call the model
         const stream = generateStream({
             model: { openai: "gpt-4.1" },
+            label: "recipe.modify",
             system: buildSystemPrompt(unitsPrompt, tagsPrompt),
             user: buildUserPrompt(
                 existingRecipe,

@@ -194,6 +194,7 @@ export const escalateDifficulty = createStreamHandler({
         // 4. Call the model
         const stream = generateStream({
             model: { openai: "gpt-4.1" },
+            label: "recipe.escalate",
             system: buildSystemPrompt(
                 unitsPrompt,
                 tagsPrompt,

@@ -30,6 +30,12 @@ import { fetchEnrichedSuggestion } from "../../services";
 /**
  * Build system prompt with explicit ingredient constraints.
  * The LLM MUST use ONLY the provided ingredients.
+ *
+ * **The ingredient and blacklist blocks go LAST — see the note on
+ * `buildRecipeSystemPrompt` in `generate-recipe.ts`, which had the identical
+ * defect.** Both are per-request, and while they sat at the top they invalidated
+ * the cacheable prefix (units, tags, rules, output format) behind them on every
+ * promotion. Do not add anything volatile above this line.
  */
 const buildSystemPrompt = (
     units: string,
@@ -38,24 +44,6 @@ const buildSystemPrompt = (
     blacklist: string[]
 ) => `Generate exactly an authentic, real-world recipe based on the provided ingredients
 
-## CRITICAL: Ingredient Constraints
-You MUST use ONLY these ingredients (no additions, no substitutions):
-${ingredientNames.map((name) => `- ${name}`).join("\n")}
-
-When outputting ingredients, use the EXACT names from the list above.
-Every instruction step should reference only ingredients from this list.
-You MUST provide quantity and unit for EACH ingredient above.
-${
-    blacklist.length > 0
-        ? `
-The user cannot eat the following, and the ingredient list above has already been
-adapted around them. NEVER reintroduce one — not as an ingredient, not in an
-instruction step, not as a garnish, seasoning or serving suggestion, and not in a
-tip:
-${blacklist.map((name) => `- ${name}`).join("\n")}
-`
-        : ""
-}
 ## Rules
 - For each instruction step, include an "ingredients" array listing the ingredient names used in that specific step
 - Each step MUST be authentic
@@ -116,7 +104,26 @@ Note: The "comment" field is optional but should be included when the ingredient
 Then one line per instruction step (include ingredients array with names of ingredients used in this step):
 {"type":"instruction","text":"Step description without number prefix","durationSeconds":600,"temperatureC":180,"equipment":["oven"],"ingredients":["ingredient1","ingredient2"]}
 
-No markdown, no code blocks, just JSONL.`;
+No markdown, no code blocks, just JSONL.
+
+## CRITICAL: Ingredient Constraints
+You MUST use ONLY these ingredients (no additions, no substitutions):
+${ingredientNames.map((name) => `- ${name}`).join("\n")}
+
+When outputting ingredients, use the EXACT names from the list above.
+Every instruction step should reference only ingredients from this list.
+You MUST provide quantity and unit for EACH ingredient above.
+${
+    blacklist.length > 0
+        ? `
+The user cannot eat the following, and the ingredient list above has already been
+adapted around them. NEVER reintroduce one — not as an ingredient, not in an
+instruction step, not as a garnish, seasoning or serving suggestion, and not in a
+tip:
+${blacklist.map((name) => `- ${name}`).join("\n")}
+`
+        : ""
+}`;
 
 interface UserPromptInput {
     name: string;
@@ -282,6 +289,7 @@ export const promoteSuggestion = createStreamHandler({
         // 6. Call the model
         const stream = generateStream({
             model: { openai: "gpt-4.1" },
+            label: "suggestions.promote",
             system: buildSystemPrompt(
                 unitsPrompt,
                 tagsPrompt,

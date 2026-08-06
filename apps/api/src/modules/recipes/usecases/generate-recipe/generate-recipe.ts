@@ -33,20 +33,27 @@ import { persistRecipeWithIngredientIds } from "../../services/persist-recipe";
  * Exported for the model-migration eval harness, which must send byte-identical
  * prompts to every candidate — a copy in the eval would drift and invalidate the
  * comparison.
+ *
+ * **The ingredient block goes LAST, and that ordering is load-bearing.** Prompt
+ * caching — automatic on OpenAI, explicit on Anthropic, prefix-matched on both —
+ * keys on the longest identical *prefix*. `ingredientNames` is the one thing here
+ * that changes on every single request, so while it sat at line 3 it invalidated
+ * the whole prompt behind it: the units table, the tag list, the category guide,
+ * the tagging and duration rules and the entire output format, none of which ever
+ * change, were re-billed at full price on every recipe. This is the largest
+ * prompt in the app and it cached nothing.
+ *
+ * Moving the block to the end costs nothing semantically — it is the same
+ * instruction in the same message — and recency arguably helps adherence. But it
+ * is still a prompt change, so `step-structure.eval.ts` (which measures exactly
+ * this constraint: do steps reference only listed ingredients) needs re-running to
+ * re-baseline. Do not add anything volatile above this line.
  */
 export const buildRecipeSystemPrompt = (
     units: string,
     tags: string,
     ingredientNames: string[]
 ) => `Generate exactly an authentic, real-world recipe based on the provided ingredients
-
-## CRITICAL: Ingredient Constraints
-You MUST use ONLY these ingredients (no additions, no substitutions):
-${ingredientNames.map((name) => `- ${name}`).join("\n")}
-
-When outputting ingredients, use the EXACT names from the list above.
-Every instruction step should reference only ingredients from this list.
-You MUST provide quantity and unit for EACH ingredient above.
 
 ## Rules
 - For each instruction step, include an "ingredients" array listing the ingredient names used in that specific step
@@ -108,7 +115,15 @@ Note: The "name" must be the plain ingredient only — NEVER include parentheses
 Then one line per instruction step (include ingredients array with names of ingredients used in this step):
 {"type":"instruction","text":"Step description without number prefix","durationSeconds":600,"temperatureC":180,"equipment":["oven"],"ingredients":["ingredient1","ingredient2"]}
 
-No markdown, no code blocks, just JSONL.`;
+No markdown, no code blocks, just JSONL.
+
+## CRITICAL: Ingredient Constraints
+You MUST use ONLY these ingredients (no additions, no substitutions):
+${ingredientNames.map((name) => `- ${name}`).join("\n")}
+
+When outputting ingredients, use the EXACT names from the list above.
+Every instruction step should reference only ingredients from this list.
+You MUST provide quantity and unit for EACH ingredient above.`;
 
 /**
  * Build user prompt using suggestion data. Exported alongside
@@ -192,6 +207,7 @@ export const generateRecipe = createStreamHandler({
         // 6. Call the model
         const stream = generateStream({
             model: { openai: "gpt-4.1" },
+            label: "recipe.generate",
             system: buildRecipeSystemPrompt(unitsPrompt, tagsPrompt, ingredientNames),
             user: buildRecipeUserPrompt(
                 suggestion.name,

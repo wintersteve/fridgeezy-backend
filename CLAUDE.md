@@ -249,7 +249,15 @@ precedes `'_'`. Ingredients are **not** seeded by `db reset`; run
 
 Evals (`npx nx run @fridgeezy/api:<target>`): `eval`, `calibrate`,
 `calibrate-ingredients`, `calibrate-authenticity`, `eval-model-migration`,
-`check-streaming-conformance`.
+`check-streaming-conformance`, `check-batch-dedup`.
+
+`check-batch-dedup` is the odd one out and the cheapest thing here: no database,
+no LLM, no API key, runs in milliseconds. It drives the intra-batch dedup
+coordinator through the interleavings the real stream produces — including four
+identical dishes settling in reverse arrival order — because what it protects is
+a **concurrency** property, and one that holds "usually" is what put `Haemul
+Pajeon` next to `Pajeon` in the first place. Run it after touching
+`suggestion-batch.ts`.
 
 ### knip
 
@@ -483,6 +491,30 @@ This crosses many files; missing one silently drops the value. Touch:
 1. The LLM streams suggestions as JSONL, validated by `GenerateSuggestionResponseSchema`.
 2. `persistSuggestion()` matches ingredients and tags, then calls
    `suggestionsRepo.persistWithRelations()`.
+   `persistOrReuseSuggestion()` wraps it, in this order — **review, batch, database,
+   persist** — and the order is the design, not an accident:
+
+   1. **Review** (`verifySuggestionAuthenticity`) — one LLM call deciding
+      "is this food", "is this an attested dish" and "what is it called".
+      Unauthentic dishes drop here, before anything has been spent on them.
+   2. **Batch dedup** (`suggestion-batch.ts`) — in memory, against the other
+      suggestions of the *same request*, which are not in the database yet.
+   3. **Database dedup** — recipes first, then suggestions by exact canonical
+      name, then by signature similarity.
+   4. **Persist.**
+
+   Review runs **first**, and that is load-bearing. It used to be kicked off in
+   parallel and awaited last, so every dedup layer compared the name the
+   *generator* happened to pick and the canonical name arrived too late to help.
+   That is how the dev catalog collected `Tarte Tatin` + `Apple Tarte Tatin`
+   (cosine 0.856 — gray band, adjudicated apart) and `Pajeon` + `Haemul Pajeon`:
+   canonicalise first and both pairs collide on an exact name match, for free.
+   The reorder costs ~0.5s of overlap, entirely behind the provisional card, and
+   buys back a wasted embedding + three round trips on every dropped dish plus
+   the second embedding every renamed dish used to pay.
+
+   **Do not restore the parallel start.** The apparent latency win was paid for in
+   duplicate rows.
 3. Promotion: `fetchEnrichedSuggestion()` builds a `RecipeStreamInitialState`,
    which seeds the recipe-generation prompt.
 4. `createRecipeStream()` accumulates the streamed recipe;
@@ -511,6 +543,73 @@ and left alone on purpose. Don't "fix" one without the trigger next to it:
   `listCatalogDishes`): the generator free-texts them and `matchIngredients`
   reconciles after the fact. *Revisit when* the `[Ingredients]` logs show the
   gate rejecting or duplicating often.
+- **The authenticity gate judges the INGREDIENTS, not the name.** Its blind spot
+  was measured on 2026-08-05: a "Ceviche de Mariscos" whose ingredients were
+  lime, onion, chili, sweet potato and corn — ceviche's garnishes, no seafood —
+  scored `canonical` at **0.95**, *higher* than the same dish with its seafood
+  intact. It was reading the name. A dietary adaptation wearing a real dish's
+  name is the hardest input this gate sees, because the name, cuisine and tags
+  are all impeccable; that is what hides it. Hence the `adaptation` status and
+  the "name the defining ingredient, then find it in the list" test in the
+  prompt. `GUTTED_DISHES` in `dedup-authenticity.eval.ts` holds that exact row —
+  **keep it there.** Prompt edits that improve the common case have a habit of
+  restoring this one.
+- **A dietary restriction changes the DISH, never the recipe.** `BLACKLIST_RULE`
+  distinguishes the two: a blacklisted item gets swapped, a dietary restriction
+  means picking a dish that already complies. Strip seafood from a ceviche and
+  what is left is a plate of garnishes with a lie for a name.
+- **The catalog is FOOD, and the axis is "is it drunk", not "does it contain
+  alcohol".** Enforced in two places, deliberately: `FOOD_ONLY_RULE`
+  (`constraint-rules.ts`, shared by all three generators) stops most drinks being
+  generated, and the `not_food` status on the authenticity gate is what actually
+  keeps them out of the database. The prompt rule alone is not a gate — the
+  generator is the thing being policed — but without it every drink costs a
+  provisional card the client draws and then withdraws.
+
+  The distinction matters in both directions and getting it backwards breaks real
+  cooking: coq au vin, tiramisu and beer-battered fish are food; a virgin daiquiri
+  is not. Soup and consommé are food — eaten from a bowl, even when sipped.
+  `DRINKS` and `FOOD_WITH_DRINK` in `dedup-authenticity.eval.ts` pin both sides,
+  and the drink fixtures are scored on the **status**, not just on `authentic`: a
+  drink dropped as `invention` passes an authenticity-only assertion while
+  breaking the loop-break and the rejection frame below.
+
+  There is no drink slot in the taxonomy to fall back on — `course` is exactly
+  `{appetizer, main, side, dessert}` and no `dish_form` is a beverage — so a drink
+  that gets past the gate is not merely off-scope, it is stored **mislabelled**
+  and then feeds `listCatalogDishes` and the signature embeddings as a dish.
+- **An out-of-scope request is terminal, and says so.** The batch feed emits
+  `RejectedSuggestionRequestSchema` (`{rejected: true, reason: "not_food"}`) — a
+  frame with no `tempId`, so any client keying on `tempId` must branch on
+  `rejected` *before* it looks one up, or a lookup miss reads as "new card".
+  Withdrawal alone was not enough: four cards appearing and vanishing leaves a
+  blank feed that reads as a bug.
+
+  It also breaks the `MAX_PASSES` top-up. That loop exists to refill slots dedup
+  collapsed, where re-asking plausibly returns something new; "mojito" asked again
+  returns a mojito. Two separate signals feed it — the generator's own
+  `{"rejected":"not_food"}` JSONL line (cheap, before any card is drawn) and the
+  gate's `not_food` drop (after four have been drawn) — plus a `generatedAny`
+  check, because a pass that produced nothing has nothing to top up *from*.
+  Chat's single-suggestion path shares the gate but not the frame: it drops the
+  dish and lets the assistant explain itself in prose.
+- **A reused suggestion row is a card the feed may still have to withdraw.**
+  Dedup resolving to an existing row is a success, and the single-suggestion
+  endpoint returns it as-is. The batch feed must not: emitting it renders the
+  same dish twice under two `tempId`s with one `id`. `generate-suggestions-stream`
+  therefore suppresses a row this response already showed, or that the client
+  named in `request.exclude`. Keep that decision in the *caller* — reusing the
+  row is right, drawing it twice is not.
+- **`exclude` is the client's list, not the catalogue's.** `listCatalogDishes`
+  reads both `recipes` and `recipe_suggestions`; `request.exclude` carries what
+  the client has on screen from anywhere else, including earlier batches of the
+  same infinite-scroll feed. Both feed the same prompt block. The use case
+  spreads `body` rather than copying fields — a hand-written copy is what
+  silently dropped `exclude` for as long as the client had been sending it.
+- **A short batch tops itself up once** (`MAX_PASSES`), asking only for the
+  shortfall. Deliberately capped at one extra pass: a narrow filter deep into a
+  feed can genuinely be out of new dishes, and chasing four would just buy more
+  LLM calls to withdraw.
 - **No feature flags.** Dedup and authenticity ship straight to the live path;
   `LLM_PROVIDER` is the only runtime switch. The eval targets are the safety net
   instead. Build a flag scoped to a risky change, not as a standing fixture.

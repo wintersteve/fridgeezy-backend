@@ -11,6 +11,20 @@ export const GenerateSuggestionRequestSchema = z.object({
     cuisine: z.string().optional(),
     difficulty: z.enum(["easy", "medium", "hard"]).optional(),
     dietaryRestrictions: z.array(z.string()).optional(),
+    /**
+     * Dish names the client is ALREADY showing — earlier batches of an
+     * infinite-scroll feed, plus whatever came from the database — so the next
+     * batch stays novel.
+     *
+     * The client has always sent this (`useSuggestionFeed` builds it from every
+     * committed batch). It was simply not declared here, and a zod object strips
+     * what it does not declare, so it was discarded on arrival and every "generate
+     * more" page was free to re-propose page one's dishes. The backend's own
+     * `listCatalogDishes` does not cover it: that reads the catalogue, and the
+     * client's list also includes dishes shown from sources the backend cannot
+     * see.
+     */
+    exclude: z.array(z.string()).optional(),
     ingredients: z.array(z.string()).optional(),
 });
 
@@ -138,6 +152,38 @@ export const WithdrawnSuggestionSchema = z.object({
 });
 
 export type WithdrawnSuggestionDto = z.infer<typeof WithdrawnSuggestionSchema>;
+
+/**
+ * Terminal frame: the request itself is out of scope, so no card is coming.
+ *
+ * Distinct from a batch that merely came back empty. An empty batch means "we
+ * found nothing this time" and a retry is reasonable; this means "we will never
+ * answer this", and retrying spends money to withdraw the same cards again.
+ *
+ * It exists because withdrawal alone reads as a bug from the client's side. Ask
+ * for "mojito" and four cards appear and then vanish, leaving a blank feed with
+ * nothing to explain it — which is a worse experience than the drink recipes it
+ * replaced. The client needs something to render, and `reason` is what it
+ * renders.
+ *
+ * Carries no `tempId`: it is about the request, not about any one card. A client
+ * keying frames by `tempId` must branch on `rejected` BEFORE it looks one up.
+ */
+export const RejectedSuggestionRequestSchema = z.object({
+    rejected: z.literal(true),
+    /**
+     * Why, as a stable machine-readable code — never a sentence to display.
+     *
+     * The user-facing wording belongs in the client, where it can be localised
+     * and matched to the surface it appears on. A message chosen here would ship
+     * inside a packed tarball and could not be changed without rebuilding it.
+     */
+    reason: z.literal("not_food"),
+});
+
+export type RejectedSuggestionRequestDto = z.infer<
+    typeof RejectedSuggestionRequestSchema
+>;
 
 export type ProvisionalSuggestionDto = z.infer<typeof ProvisionalSuggestionSchema>;
 

@@ -37,11 +37,21 @@ are not documented by the CLI:
   `anthropic.*` IDs fail with *"Invocation … with on-demand throughput isn't
   supported"*. `aws bedrock list-foundation-models` returns the bare form, so it is
   not a source for this value.
-- **`max_tokens` is required**, where the OpenAI path sets no cap.
+- **`max_tokens` is required**, where the OpenAI path sets no cap — and it bounds
+  thinking *and* visible text together, so a budget sized for the answer alone
+  starts truncating the moment thinking is on.
 - **Do not disable thinking** on streaming paths: Claude can then leak
   `<thinking>` tags into the visible response, corrupting the JSONL line they land
   on — and a corrupt line is dropped silently, so it reads as missing content
   rather than an error.
+- **Omitting `thinking` is not the same as disabling it, and the models
+  disagree about which.** Sonnet 4.6 runs without thinking when the field is
+  absent; Sonnet 5 runs adaptive. An absent `effort` is `high` on both. So
+  `buildParams` sends both fields on every request from `DEFAULT_THINKING` /
+  `DEFAULT_EFFORT` — otherwise a model bump moves the bill (thinking bills as
+  output) and the truncation risk with nothing to flag it. There is no "send
+  neither" state: Haiku 4.5 and Sonnet 4.5 reject this pair, so switching to
+  either is a change that comes through `build-params.ts`.
 - Neither `get-foundation-model-availability` nor `list-foundation-models` is a
   usable access check; both reported models that then returned 403. Invoke and
   read the error.
@@ -51,7 +61,11 @@ are not documented by the CLI:
 | Env | Default | Notes |
 | --- | --- | --- |
 | `AWS_REGION` | `eu-central-1` | Serves the Claude family; matches the Lambda infra. |
-| `BEDROCK_MODEL_ID` | `eu.anthropic.claude-sonnet-4-6` | Inference profile ID. Sonnet 5 once access lands. |
+| `BEDROCK_MODEL_ID` | `eu.anthropic.claude-sonnet-4-6` | Inference profile ID. Sonnet 5 once access lands. Check `DEFAULT_THINKING`/`DEFAULT_EFFORT` support before changing this. |
+
+Output caps are per call site, not per env. `BEDROCK_MAX_TOKENS` (32k) is the
+**streaming** default; every one-shot caller names its own `TokenLimit.bedrock`
+so a short verdict can't inherit a recipe-sized budget.
 
 Auth comes from the AWS credential chain (IAM role in Lambda, profile or env
 locally) — there is no API key to validate at import, so a missing credential

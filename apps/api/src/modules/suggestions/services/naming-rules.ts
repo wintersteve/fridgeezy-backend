@@ -33,6 +33,7 @@ export const DISH_NAME_RULE = `name — the name an English speaker would unders
   - A cuisine filter does NOT change this rule. Being asked for Vietnamese dishes is not a reason to headline "Phở Bò" over "Beef Pho", or to keep diacritics an English menu drops.
   - The English name must still read as a NAME — as short as a menu heading, usually two to four words. Never a recipe summary: "Vietnamese Sizzling Pancake", NOT "Rice Flour Pancake with Pork, Shrimp and Bean Sprouts".
   - NEVER an invented name, and never one that lists its own ingredients: NOT "Carbonara with Mushrooms", NOT "Indian Tomato Butter Chicken". A dish that only exists as such a combination is not a dish — pick a different one.
+  - DROP A QUALIFIER THAT ADDS NOTHING. If the qualifier names something the dish ALREADY IS by default, it is not part of the name: "Apple Tarte Tatin" -> "Tarte Tatin" (tarte tatin is apple), "Cucumber Sunomono" -> "Sunomono", "Beef Bourguignon with Red Wine" -> "Beef Bourguignon". THE TEST: would someone ordering the dish without the qualifier be served the same thing? If yes, drop it. KEEP a qualifier that marks a genuinely different dish — one whose defining ingredients or technique change: "Hiroshima-style Okonomiyaki", "Lao Green Papaya Salad", "Seafood Pajeon". This is the single biggest source of duplicate rows: the base dish and the redundantly-qualified one are stored as two, and users are shown the same dish twice.
   - No parentheses and no second name here. The native spelling goes in "name_alt"; the gloss goes in "description".`;
 
 /**

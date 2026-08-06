@@ -1,6 +1,7 @@
-import { supabaseAdmin } from "@fridgeezy/supabase";
+import { generateEmbedding } from "@fridgeezy/openai";
+import { SuggestionsRepository, supabaseAdmin } from "@fridgeezy/supabase";
 
-import { searchRecipes } from "../../recipes/services/search-recipes";
+import { searchRecipesByEmbedding } from "../../recipes/services/search-recipes";
 
 /**
  * Deliberately loose — this is a recall net, not an identity test. Anything it
@@ -13,17 +14,22 @@ const CATALOG_MATCH_LIMIT = 25;
 /**
  * Catalogue size at which naming every dish stops being the better trade.
  *
- * Measured at ~3.4 prompt tokens per dish name, so 300 is roughly 1k tokens —
- * cheap against the cost of the model spending a slot on a dish the user
- * already has. Above this the vector search earns its latency back.
+ * Measured at ~3.4 prompt tokens per dish name, so this budget is roughly 1.4k
+ * tokens — about $0.003 a batch on gpt-4.1, against the cost of the model
+ * spending a slot on a dish the user already has. Above this the vector search
+ * earns its latency back.
+ *
+ * Raised from 300 when suggestions joined recipes in this list: the dev
+ * catalogue is 46 recipes and 242 suggestions, so the old ceiling would have
+ * tipped straight into the lossy vector path the moment both were counted.
  */
-const FULL_LIST_MAX = 300;
+const FULL_LIST_MAX = 400;
 
 /**
  * How long the full catalogue list is reused for.
  *
  * Safe to cache at all because, unlike the vector search, this list does not
- * depend on the query. Stale by up to a minute only means a brand-new recipe is
+ * depend on the query. Stale by up to a minute only means a brand-new dish is
  * briefly absent from the exclusions — the dedup guard still catches it, which
  * is exactly the fallback this whole function is an optimisation over.
  */
@@ -34,6 +40,13 @@ let cache: { names: string[]; at: number } | null = null;
 /**
  * Every dish name in the catalogue, or `null` if there are too many to name.
  *
+ * **Both tables, not just `recipes`.** A dish exists as a suggestion long before
+ * anyone promotes it — 242 suggestions against 46 recipes in the dev catalogue —
+ * so listing only recipes told the generator about a sixth of what the user had
+ * already been shown, and it re-proposed the rest. That is how `Arancini`,
+ * `Arancini al Burro` and `Arancini di Riso al Ragù` all ended up stored: three
+ * separate batches, days apart, none of which knew the earlier ones existed.
+ *
  * Fetches one past the limit so a single query answers both "what are they" and
  * "are there too many", rather than paying for a separate count.
  */
@@ -42,29 +55,72 @@ async function allCatalogDishes(): Promise<string[] | null> {
         return cache.names;
     }
 
-    const { data, error } = await supabaseAdmin
-        .from("recipes")
-        .select("name")
-        .limit(FULL_LIST_MAX + 1);
+    const [recipes, suggestions] = await Promise.all([
+        supabaseAdmin.from("recipes").select("name").limit(FULL_LIST_MAX + 1),
+        supabaseAdmin
+            .from("recipe_suggestions")
+            .select("name")
+            .limit(FULL_LIST_MAX + 1),
+    ]);
 
-    if (error || !data) {
-        console.error("[Suggestions] Catalog name fetch failed:", error);
+    if (recipes.error || !recipes.data || suggestions.error || !suggestions.data) {
+        console.error(
+            "[Suggestions] Catalog name fetch failed:",
+            recipes.error ?? suggestions.error
+        );
         return null;
     }
 
-    if (data.length > FULL_LIST_MAX) {
+    const names = [...recipes.data, ...suggestions.data]
+        .map((row) => row.name)
+        .filter(Boolean);
+
+    // Deduplicated case-insensitively: a promoted dish can appear in both tables
+    // for a while, and paying prompt tokens to name it twice teaches the model
+    // nothing.
+    const unique = [...new Map(names.map((n) => [n.toLowerCase(), n])).values()];
+
+    if (unique.length > FULL_LIST_MAX) {
         return null;
     }
 
-    const names = data.map((row) => row.name).filter(Boolean);
-    cache = { names, at: Date.now() };
+    cache = { names: unique, at: Date.now() };
 
-    return names;
+    return unique;
 }
 
 /**
- * The dishes already in the recipe catalog that the generator should not propose
- * again.
+ * Nearest existing SUGGESTIONS to the query, for the oversized-catalogue path.
+ *
+ * The suggestion table has no `search_*` RPC of its own that takes a query
+ * string, so the query is embedded once here and the same vector drives both
+ * searches — one embedding, two lookups.
+ */
+async function searchCatalog(query: string): Promise<string[]> {
+    const embedding = await generateEmbedding(query);
+
+    const [recipes, suggestions] = await Promise.all([
+        searchRecipesByEmbedding(
+            embedding,
+            CATALOG_MATCH_THRESHOLD,
+            CATALOG_MATCH_LIMIT
+        ),
+        new SuggestionsRepository().searchSimilar(
+            embedding,
+            CATALOG_MATCH_THRESHOLD,
+            CATALOG_MATCH_LIMIT
+        ),
+    ]);
+
+    const suggestionNames = suggestions.success
+        ? suggestions.value.map((match) => match.name)
+        : [];
+
+    return [...recipes.map((match) => match.name), ...suggestionNames];
+}
+
+/**
+ * The dishes already in the catalog that the generator should not propose again.
  *
  * Stopping a duplicate AFTER generation (the dedup guard) is correct but
  * wasteful: the model burned a slot on a dish the user already has, and the
@@ -96,24 +152,33 @@ export async function listCatalogDishes(query: string): Promise<string[]> {
             return all;
         }
 
-        const matches = await searchRecipes(
-            query,
-            CATALOG_MATCH_THRESHOLD,
-            CATALOG_MATCH_LIMIT
-        );
-
-        return matches.map((match) => match.name);
+        return await searchCatalog(query);
     } catch (error) {
         console.error("[Suggestions] Catalog exclusion lookup failed:", error);
         return [];
     }
 }
 
-/** Render the exclusion list as a user-prompt block (empty when there is none). */
+/**
+ * Render the exclusion list as a user-prompt block (empty when there is none).
+ *
+ * Deduplicated case-insensitively because the caller merges several sources —
+ * the catalogue, the client's own "already on screen" list, and the dishes an
+ * earlier pass of this same request already emitted.
+ */
 export function buildExistingDishesBlock(names: string[]): string {
-    if (names.length === 0) {
+    const unique = [
+        ...new Map(
+            names
+                .map((name) => name.trim())
+                .filter(Boolean)
+                .map((name) => [name.toLowerCase(), name])
+        ).values(),
+    ];
+
+    if (unique.length === 0) {
         return "";
     }
 
-    return `Already in the catalog (do NOT suggest these): ${names.join(", ")}`;
+    return `Already in the catalog (do NOT suggest these, nor a variation, translation or spelling variant of one): ${unique.join(", ")}`;
 }

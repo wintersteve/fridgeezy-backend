@@ -9,7 +9,11 @@ import {
 } from "@fridgeezy/schemas";
 
 import { buildSuggestionsUserPrompt } from "./build-suggestions-user-prompt";
-import { ADAPTED_FOR_RULE, BLACKLIST_RULE } from "./constraint-rules";
+import {
+    ADAPTED_FOR_RULE,
+    BLACKLIST_RULE,
+    FOOD_ONLY_RULE,
+} from "./constraint-rules";
 import { extractStableJsonFields } from "./extract-stable-json-fields";
 import {
     DISH_GLOSS_RULE,
@@ -37,7 +41,8 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 - AUTHENTICITY IS PARAMOUNT: Only suggest a real, well-documented recipe that exists in a culinary tradition.
 - The recipe MUST be a genuine, documented dish — never an invented or descriptive name (e.g., NOT "Indian Tomato Butter Chicken"). Do NOT add alternative names in parenthesis.
 - Include ALL essential ingredients that define the dish. Never omit core ingredients that make the recipe authentic.
-- If the request cannot be satisfied authentically under these constraints, pick the closest authentic dish that does satisfy them.
+- ${FOOD_ONLY_RULE}
+- If the request cannot be satisfied authentically under these constraints, pick the closest authentic dish that does satisfy them. The one exception is a request for a DRINK: there, return nothing rather than reaching for the closest food.
 
 ## Constraints
 ${BLACKLIST_RULE}
@@ -193,6 +198,7 @@ export async function streamSingleSuggestion(
 
     const stream = generateStream({
         model: { openai: "gpt-4.1" },
+        label: "suggestions.single",
         system: SYSTEM_PROMPT,
         user: buildSuggestionsUserPrompt(request),
         provider,

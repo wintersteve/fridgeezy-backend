@@ -153,6 +153,7 @@ export async function* generateSubstitutesStream(
 
     const stream = generateStream({
         model: { openai: "gpt-4.1" },
+        label: "substitutes.generate",
         system: SUBSTITUTES_SYSTEM_PROMPT,
         // Deduped list, so the model is asked for exactly the lines this stream
         // will emit.

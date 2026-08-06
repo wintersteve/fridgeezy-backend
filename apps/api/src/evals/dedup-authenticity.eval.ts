@@ -16,7 +16,14 @@ config();
  */
 interface DishFixture {
     name: string;
-    nameAlt: string;
+    /**
+     * Nullable, matching `name_alt` on the real DTO. Every fixture predating the
+     * scope checks happened to carry an alternate name, which made `string` look
+     * sufficient — but a Mojito has no second name, and inventing an empty
+     * string to satisfy the type would put a stray blank line in the descriptor
+     * the model actually reads.
+     */
+    nameAlt: string | null;
     tags: string[];
     ingredients: string[];
 }
@@ -92,6 +99,59 @@ const INVENTION_DISHES: DishFixture[] = [
     { name: "Zorblatt Crunch", nameAlt: "Zorblatt Crunch", tags: ["fusion", "snack", "dish"], ingredients: ["moon dust", "glitter", "cardboard"] },
 ];
 
+/**
+ * Real dishes with their DEFINING ingredient stripped out — almost always a
+ * dietary adaptation still wearing the original's name. Should be DROPPED.
+ *
+ * The first fixture is verbatim the row that reached the live catalog on
+ * 2026-08-05: the gate rated it "canonical" at 0.95 confidence, HIGHER than the
+ * same dish with its seafood intact, because it was reading the name and not the
+ * ingredient list. These are harder than the inventions above — the name, cuisine
+ * and tags are all impeccable, which is exactly what hides them.
+ */
+const GUTTED_DISHES: DishFixture[] = [
+    { name: "Peruvian Seafood Ceviche", nameAlt: "Ceviche de Mariscos", tags: ["peruvian", "appetizer", "dish"], ingredients: ["cilantro", "corn", "lime", "onion", "red chili", "salt", "sweet potato"] },
+    { name: "Spaghetti alla Carbonara", nameAlt: "Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "olive oil", "nutritional yeast", "black pepper", "zucchini"] },
+    { name: "Green Papaya Salad", nameAlt: "Som Tam", tags: ["thai", "salad", "dish"], ingredients: ["cabbage", "carrot", "lime", "chili", "peanut", "soy sauce"] },
+];
+
+/**
+ * Drinks. Should be DROPPED as `not_food`, however real they are.
+ *
+ * Structurally the same trap as GUTTED_DISHES and the opposite failure: there,
+ * an impeccable name hid a broken ingredient list; here, the name AND the
+ * ingredients are both perfectly correct, and the item is still out of scope.
+ * A gate that only asks "is this attested" rates a Mojito canonical at high
+ * confidence and is right to — which is why the food test has to run before the
+ * authenticity one rather than alongside it.
+ *
+ * Alcohol is deliberately not the axis. Half these fixtures are alcohol-free,
+ * because the rule is "is its purpose to be drunk" and a virgin daiquiri fails
+ * it exactly as hard as the original.
+ */
+const DRINKS: DishFixture[] = [
+    { name: "Mojito", nameAlt: null, tags: ["cuban", "dessert", "dish"], ingredients: ["white rum", "lime", "mint", "sugar", "soda water"] },
+    { name: "Virgin Piña Colada", nameAlt: null, tags: ["caribbean", "dessert", "dish"], ingredients: ["pineapple juice", "coconut cream", "ice"] },
+    { name: "Mango Lassi", nameAlt: null, tags: ["indian", "dessert", "dish"], ingredients: ["mango", "yogurt", "sugar", "cardamom"] },
+    { name: "Horchata", nameAlt: null, tags: ["mexican", "dessert", "dish"], ingredients: ["rice", "cinnamon", "sugar", "milk"] },
+];
+
+/**
+ * Food that CONTAINS a drink. Should PASS.
+ *
+ * The false-positive half of the same rule, and the reason it is worth its own
+ * fixture set: a gate told to reject drinks will happily reject anything with
+ * wine in the ingredient list, which removes a large slice of European cooking.
+ * Gazpacho and consommé are here because they are the genuinely ambiguous
+ * end — poured, sometimes drunk from a cup, and still food.
+ */
+const FOOD_WITH_DRINK: DishFixture[] = [
+    { name: "Coq au Vin", nameAlt: null, tags: ["french", "main", "stew"], ingredients: ["chicken", "red wine", "bacon", "mushroom", "onion", "thyme"] },
+    { name: "Tiramisu", nameAlt: null, tags: ["italian", "dessert", "dish"], ingredients: ["mascarpone", "espresso", "marsala", "ladyfinger", "cocoa", "egg"] },
+    { name: "Gazpacho", nameAlt: null, tags: ["spanish", "appetizer", "soup"], ingredients: ["tomato", "cucumber", "bell pepper", "garlic", "olive oil", "bread"] },
+    { name: "Beef Consommé", nameAlt: null, tags: ["french", "appetizer", "soup"], ingredients: ["beef", "egg white", "carrot", "celery", "leek"] },
+];
+
 async function main() {
     let pass = 0;
     let fail = 0;
@@ -128,6 +188,29 @@ async function main() {
     console.log("\nAuthenticity — should be DROPPED:");
     for (const d of INVENTION_DISHES) {
         check(d.name, (await verifySuggestionAuthenticity(toDto(d))).authentic, false);
+    }
+
+    console.log("\nAuthenticity — defining ingredient stripped, should be DROPPED:");
+    for (const d of GUTTED_DISHES) {
+        const review = await verifySuggestionAuthenticity(toDto(d));
+        check(`${d.name} [${review.status}]`, review.authentic, false);
+    }
+
+    // Scored on the STATUS, not just on `authentic`. A drink dropped as
+    // "invention" would pass an authenticity-only assertion while telling the
+    // caller the wrong thing: `not_food` is what breaks the top-up loop and
+    // sends the terminal rejection frame, so a right answer for the wrong
+    // reason is a silent regression of the feature this fixture guards.
+    console.log("\nScope — drinks, should be DROPPED as not_food:");
+    for (const d of DRINKS) {
+        const review = await verifySuggestionAuthenticity(toDto(d));
+        check(`${d.name} [${review.status}]`, review.status === "not_food", true);
+    }
+
+    console.log("\nScope — food containing a drink, should PASS:");
+    for (const d of FOOD_WITH_DRINK) {
+        const review = await verifySuggestionAuthenticity(toDto(d));
+        check(`${d.name} [${review.status}]`, review.authentic, true);
     }
 
     console.log("\n" + "=".repeat(40));

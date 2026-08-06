@@ -8,6 +8,7 @@ import {
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { z } from "zod/v4";
 
+import { FOOD_ONLY_RULE } from "../../suggestions/services/constraint-rules";
 import {
     DISH_GLOSS_RULE,
     DISH_NAME_ALT_RULE,
@@ -37,6 +38,8 @@ const SYSTEM_PROMPT = `You are a recipe composition assistant. Generate compleme
 ## Rules
 - Suggest authentic, real-world recipes that complement the base recipe
 - Each recipe MUST be a real dish (not invented, must be authentic), named by the rule under "Output Format" below
+- ${FOOD_ONLY_RULE}
+  - This applies to PAIRINGS too. A wine or cocktail that would go well with the base recipe is still a drink, and a menu course here is always something eaten.
 - Do NOT suggest recipes of excluded course types
 - If cuisine matching is requested, suggest recipes from the same cuisine
 - If difficulty matching is requested, suggest recipes of similar difficulty
@@ -193,6 +196,7 @@ export async function* generateComposeRecipes(
 
     const stream = generateStream({
         model: { openai: "gpt-4.1" },
+        label: "recipe.compose",
         system: SYSTEM_PROMPT,
         user: buildUserPrompt(
             baseRecipe,

@@ -20,10 +20,22 @@ export async function adjudicateSameDish(
     try {
         const { text: content } = await generateCompletion({
             model: { openai: "gpt-4o-mini" },
+            label: "adjudicate.dish",
             system: SYSTEM_PROMPT,
             user: `DISH A:\n${dishA}\n\nDISH B:\n${dishB}`,
             json: true,
-            maxTokens: { openai: 10 },
+            // The two numbers are not conversions of each other. 10 is ample for
+            // `{"same":true}` from a model that answers immediately; a thinking
+            // model spends that before emitting any visible text, and Anthropic
+            // rejects a cap that doesn't clear the thinking budget. 1024 clears
+            // a low-effort pass on a one-bit judgement with room to spare, and is
+            // 32x tighter than the streaming fallback this used to inherit.
+            maxTokens: { openai: 10, bedrock: 1024 },
+            // Cheapest setting that still leaves thinking on: a leaked
+            // `<thinking>` tag makes this unparseable, and the catch below fails
+            // closed, so a leak here quietly stops merging dishes that should
+            // merge. Adaptive stays; only the depth comes down.
+            effort: "low",
         });
 
         if (!content) return false;

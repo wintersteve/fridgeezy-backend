@@ -13,6 +13,35 @@ These are two independent migrations bundled into one effort:
 Do them as separate, independently-shippable phases — don't couple a model swap
 to a hosting swap in the same PR, or a regression becomes impossible to bisect.
 
+## Status as of 2026-08-06 — read this before the phases
+
+The two halves are in very different places, and the file's structure hides it:
+
+- **Hosting is DONE and deployed.** Phase 3 is complete and verified against real
+  AWS. Lambda is what serves traffic today. Nothing below reopens that, and
+  nothing about the Bedrock decision changes it — they are independent, which is
+  the point of the split above.
+- **Inference is BUILT but PARKED.** Phase 1 ported all 11 text call sites; no
+  module in `apps/api` imports a provider SDK. `LLM_PROVIDER` still defaults to
+  `openai`, so **no traffic has ever run on Bedrock**, and none can: the account's
+  Anthropic entitlement gate blocks every model (see Phase 0's last checkbox).
+
+**The open question is no longer "can we build it" but "should we switch", and
+that is deliberately being answered with measurements rather than estimates.**
+What a cutover buys is operational — IAM instead of an API key, one AWS bill,
+in-region inference — against a token bill estimated at ~2x, recoverable toward
+parity with prompt caching and per-call-site model choice, and a full prompt
+re-validation on a set of prompts tuned against `gpt-4.1`/`gpt-4o`. The
+instrumentation to replace those estimates with real numbers landed 2026-08-06
+(Phase 5, first checkbox); the comparison itself still waits on the console gate.
+
+**Do not delete `libs/bedrock` while parked.** It costs nothing to carry — it has
+no runtime path — and it holds account-specific findings that exist nowhere else:
+the inference-profile ID form, the `AnthropicBedrockMantle` entitlement gap, the
+`data:`-prefix trap, and the fact that neither `list-foundation-models` nor
+`get-foundation-model-availability` is a usable access check. It is also the
+difference between a `gpt-4.1` deprecation being a config change and a project.
+
 ---
 
 ## ⚠️ Read first — known risks this migration takes on
@@ -219,10 +248,27 @@ change is validated in isolation before touching hosting.
       spends that before emitting any visible text, and Anthropic rejects a cap
       that doesn't clear the thinking budget. `generateCompletion` therefore takes
       a `TokenLimit` (`{ openai?, bedrock? }`) rather than one number, the same way
-      `ModelSelection` already handles model IDs. **The Bedrock caps are unset and
-      unvalidated** — they fall back to `BEDROCK_MAX_TOKENS` (16k), which is far
-      too generous for a 10-token verdict and needs a real number once access
-      lands.
+      `ModelSelection` already handles model IDs.
+      **The Bedrock caps are now set** (2026-08-06): 1024 on the two short
+      adjudicators, 2048 on authenticity, 8000 on extraction. Still unvalidated
+      against a live model — the numbers clear a low/medium-effort thinking pass
+      by construction, not by measurement — but they are no longer inheriting the
+      streaming fallback, which would have allowed 32k billed output tokens on a
+      `{"same":true}` verdict.
+- [x] **Send an explicit thinking mode on every Bedrock request** (2026-08-06).
+      `buildParams` previously omitted `thinking` and `output_config` unless a
+      call site passed them. Omission is not "off": Sonnet 4.6 reads an absent
+      `thinking` as no thinking, Sonnet 5 reads it as adaptive, and an absent
+      `effort` is `high` on both. So a `BEDROCK_MODEL_ID` bump would have changed
+      the bill and the truncation risk with nothing to flag it — thinking bills as
+      output and shares `max_tokens` with the visible text. Both fields are now
+      sent unconditionally from `DEFAULT_THINKING`/`DEFAULT_EFFORT`
+      (adaptive/medium, matching the eval's leading candidate), and
+      `BEDROCK_MAX_TOKENS` went 16k → 32k because the old figure budgeted for a
+      full recipe JSONL *before* thinking took a share of it.
+      **There is deliberately no "omit both" state.** Haiku 4.5 and Sonnet 4.5
+      reject this pair, so pointing `BEDROCK_MODEL_ID` at either has to come
+      through `build-params.ts` rather than silently half-working.
       **The `client?: OpenAI` seam is gone**, replaced by an optional `provider`.
       It could only ever inject an OpenAI client, so it could not express the A/B
       it existed for; nothing passed one. That also resolves the previous
@@ -353,6 +399,21 @@ Still open on hosting, neither blocking:
 
 ## Phase 4 — Embeddings migration (corpus-wide — easy to miss)
 
+> **Recommended to CUT, 2026-08-06.** This is the weakest item on the list and
+> the most expensive. Phase 0 already established that matching dimensions
+> (Cohere Embed v4 at 1536) avoids the *schema* change but **not the re-embed** —
+> the vector spaces differ, so the whole corpus goes back through the model, and
+> the 10 `vector(3072)` columns need migrating either way. Against that:
+> embeddings are the one place OpenAI is meaningfully cheaper, the corpus is small
+> enough that either bill is trivial, and stored vectors must be built by the same
+> code as query vectors — so `buildSuggestionSignature` and `embed-suggestions`
+> have to move together or similarity silently degrades rather than erroring.
+>
+> The only benefit is dropping the OpenAI key, and **chat tool calling still holds
+> it anyway** (`create-chat-completion.ts` imports the OpenAI client directly).
+> Leave embeddings on OpenAI; revisit only if that key becomes the last thing
+> standing.
+
 Switching off `text-embedding-3-small` changes vector dimensions, so this is a
 data migration, not just a code edit.
 
@@ -368,10 +429,54 @@ data migration, not just a code edit.
 
 ## Phase 5 — Observability, cost, cutover
 
-- [ ] Add per-request token + latency logging (Bedrock usage) to track cost and
-      the idle-wait profile on Lambda.
+- [x] Add per-request token + latency logging (2026-08-06). `reportUsage` in
+      `libs/llm` emits one `[LLM] {...}` JSON line per model call, from *both*
+      providers and both entry points (`generateStream`, `generateCompletion`),
+      carrying `provider`, `model`, `label`, `inputTokens`, `cachedInputTokens`,
+      `outputTokens`, `latencyMs` and `streamed`.
+      **It lives in the facade, not at the call sites.** That is what makes the
+      two providers comparable at all — the counts are normalised to one shape
+      regardless of which SDK produced them (OpenAI reports
+      `prompt_tokens`/`completion_tokens` with hits folded into the prompt total;
+      Anthropic reports `input_tokens`/`output_tokens` with the cache split
+      disjoint), and a new call site is instrumented by construction.
+      **`label` is set at all 12 call sites and matters more under Bedrock**,
+      where every path runs the same `BEDROCK_MODEL_ID` and the model field stops
+      distinguishing them.
+      Two provider-specific details worth keeping: OpenAI streaming reports no
+      usage at all without `stream_options: { include_usage: true }`, and it
+      arrives as a final chunk with an EMPTY `choices` array — safe only because
+      `processJsonlStream` reads `choices[0]?.delta?.content` and skips falsy
+      content. On Bedrock the counts arrive split across `message_start` (input)
+      and the final `message_delta` (output), so `toCompletionChunks` accumulates
+      and fires `onUsage` once at the end.
+      Query it with CloudWatch Logs Insights:
+      `filter @message like /\[LLM\]/ | stats sum(inputTokens), sum(cachedInputTokens), sum(outputTokens), avg(latencyMs) by label, provider`
+- [x] **Fix the cache-hostile prompts** (2026-08-06). Prompt caching is a *prefix*
+      match on both providers — automatic on OpenAI, explicit `cache_control` on
+      Anthropic — so anything volatile placed early invalidates everything behind
+      it, silently and at full price.
+      `buildRecipeSystemPrompt` (`generate-recipe.ts`) and `buildSystemPrompt`
+      (`promote.ts`) both interpolated `ingredientNames` — the one thing that
+      changes on every request — at **line 3**, ahead of the units table, tag
+      list, category guide, tagging/duration rules and the whole output format.
+      The two largest prompts in the app cached nothing. Both blocks moved to the
+      end; verified as a pure reorder (no prompt line added or removed).
+      Measured on `gpt-4o-mini` with a 3.8k-token prefix: first call 3832 input /
+      0 cached, identical repeat **120 input / 3712 cached** — 97% of the prompt
+      off full rate, on the streamed path too.
+      **`step-structure.eval.ts` needs re-running to re-baseline** — it measures
+      exactly the constraint that moved.
+      Deliberately NOT changed: `buildSuggestionsSystemPrompt(count)` interpolates
+      `count` in line 1, but the main pass always passes `SUGGESTIONS_PER_BATCH`,
+      so ~90% of calls share a prefix and only the rare top-up diverges. Not worth
+      a prompt change. `escalate-difficulty`'s two difficulty strings are likewise
+      low-cardinality (at most 6 prefixes) and cache per-combination.
 - [ ] Set a cost baseline: compare Bedrock token spend + Lambda compute vs the
-      current OpenAI + Gemini bill on representative volume.
+      current OpenAI + Gemini bill on representative volume. **The logging above
+      is the input to this** — read real `[LLM]` totals per `label` rather than
+      estimating from prompt length, and note that Bedrock is priced separately
+      from the first-party Anthropic API.
 - [ ] Roll out behind the provider flag: shadow / percentage cutover, watch eval
       scores and error rates, keep OpenAI as instant rollback.
 - [ ] Decommission OpenAI paths once Bedrock is stable and validated.
@@ -386,6 +491,101 @@ data migration, not just a code edit.
 - Moving images off Gemini (keep unless a reason emerges — see Phase 0).
 - Any prompt rewrite beyond what evals prove is needed for the model swap.
 - Multi-region / HA — single region first.
+- **Bedrock Guardrails.** Evaluated 2026-08-06, not worth adopting here, and not
+  a reason to move inference either way — it has a standalone `ApplyGuardrail`
+  API, so it is callable against arbitrary text without invoking a Bedrock model.
+  Feature by feature: contextual grounding is strictly worse than what
+  `verifySuggestionAuthenticity` already does (a generic grounding check would
+  never catch a ceviche with no seafood); PII redaction has no subject matter
+  here; denied-topics would stop `/rest/chat` being used as a free
+  general-purpose LLM, but the actual fix for that is **auth on the Function
+  URL** — already open under Phase 3 — and a content filter treats the symptom
+  while still billing for every filtered request; image content filtering is
+  already handled at the model layer by both providers.
+- Bedrock Knowledge Bases, Agents, and Model Evaluation. Each has a
+  purpose-built in-repo equivalent that fits better: pgvector with custom text
+  builders, `usecases/`, and the eval harnesses respectively.
+
+### Alternative NOT evaluated when this file was written
+
+**Claude Platform on AWS** — Anthropic-operated rather than partner-operated,
+reached through AWS infrastructure with SigV4 auth, IAM access control and AWS
+Marketplace billing, at same-day feature parity with the first-party API. Bare
+model IDs (no `anthropic.` prefix, no inference profiles), an `AnthropicAWS`
+client, and a required `workspace_id`.
+
+Worth probing before committing to Bedrock, because it delivers the three things
+actually motivating this migration — IAM instead of an API key, one AWS bill,
+in-region inference — **without** Bedrock's feature subset, which drops Message
+Batches, the Files and Models APIs, and every server-side tool. `libs/bedrock` is
+one client construction and two response transforms, and `libs/llm` already
+resolves providers by name, so evaluating it is roughly a day. It carries its own
+entitlement question, which may or may not be easier than the one currently
+blocking Bedrock.
+
+---
+
+# Scope: food only — done 2026-08-06
+
+Drinks are out of scope and are now gated. Two enforcement points, deliberately:
+`FOOD_ONLY_RULE` (`constraint-rules.ts`, shared by the batch, single and compose
+generators) as the cheap first line, and a `not_food` status on
+`verifySuggestionAuthenticity` as the actual gate. Covered by `DRINKS` and
+`FOOD_WITH_DRINK` in `dedup-authenticity.eval.ts` — 24/24 passing, with the
+pre-existing `GUTTED_DISHES` and invention fixtures unregressed.
+
+**The axis is "is its purpose to be drunk", not "does it contain alcohol",** and
+that was a deliberate call rather than a convenient one. Alcohol as an *ingredient*
+is fine and must stay fine — coq au vin, tiramisu, beer-battered fish — while a
+virgin daiquiri is as out of scope as the original. Cutting on alcohol instead
+would have stripped wine and beer out of a large slice of European cooking while
+still admitting smoothies.
+
+- [x] **Client copy for the rejection** (2026-08-06). `useSuggestionFeed` returns
+      `rejectedReason: "not_food" | null`, `generateMore` is a no-op while it is
+      set, and `search-screen.tsx` derives a third empty state from it
+      (`browseEmpty`) — "No drinks, just food", with a `glass-cocktail-off` glyph
+      tinted `onBackgroundVariant` rather than `error`, because nothing went
+      wrong. Verified on the simulator by forcing the branch; the copy wraps over
+      three lines with no clipping.
+      **The wording lives in the client and the backend sends a code, never a
+      sentence.** There is no i18n library in the client today, so "so it can be
+      localised" is aspirational — the live reason is that copy in a packed
+      tarball cannot be changed without rebuilding it.
+
+Still open, both product decisions rather than bugs:
+
+- [ ] **Give the feed a free-text path, or accept the state is defensive.** The
+      empty state above is currently **unreachable on that screen**: the AI feed
+      is driven entirely by structured filters (fridge ingredients, course,
+      cuisine, difficulty), and typing tears it down in favour of a catalogue-only
+      `ilike` search (`aiEnabled = shouldUseAI && !isSearching`). A drinks-only
+      request cannot be expressed there. The user-facing path that CAN ask for a
+      mojito is **chat**, which drops the dish and lets the assistant explain
+      itself in prose. So the value delivered today is the database protection —
+      no drinks persisted or mislabelled, on every path — and the empty state is
+      there for the day free text reaches the feed.
+- [ ] **Decide whether drinks ever get a home.** If smoothies and lassi are wanted
+      later, the taxonomy needs a `drink` course tag and a `dish_form` value
+      before the gate can be narrowed to alcohol — a migration plus a seed change,
+      not a prompt edit. Until then "anything drunk" is the honest line, because
+      the tag vocabulary cannot represent a beverage.
+
+## App Store note
+
+Alcohol does not block release — the relevant rule prohibits *encouraging
+excessive consumption*, not recipes containing it — but it does move the age
+rating, and **generated content has to be rated for what it CAN produce, not what
+it was designed to produce**. Before this gate a reviewer could type "mojito" and
+get a cocktail, which makes the app one that teaches you to make alcoholic drinks
+regardless of intent. The gate is what makes "this app does not produce cocktail
+recipes" a property of the system rather than a hope about the model.
+
+Note that food recipes still reference alcohol as an ingredient, so the mild tier
+applies either way; rejecting drinks does not get you to "no alcohol references"
+and chasing that is not worth breaking real dishes for. **Walk the current
+App Store Connect questionnaire before declaring a rating** — the tiers were
+revised recently and under-declaring is enforced after the fact.
 
 ---
 

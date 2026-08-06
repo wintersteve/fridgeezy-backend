@@ -97,10 +97,17 @@ export async function adjudicateIngredient(
     try {
         const { text: content } = await generateCompletion({
             model: { openai: "gpt-4o-mini" },
+            label: "adjudicate.ingredient",
             system: SYSTEM_PROMPT,
             user: userPrompt,
             json: true,
-            maxTokens: { openai: 30 },
+            // 30 covers `{"decision":"same","category":"vegetables"}` on a model
+            // that answers immediately; the Bedrock number has to clear the
+            // thinking budget first, which is why it isn't a conversion of it.
+            maxTokens: { openai: 30, bedrock: 1024 },
+            // Picking one of a fixed 17-item vocabulary — the shallowest
+            // judgement of the three adjudicators.
+            effort: "low",
         });
 
         if (!content) return { decision: "new" };

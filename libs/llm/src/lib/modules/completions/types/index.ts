@@ -30,6 +30,16 @@ interface BaseParams {
     model: ModelSelection;
     system?: string;
     user: string;
+    /**
+     * Which call site this is, for the `[LLM]` usage line.
+     *
+     * Worth setting even though it is optional: under Bedrock every path runs
+     * the same `BEDROCK_MODEL_ID`, so the model field stops distinguishing them
+     * and an unlabelled row becomes unattributable. On OpenAI the model happens
+     * to separate most call sites today, which is exactly why it is easy to
+     * forget until the comparison it was needed for.
+     */
+    label?: string;
     /** Overrides {@link resolveProvider} for this call — used to A/B the two. */
     provider?: LlmProvider;
     /**
@@ -38,9 +48,18 @@ interface BaseParams {
      * eval is only meaningful if the baseline is unchanged.
      */
     maxTokens?: number;
-    /** Bedrock only; ignored on OpenAI. See `@fridgeezy/bedrock` for the caveat. */
+    /**
+     * Bedrock only; ignored on OpenAI. See `@fridgeezy/bedrock` for the caveat.
+     *
+     * Unset does not mean "off" — the Bedrock request always carries an explicit
+     * mode (`DEFAULT_THINKING`), because the models disagree about what an absent
+     * field means. Set this only to depart from that default.
+     */
     thinking?: ThinkingType;
-    /** Bedrock only; ignored on OpenAI. */
+    /**
+     * Bedrock only; ignored on OpenAI. Unset falls back to `DEFAULT_EFFORT`
+     * rather than to the API's own default, which is `high`.
+     */
     effort?: ThinkingEffort;
 }
 
@@ -58,6 +77,12 @@ export type GenerateStreamParams = BaseParams;
  *
  * Omitting `bedrock` falls back to `BEDROCK_MAX_TOKENS`; omitting `openai`
  * leaves that branch uncapped, which is what the streaming paths do.
+ *
+ * **Every one-shot call site now names a `bedrock` figure.** That fallback is
+ * sized for a full recipe stream, so inheriting it on a call that returns
+ * `{"same":true}` meant a thinking model could spend 32k billed output tokens on
+ * a one-bit verdict. The fallback is for streaming; one-shot callers pick a
+ * number that clears their own thinking allowance and stops there.
  */
 export interface TokenLimit {
     /** `max_completion_tokens` on the OpenAI branch. */

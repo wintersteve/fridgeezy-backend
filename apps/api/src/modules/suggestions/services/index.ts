@@ -8,3 +8,4 @@ export * from "./match-ingredients";
 export * from "./match-tags";
 export * from "./persist-or-reuse-suggestion";
 export * from "./persist-suggestion";
+export * from "./suggestion-batch";

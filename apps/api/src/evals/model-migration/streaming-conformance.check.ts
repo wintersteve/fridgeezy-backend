@@ -154,6 +154,84 @@ function anthropicEvents(chunks: string[]): AsyncIterable<AnthropicStreamEvent> 
     })();
 }
 
+/**
+ * Anthropic usage as it really arrives: split across two event types, with the
+ * output count RESTATED as a running total on every `message_delta` rather than
+ * sent as an increment.
+ *
+ * That restatement is the whole reason this fixture exists. An accumulator that
+ * sums `message_delta` — the obvious implementation — multiplies the output
+ * count, and the resulting cost comparison is wrong in the direction that makes
+ * Bedrock look worse than it is. Nothing downstream would flag it: the numbers
+ * are plausible, just inflated.
+ */
+function anthropicUsageEvents(): AsyncIterable<AnthropicStreamEvent> {
+    const events: AnthropicStreamEvent[] = [
+        {
+            type: "message_start",
+            message: {
+                usage: {
+                    input_tokens: 120,
+                    cache_read_input_tokens: 3712,
+                    output_tokens: 0,
+                },
+            },
+        },
+        { type: "content_block_delta", delta: { type: "text_delta", text: "hi" } },
+        { type: "message_delta", usage: { output_tokens: 7 } },
+        { type: "message_delta", usage: { output_tokens: 41 } },
+        { type: "message_stop" },
+    ];
+
+    return (async function* () {
+        for (const event of events) yield event;
+    })();
+}
+
+/**
+ * Usage is observed, reported exactly once, and never reaches the chunk stream.
+ *
+ * Unexercised against a live model like the rest of the Bedrock path, and worth
+ * covering for the same reason: the failure is silent. Usage that comes back as
+ * zeros does not error — it produces a cost comparison built on nothing, which is
+ * the one thing this instrumentation exists to prevent.
+ */
+async function checkUsageReporting(): Promise<void> {
+    console.log("\nUsage accounting — observed, not streamed:");
+
+    const reported: { inputTokens: number; cachedInputTokens: number; outputTokens: number }[] = [];
+    const text: string[] = [];
+
+    for await (const chunk of toCompletionChunks(anthropicUsageEvents(), (usage) =>
+        reported.push(usage)
+    )) {
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) text.push(content);
+    }
+
+    check(`${"fires once".padEnd(17)} one record per stream`, reported.length === 1, `got ${reported.length}`);
+    check(
+        `${"input".padEnd(17)} read from message_start`,
+        reported[0]?.inputTokens === 120,
+        `got ${reported[0]?.inputTokens}`
+    );
+    check(
+        `${"cache".padEnd(17)} read + creation summed`,
+        reported[0]?.cachedInputTokens === 3712,
+        `got ${reported[0]?.cachedInputTokens}`
+    );
+    check(
+        `${"output".padEnd(17)} last total wins, not summed`,
+        reported[0]?.outputTokens === 41,
+        `got ${reported[0]?.outputTokens} (48 means the deltas were added up)`
+    );
+    check(
+        `${"isolation".padEnd(17)} no usage event became text`,
+        text.join("") === "hi",
+        `got ${JSON.stringify(text.join(""))}`
+    );
+}
+
 /** The OpenAI baseline: chunks already in the shape the parser expects. */
 function openAiChunks(chunks: string[]) {
     return (async function* () {
@@ -693,6 +771,7 @@ async function main() {
         6
     );
     await checkIncrementalReveal();
+    await checkUsageReporting();
     await checkToolCallStreaming();
     checkFinishReasonMapping();
     checkMessageTranslation();

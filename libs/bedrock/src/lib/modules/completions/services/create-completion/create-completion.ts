@@ -108,7 +108,23 @@ export async function createCompletion(
     const typed = message as unknown as {
         content: AnthropicContentBlock[];
         stop_reason?: string | null;
+        usage?: {
+            input_tokens?: number;
+            output_tokens?: number;
+            cache_read_input_tokens?: number;
+            cache_creation_input_tokens?: number;
+        };
     };
+
+    // One object rather than the streaming path's two events, so the counts are
+    // read straight off the response instead of accumulated.
+    params.onUsage?.({
+        inputTokens: typed.usage?.input_tokens ?? 0,
+        cachedInputTokens:
+            (typed.usage?.cache_read_input_tokens ?? 0) +
+            (typed.usage?.cache_creation_input_tokens ?? 0),
+        outputTokens: typed.usage?.output_tokens ?? 0,
+    });
 
     return {
         text: toCompletionText(typed.content),

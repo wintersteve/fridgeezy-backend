@@ -74,6 +74,7 @@ No markdown, no code blocks, just the JSON object.`;
 
         const { text: content, finishReason } = await generateCompletion({
             model: { openai: "gpt-4o" },
+            label: "ingredients.extract",
             system: systemPrompt,
             user: "Identify all the food ingredients visible in this image.",
             image: {
@@ -85,7 +86,14 @@ No markdown, no code blocks, just the JSON object.`;
             // output is a whole ingredient list, so the cap is a real ceiling
             // rather than a cost guard, and a Bedrock run needs its own budget
             // that clears the thinking allowance.
-            maxTokens: { openai: 2000, bedrock: 4000 },
+            //
+            // Raised from 4000 once thinking became explicit: Anthropic counts
+            // thinking against the same cap, so the old figure was the list
+            // budget being shared rather than a ceiling above it. This is the
+            // one capped call site that fails LOUDLY — the "try a clearer image"
+            // branch below reads `finishReason` — so the headroom is about not
+            // rejecting a busy fridge photo, not about hiding truncation.
+            maxTokens: { openai: 2000, bedrock: 8000 },
         });
 
         if (!content) {

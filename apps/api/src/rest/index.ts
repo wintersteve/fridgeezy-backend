@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import { requireSupabaseUser } from "../middleware/require-auth";
 import { ChatRoutes } from "../modules/chat";
 import { IngredientsRoutes } from "../modules/ingredients";
 import { RecipesRoutes } from "../modules/recipes";
@@ -34,8 +35,13 @@ function addDirectRoutes(router: Router): void {
 export function createRestRouter() {
     const router = Router();
 
+    // Authentication is applied per-mount rather than to the whole router, so
+    // that /health stays reachable without a token — a health check that needs
+    // credentials cannot answer the question it exists to answer. Every mount is
+    // covered because the loop is the only way a feature router gets mounted;
+    // adding one to MOUNTS cannot accidentally leave it open.
     for (const { prefix, router: mounted } of MOUNTS) {
-        router.use(prefix, mounted);
+        router.use(prefix, requireSupabaseUser, mounted);
     }
 
     addDirectRoutes(router);

@@ -50,7 +50,15 @@ data "aws_iam_policy_document" "api" {
       "ssm:GetParametersByPath",
     ]
 
+    # Two ARNs, and both are needed. `GetParameter` authorizes against the
+    # parameter, which the `/*` form covers; `GetParametersByPath` authorizes
+    # against the PATH ITSELF, which it does not — the path node is
+    # `parameter/fridgeezy/dev` with no trailing slash. Granting only the
+    # wildcard reads as correct and fails at runtime with
+    # `not authorized to perform: ssm:GetParametersByPath on resource:
+    # arn:...:parameter/fridgeezy/dev`, which is how this was found.
     resources = [
+      "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}",
       "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}/*",
     ]
   }

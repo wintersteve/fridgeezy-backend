@@ -4,7 +4,9 @@
 # .terraform.lock.hcl is intentionally NOT ignored — it pins provider versions
 # and must be committed.
 
-# Local state — remove once the S3 backend is configured (see versions.tf).
+# State lives in S3 (versions.tf). These patterns stay: `init -migrate-state`
+# leaves the pre-migration state behind as a local file, and a stray
+# `-backend=false` or a failed init can recreate one at any time.
 *.tfstate
 *.tfstate.*
 crash.log

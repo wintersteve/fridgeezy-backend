@@ -385,18 +385,73 @@ producer's cadence through the Function URL, not batched at the end:
 Test it by timestamping each SSE line (`curl -sN` piped through a read loop) — a
 buffered response puts every line at the same offset, a real stream spreads them.
 
-Still open on hosting, neither blocking:
+All three hosting follow-ups closed **2026-08-06**, in the order the middle one
+required — secrets first, then the state move, so the dirty state never reached
+S3 at all:
 
-- [ ] **S3 state backend.** State is local, so the only record of a live
-      deployment is one gitignored file on one laptop. `versions.tf:19` has the
-      block commented and `infra/README.md` has the bootstrap commands.
-- [ ] **Secrets out of Terraform state.** Have the app read SSM at cold start
-      instead of Terraform baking values into env vars. `iam.tf` already grants
-      the permission, so this is app-side only — and it should land *before* the
-      state file moves to S3.
-- [ ] **Auth on the Function URL.** `AuthType: NONE` in both environments; the
-      concurrency cap bounds the damage but does not prevent it. Switch to
-      `AWS_IAM` once the client can sign requests.
+- [x] **Secrets out of Terraform state.** `apps/api/src/load-secrets.ts` fetches
+      the five parameters by path at cold start; Terraform now sets only
+      `SSM_PARAMETER_PREFIX`. Verified on the deployed function: its environment
+      holds no secret, and cold start is **1.15s** — inside the 1.0–1.9s band
+      measured on 2026-08-03, so the extra round trip did not cost anything
+      noticeable.
+
+      Two things this turned up that were not in the plan:
+
+      1. **`iam.tf` did not actually grant the read**, contrary to the note that
+         said it did. `GetParametersByPath` authorizes against the *path node*
+         (`parameter/fridgeezy/dev`), not the children that `parameter/…/*`
+         covers, so the first deploy returned 502 with `not authorized to
+         perform: ssm:GetParametersByPath`. Both ARNs are listed now.
+      2. **`lambda.ts` has to import `./create-app` dynamically.** Three libs
+         construct their client and throw at module scope, so a static import
+         evaluates them before the fetch can run. The deferred import also
+         gutted the artifact's `ERR_REQUIRE_ESM` check — requiring `lambda.js`
+         no longer touches a lib — so `build-artifact.sh` now runs two loads:
+         one with no secrets at all (proving the deferral) and one that forces
+         the graph via `loadAppModule()`.
+
+      The keys were in plaintext in the local state file until this landed. It
+      was never tracked by git (`git log --all -- infra/terraform.tfstate` is
+      empty) and the file has been removed, so the exposure was one laptop's
+      disk — but **rotating the five keys is the only thing that makes that
+      exposure certainly over**, and it is now cheap: `put-secrets.sh` plus a
+      cold start, no `terraform apply`.
+- [x] **S3 state backend.** `fridgeezy-tfstate`, key `api/terraform.tfstate`,
+      versioning + AES256 + public-access-block, locked via `use_lockfile`.
+      Migrated with `init -migrate-state`; `plan` is clean against it and the
+      local copies are gone. The public-access-block was added to the README
+      bootstrap — it was missing, and a state file names every resource, ARN and
+      account id in the deployment.
+- [x] **Auth on the Function URL** — closed, but **not** the way this item said,
+      and the original wording was wrong. "Switch to `AWS_IAM` once the client
+      can sign requests" describes something that cannot happen: `AWS_IAM`
+      requires the caller to SigV4-sign with real AWS credentials, and a
+      published React Native binary cannot hold one without leaking it. Cognito
+      could vend temporary credentials, at the cost of running a second identity
+      system next to the Supabase one the app already has.
+
+      So the URL stays `AuthType: NONE` and the gate lives in the app:
+      `requireSupabaseUser` rejects any `/rest` request without a valid Supabase
+      access token, applied inside the `MOUNTS` loop so a new module cannot be
+      mounted unauthenticated by accident. `/health` stays open.
+
+      Verified on the deployed function: `/rest/health` 200 without a token,
+      `/rest/suggestions/generate` and `/rest/chat` **401** without one and with
+      a garbage one, and a real token minted against local Supabase passes the
+      gate. The 401 lands *before* any LLM call, which is the point — the
+      concurrency cap only bounded the bill, it never prevented the spend.
+
+      Client sends the header from `use-sse-stream.ts` (the one choke point all
+      SSE features share) and `use-extract-ingredients.ts`. The SSE hook keeps
+      the token in a **ref, not a dependency**: a mid-stream token refresh would
+      otherwise re-run the connection effect, killing a live stream and paying
+      for a second generation to replace it.
+
+      Still open, deliberately: **no per-user rate limiting.** Authentication
+      bounds *who* can spend, not *how much* — anyone who can sign up can still
+      loop the feed. `reserved_concurrent_executions` (dev 5 / prod 50) remains
+      the only ceiling on the bill.
 
 ---
 

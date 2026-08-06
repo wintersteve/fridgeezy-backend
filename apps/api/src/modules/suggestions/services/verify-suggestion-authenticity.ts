@@ -4,9 +4,33 @@ import { GenerateSuggestionResponseDto } from "@fridgeezy/schemas";
 import { DISH_NAME_ALT_RULE, DISH_NAME_RULE } from "./naming-rules";
 import { describeSuggestion } from "./suggestion-signature";
 
+/**
+ * The axis here is NOTABILITY — is this dish known by name to the people whose
+ * food it is — not tradition. Those are different questions, and gating on the
+ * second is what dropped "Chicken Tikka" as `modern_fusion`.
+ *
+ * `modern_fusion` used to be a status and a rejection. It was the wrong shape
+ * twice over: a Korean taco and a California roll are modern fusion and belong
+ * in the catalog, while a fusion dish the model invented three seconds ago does
+ * not — and the thing separating them is whether anyone has heard of it. So the
+ * traditional/modern split is gone, `canonical` is now `well_known` (traditional
+ * and modern alike), and the dishes that used to be caught by "not traditional"
+ * are caught by `obscure` instead, which is the honest reason to drop them.
+ */
 export type AuthenticityStatus =
-    | "canonical"
+    | "well_known"
     | "regional_variant"
+    /**
+     * Plausibly real, but not established under any name — the dish nobody could
+     * ask for, because there is nothing to ask for it BY.
+     *
+     * This is the tail the exclusion list drives the generator into: every batch
+     * tells it "not these", so as a cuisine fills up it reaches for things like
+     * "Persian Chicken with Yogurt and Walnuts". The test that catches it is in
+     * the prompt below — a real dish has a NAME, and a description standing in
+     * for one means there is no dish behind it.
+     */
+    | "obscure"
     /**
      * A real dish with a DEFINING ingredient removed or swapped — a ceviche with
      * no seafood, a carbonara with no egg. Distinct from "invention" because the
@@ -25,7 +49,6 @@ export type AuthenticityStatus =
      * signature embeddings as if it were a dish.
      */
     | "not_food"
-    | "modern_fusion"
     | "invention"
     | "unknown";
 
@@ -58,15 +81,27 @@ export interface SuggestionReview {
 
 /** Minimum confidence for an attested verdict to be trusted. */
 const CONFIDENCE_FLOOR = 0.6;
-/** Statuses allowed into the discovery catalog. */
-const ATTESTED: AuthenticityStatus[] = ["canonical", "regional_variant"];
+/**
+ * Statuses allowed into the discovery catalog.
+ *
+ * **This is also the catalogue's growth limiter, and it is the only one.** The
+ * exclusion list handed to the generator grows monotonically ("do NOT suggest
+ * these"), so every batch pushes it further down the popularity tail; left
+ * ungated, the catalogue grows without bound and its median dish gets more
+ * obscure the bigger it gets. A floor that does not move turns that around: a
+ * cuisine saturates when the generator can no longer produce a dish notable
+ * enough to clear it, and the catalogue converges on "the dishes worth having"
+ * rather than on a number someone picked. Do not add a configured cap — raising
+ * or lowering THIS is how the size is tuned.
+ */
+const ATTESTED: AuthenticityStatus[] = ["well_known", "regional_variant"];
 
 const STATUSES: AuthenticityStatus[] = [
-    "canonical",
+    "well_known",
     "regional_variant",
+    "obscure",
     "adaptation",
     "not_food",
-    "modern_fusion",
     "invention",
     "unknown",
 ];
@@ -84,7 +119,7 @@ const STATUSES: AuthenticityStatus[] = [
  * still produced *Pain Aux Bananes* for banana bread. This is a second, single-
  * purpose look at one dish, with the rule quoted verbatim so the two can't drift.
  */
-const SYSTEM_PROMPT = `You verify that a proposed recipe is a REAL, attested dish before it enters a discovery catalog, and you decide what that dish should be CALLED.
+const SYSTEM_PROMPT = `You decide whether a proposed dish is WELL KNOWN enough to enter a discovery catalog, and what it should be CALLED.
 
 ## 0. FIRST: is this food at all?
 
@@ -103,18 +138,30 @@ When it is "not_food", stop. Skip step 2, echo the proposed name back unchanged 
 
 ## 1. Classify the dish into one status
 
+You are judging ONE thing: **is this dish KNOWN BY NAME to the people whose food it is?**
+
+You are NOT judging whether it is traditional, old, or pure. A dish invented in 1985 that everyone now orders by name is exactly as valid as one cooked for six centuries. Chicken Tikka, California Roll, Buffalo Wings, Korean tacos, Nachos, Banh Mi — all fine. Never hold modernity or fusion against a dish; hold only obscurity against it.
+
+"Known" means known WITHIN ITS OWN CULTURE, not known globally. A dish every household in Oaxaca can name is well known even if no one outside Mexico has heard of it. Do not require that an English speaker recognise it — that is step 2's job, and it is a separate question.
+
 Judge the dish THE INGREDIENT LIST DESCRIBES, not the dish the name claims. Read the ingredients FIRST and the name second. A correct, confident, well-spelled name on a dish that is not that dish is the single most common defect reaching you, and the name is exactly what hides it.
 
-BEFORE you may answer "canonical" or "regional_variant", do this test: name the one ingredient without which this dish would not BE this dish — the seafood in a ceviche, the egg and cured pork in a carbonara, the cheese in a cacio e pepe, the rice in a risotto, the papaya in a green papaya salad. Then find it in the list. If it is absent or has been swapped for something else, the answer is "adaptation" and nothing else.
+TEST ONE — the defining ingredient. Before you may answer "well_known" or "regional_variant", name the one ingredient without which this dish would not BE this dish — the seafood in a ceviche, the egg and cured pork in a carbonara, the cheese in a cacio e pepe, the rice in a risotto, the papaya in a green papaya salad. Then find it in the list. If it is absent or has been swapped for something else, the answer is "adaptation" and nothing else.
 
-- "adaptation": a REAL dish with a defining ingredient missing or replaced — most often a vegan/vegetarian/allergy-free version wearing the original's name. "Ceviche de Mariscos" whose ingredients are lime, onion, chili, sweet potato and corn but no seafood is an adaptation: those are ceviche's GARNISHES, and the dish they garnish is not there. Use this even when the name, cuisine and tags are impeccable. A dish is not excused because the description admits the substitution.
-- "canonical": a well-documented dish with an established identity — traditional (Murgh Makhani, Spaghetti alla Carbonara) OR a modern dish that is now widely recognised in its own right (California Roll, Buffalo Wings, Nachos) — AND the ingredients actually constitute it.
-- "regional_variant": an attested regional or traditional variation of a real dish (e.g. Lao-style green papaya salad). A genuine regional variant differs in ingredients that the TRADITION itself varies; it never simply omits the dish's defining ingredient.
-- "modern_fusion": a plausible modern/fusion creation that is NOT (yet) an established, recognised dish.
-- "invention": an arbitrary combination unlikely to be an established dish (e.g. "Carbonara with Asparagus"), or a hallucinated / non-existent dish.
+TEST TWO — can you NAME it? A real dish has a name people ask for it by. A made-up one can only be described. So: if the proposed name reads as a DESCRIPTION of ingredients rather than as a name ("Persian Chicken with Yogurt and Walnuts", "Spiced Lentil Stew with Coconut"), ask whether a real, named dish is hiding behind it.
+  - There is one, and this is its literal translation or a plain-English rendering of it -> "well_known". Som Tam described as "Green Papaya Salad" is still Som Tam. Say the real name in step 2.
+  - You cannot produce the name it would be asked for by, in any language, because there isn't one -> "obscure". This is a plausible plate of food, not a dish.
+A native-language name is NOT automatic proof of a real dish — a model can invent a plausible-sounding one. Apply the same test: do you actually know this dish under this name?
+
+- "well_known": an established dish, recognised by name within its own food culture — traditional (Murgh Makhani, Spaghetti alla Carbonara, Chicken Tikka) or modern (California Roll, Buffalo Wings, Nachos) — AND the ingredients actually constitute it.
+- "regional_variant": an attested regional variation of a real dish, itself known by name where it is eaten (e.g. Lao-style green papaya salad). A genuine regional variant differs in ingredients that the TRADITION itself varies; it never simply omits the dish's defining ingredient.
+- "obscure": plausibly a real plate of food, but not established under any name — nobody orders this, because there is nothing to order. Also use this for a dish so marginal that only a specialist would recognise it.
+- "invention": an arbitrary combination presented as a dish (e.g. "Carbonara with Asparagus"), or a hallucinated / non-existent dish. The difference from "obscure" is that an invention contradicts a real dish or could not exist; an obscure one is merely nameless.
 - "unknown": you cannot tell.
 
-Only "canonical" and "regional_variant" belong in a discovery catalog.
+Only "well_known" and "regional_variant" belong in a discovery catalog.
+
+This catalog is FINITE by design and already holds the obvious dishes, so you will mostly be shown things near the edge. When you find yourself reasoning "this could plausibly be a dish", that is the answer: it is "obscure". Reserve "well_known" for dishes you actually know.
 
 ## 2. Name the dish
 
@@ -137,7 +184,7 @@ ${DISH_NAME_ALT_RULE}
 Echo the proposed name back unchanged unless it clearly breaks Step A or Step C. Renaming a dish that was already right is worse than leaving it alone.
 
 Respond with a single JSON object and nothing else:
-{"status":"canonical"|"regional_variant"|"adaptation"|"not_food"|"modern_fusion"|"invention"|"unknown","confidence":0.0-1.0,"name":"...","name_alt":"..."|null}.`;
+{"status":"well_known"|"regional_variant"|"obscure"|"adaptation"|"not_food"|"invention"|"unknown","confidence":0.0-1.0,"name":"...","name_alt":"..."|null}.`;
 
 /**
  * Raw classification (status + confidence + the name it should carry). Throws on

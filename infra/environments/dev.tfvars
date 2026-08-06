@@ -5,7 +5,11 @@ lambda_timeout = 300
 
 log_retention_days = 14
 
-# Public Function URL — the app carries no auth of its own yet.
+# NONE is the only workable value, not a gap left open. AWS_IAM would require
+# the caller to SigV4-sign with real AWS credentials, which a published React
+# Native binary cannot hold. The app authenticates instead: every /rest route
+# demands a Supabase access token (`middleware/require-auth.ts`), /health does
+# not. See TODOS.md, Phase 3.
 function_url_auth_type = "NONE"
 
 # Spend ceiling, not a capacity plan. The URL above is unauthenticated and every

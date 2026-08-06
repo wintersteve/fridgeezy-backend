@@ -1,6 +1,6 @@
 import { generateCompletion } from "@fridgeezy/llm";
 
-export type IngredientDecision = "same" | "new" | "invalid";
+export type IngredientDecision = "same" | "new";
 
 /**
  * Controlled food-category vocabulary — the canonical_ids of the seeded
@@ -63,49 +63,85 @@ export interface IngredientAdjudication {
     category?: IngredientCategory;
 }
 
-const SYSTEM_PROMPT = `You validate ingredient names for a cooking database.
+const CATEGORY_RULE = `the single best-fitting food category. Return EXACTLY one of these ids (the id itself, not the description):
+${CATEGORY_GUIDE}`;
 
-Given an ingredient NAME and optionally a CANDIDATE existing ingredient, respond with a decision and (for new ingredients) a category.
+/** Asked when a near-miss candidate exists: is NAME the same thing as CANDIDATE? */
+const DEDUP_SYSTEM_PROMPT = `You classify ingredient names for a cooking database.
+
+Given an ingredient NAME and a CANDIDATE existing ingredient, respond with a decision and (for new ingredients) a category.
 
 decision:
-- "same": NAME is the same ingredient as CANDIDATE — a synonym, regional name, or spelling variant (e.g. "spring onion" vs "scallion"). Only valid when a CANDIDATE is provided.
-- "invalid": NAME is not a usable culinary ingredient — gibberish, a dish or recipe name, a hallucination, or an unusable fragment.
-- "new": NAME is a real, distinct culinary ingredient (different from CANDIDATE, or there is no candidate).
+- "same": NAME is the same ingredient as CANDIDATE — a synonym, regional name, or spelling variant (e.g. "spring onion" vs "scallion").
+- "new": NAME is a real, distinct culinary ingredient, different from CANDIDATE.
 
 A qualifier that changes VARIETY/TYPE (e.g. "Thai basil" vs "basil", "cherry tomato" vs "tomato") or STATE (e.g. "dried oregano" vs "fresh oregano" vs "oregano", "frozen peas" vs "peas") makes NAME a DISTINCT ingredient → "new", NOT "same", even though it is closely related to CANDIDATE. Only rule "same" for a true synonym of the identical item. Ignore pure preparation words (chopped, minced, sliced) — those do not by themselves make it distinct.
 
-category (only when decision is "new"): the single best-fitting food category. Return EXACTLY one of these ids (the id itself, not the description):
-${CATEGORY_GUIDE}
+NAME is always a real ingredient. You are not being asked to validate it, only to decide whether it is the same thing as CANDIDATE.
+
+category (only when decision is "new"): ${CATEGORY_RULE}
 
 Respond with a single JSON object and nothing else:
-{"decision":"same"|"new"|"invalid","category":"<one id from the list above, or null>"}.`;
+{"decision":"same"|"new","category":"<one id from the list above, or null>"}.`;
+
+/**
+ * Asked when there is no candidate at all. "same" is impossible, so the only
+ * open question is which category the new row gets — and that answer is worth a
+ * call, because the embedding-centroid fallback it replaces guesses badly on
+ * exactly these (a "port wine" lands as easily in sauces as in beverages).
+ */
+const CATEGORY_SYSTEM_PROMPT = `You categorise ingredient names for a cooking database.
+
+Given an ingredient NAME, return ${CATEGORY_RULE}
+
+Respond with a single JSON object and nothing else:
+{"category":"<one id from the list above>"}.`;
 
 /**
  * Ingredient creation gate: decide whether an unmatched ingredient name is the
- * same as a near-miss candidate, a genuinely new ingredient (with a controlled
- * category), or not a real ingredient at all. Fails open to a category-less
- * "new" on any error so an LLM hiccup never silently drops a valid ingredient.
+ * same as a near-miss candidate or a genuinely new ingredient, and pick the
+ * controlled category a new one is created under. Fails open to a category-less
+ * "new" on any error so an LLM hiccup never costs an ingredient.
+ *
+ * **There is deliberately no "invalid" verdict.** This used to be able to rule a
+ * name junk, and `matchIngredients` dropped those — which is how a real
+ * "evaporated milk" vanished out of a Suspiro de Limeña. The asymmetry is
+ * one-sided and the drop was on the wrong side of it:
+ *
+ * - A junk row costs one bad catalog entry, reversible with `merge_ingredient`.
+ * - A dropped real ingredient is not reversible. `recipe_suggestions` stores
+ *   only ids, so the model's own name list is gone. Worse, the diets in
+ *   `recipe_suggestion_dietary` are a NEGATIVE proof — "no ingredient here is
+ *   disqualifying" — so losing the dairy makes a dairy dessert display as
+ *   `dairy_free`. And promotion then constrains the recipe to the survivors; if
+ *   the model reintroduces the missing ingredient anyway (it will, for a dish
+ *   defined by it) it arrives with no id and `persist_recipe_with_ingredient_ids`
+ *   raises.
+ *
+ * A destructive verdict also had no business being asked of gpt-4o-mini at
+ * `effort: "low"` inside a 30-token budget. Junk is kept out upstream instead,
+ * by the generator prompt and the authenticity gate.
  */
 export async function adjudicateIngredient(
     name: string,
     candidateName?: string
 ): Promise<IngredientAdjudication> {
-    const userPrompt = candidateName
-        ? `NAME: ${name}\nCANDIDATE: ${candidateName}`
-        : `NAME: ${name}\nCANDIDATE: (none)`;
-
     try {
         const { text: content } = await generateCompletion({
             model: { openai: "gpt-4o-mini" },
             label: "adjudicate.ingredient",
-            system: SYSTEM_PROMPT,
-            user: userPrompt,
+            system: candidateName
+                ? DEDUP_SYSTEM_PROMPT
+                : CATEGORY_SYSTEM_PROMPT,
+            user: candidateName
+                ? `NAME: ${name}\nCANDIDATE: ${candidateName}`
+                : `NAME: ${name}`,
             json: true,
             // 30 covers `{"decision":"same","category":"vegetables"}` on a model
             // that answers immediately; the Bedrock number has to clear the
             // thinking budget first, which is why it isn't a conversion of it.
             maxTokens: { openai: 30, bedrock: 1024 },
-            // Picking one of a fixed 17-item vocabulary — the shallowest
+            // Picking one of a fixed 20-item vocabulary — the shallowest
             // judgement of the three adjudicators.
             effort: "low",
         });
@@ -120,9 +156,6 @@ export async function adjudicateIngredient(
         // "same" is only meaningful against an actual candidate.
         if (parsed.decision === "same" && candidateName) {
             return { decision: "same" };
-        }
-        if (parsed.decision === "invalid") {
-            return { decision: "invalid" };
         }
 
         // "new" (default): keep the category only if it's in the controlled list.

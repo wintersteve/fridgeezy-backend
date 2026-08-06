@@ -32,6 +32,20 @@ function describeProvider(): string {
 }
 
 /**
+ * Whether /rest is gated, read from the environment rather than imported from
+ * the middleware, matching the rule above.
+ *
+ * The disabled case shouts, because it is the state you can be in by accident
+ * and it is the one that lets anyone who can reach the port spend the project's
+ * LLM credits. /health is outside the gate either way.
+ */
+function describeAuth(): string {
+    return process.env.ALLOW_UNAUTHENTICATED === "true"
+        ? "⚠ DISABLED — /rest is open (ALLOW_UNAUTHENTICATED=true)"
+        : "supabase access token required · /health open";
+}
+
+/**
  * No missing-env warning here on purpose: `libs/supabase` and `libs/openai` both
  * throw at *import*, so a process missing either key dies before this banner
  * could print. A check here would be unreachable and imply a safety net that
@@ -52,6 +66,7 @@ export function startupBanner(port: number): string {
         `  fridgeezy-api ready on http://localhost:${port}`,
         "",
         `  provider  ${describeProvider()}`,
+        `  auth      ${describeAuth()}`,
         `  runtime   node ${process.version} · ${process.env.NODE_ENV ?? "development"}`,
         `  routes    ${routes.length}`,
         "",

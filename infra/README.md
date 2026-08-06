@@ -71,7 +71,6 @@ streaming behaviour end-to-end. Both need a deploy.
 | `main.tf` | Locals, artifact zipping |
 | `lambda.tf` | Function, Function URL, log group |
 | `iam.tf` | Execution role: logs, Bedrock, SSM |
-| `ssm.tf` | Secret lookups (parameters created out-of-band) |
 | `outputs.tf` | Function URL, ARNs, log group |
 | `environments/*.tfvars` | Per-environment, non-secret config |
 
@@ -97,28 +96,36 @@ for KEY in OPENAI_API_KEY GOOGLE_API_KEY SUPABASE_URL SUPABASE_ANON_KEY SUPABASE
 done
 ```
 
-**Do this before the first `terraform apply`.** `ssm.tf` reads these as `data`
-sources, so Terraform will not create them — and a missing one fails at plan
-time, before anything is provisioned:
+All five must exist for the environment you are targeting.
+
+**Terraform does not read these.** It sets one env var, `SSM_PARAMETER_PREFIX`,
+and `apps/api/src/load-secrets.ts` fetches the parameters at cold start —
+`GetParametersByPath` over the prefix, so the parameter name *is* the env var
+name and adding a sixth secret needs no Terraform change at all.
+
+That indirection is the point. Terraform used to read all five as `data` sources
+and inject the values as Lambda env vars, which put them in plaintext in the
+state file and, with versioning on, in every historical copy of it — so rotating
+a key never removed the old one, and the state file was as sensitive as the
+secrets themselves. Nothing sensitive reaches state now, which is what makes the
+S3 backend below safe to use.
+
+The cost is that a missing parameter no longer fails at plan time. It fails at
+the first invocation after a deploy, with every missing name at once:
 
 ```
-Error: reading SSM Parameter (/fridgeezy/dev/OPENAI_API_KEY): couldn't find resource
+Missing SSM parameters under /fridgeezy/dev: GOOGLE_API_KEY. Create them with infra/put-secrets.sh.
 ```
 
-All five must exist for the environment you are targeting. The error names the
-parameter, so work through them until plan gets past the data lookups.
-
-> **State sensitivity:** these values are read at apply time and injected as
-> Lambda env vars, so they end up in Terraform state. That is why the S3 backend
-> must be encrypted and access-controlled. The follow-up is to have the app read
-> SSM at cold start instead — `iam.tf` already grants the permissions, so that
-> change is app-side only.
+Note the failure is not cached: `loadSecrets()` clears its memo on rejection, so
+fixing the parameter is picked up by the next request without a redeploy.
 
 ### State backend
 
-State is local right now so `terraform init` works with no bootstrap. Before a
-second person applies, create the bucket and switch to the S3 backend block
-commented in `versions.tf`:
+State lives in S3 (`fridgeezy-tfstate`, key `api/terraform.tfstate`), configured
+in `versions.tf`. The bucket is **not** managed by this config — it holds the
+state that would describe it. Create it once per account; all four commands are
+idempotent:
 
 ```bash
 aws s3api create-bucket --bucket fridgeezy-tfstate --region eu-central-1 \
@@ -128,9 +135,19 @@ aws s3api put-bucket-versioning --bucket fridgeezy-tfstate \
 aws s3api put-bucket-encryption --bucket fridgeezy-tfstate \
   --server-side-encryption-configuration \
   '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+aws s3api put-public-access-block --bucket fridgeezy-tfstate \
+  --public-access-block-configuration \
+  'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true'
 ```
 
+Then `terraform -chdir=infra init -migrate-state`.
+
 Terraform >= 1.10 locks via `use_lockfile`, so no DynamoDB table is needed.
+
+The public access block is not belt-and-braces. A state file names every
+resource, ARN and account id in the deployment; S3 buckets have been public by
+accident often enough that the default deserves to be pinned explicitly rather
+than inherited.
 
 ## Build the artifact
 

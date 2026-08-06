@@ -30,12 +30,14 @@ resource "aws_lambda_function" "api" {
       LLM_PROVIDER     = var.llm_provider
       BEDROCK_MODEL_ID = var.bedrock_model_id
 
-      OPENAI_API_KEY = data.aws_ssm_parameter.openai_api_key.value
-      GOOGLE_API_KEY = data.aws_ssm_parameter.google_api_key.value
-
-      SUPABASE_URL              = data.aws_ssm_parameter.supabase_url.value
-      SUPABASE_ANON_KEY         = data.aws_ssm_parameter.supabase_anon_key.value
-      SUPABASE_SERVICE_ROLE_KEY = data.aws_ssm_parameter.supabase_service_role_key.value
+      # Secrets are NOT here, and must not be added back. Terraform used to read
+      # the five SSM parameters through `data` sources and set them as env vars,
+      # which meant every value sat in plaintext in the state file — and in every
+      # historical version of it, so rotating a key did not clean the old one up.
+      # `apps/api/src/load-secrets.ts` fetches them at cold start from this
+      # prefix instead; `iam.tf` grants the read. Setting a secret here would put
+      # it straight back into state, and nothing would fail to say so.
+      SSM_PARAMETER_PREFIX = local.ssm_prefix
 
       # PORT is deliberately absent — nothing listens on a socket in Lambda.
       # AWS_REGION is reserved and injected by the runtime; Bedrock picks it up.
@@ -64,7 +66,13 @@ resource "aws_lambda_function_url" "api" {
       allow_methods = ["GET", "POST", "OPTIONS"]
       # `mcp-session-id` was dropped with the MCP transport — the app serves
       # /rest only, and nothing sends that header any more.
-      allow_headers = ["content-type"]
+      #
+      # `authorization` carries the Supabase access token every /rest route now
+      # requires. This list and the one in `apps/api/src/express-app.ts` both
+      # have to allow it: the Function URL answers the preflight before the
+      # function is ever invoked, so omitting it here is not overridden by
+      # anything the app says.
+      allow_headers = ["content-type", "authorization"]
       max_age       = 86400
     }
   }

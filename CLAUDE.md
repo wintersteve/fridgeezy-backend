@@ -83,20 +83,39 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
   raw ingredients and only the compose card read them. Buckets cannot be renamed
   in place, so `20260805000001_dish_tiles_bucket.sql` creates the new one and the
   old is left standing until any client holding the previous URLs has aged out.
-- `generate-splash` — the app's launch screen: the placeholder's washes at full
-  bleed, one render per theme, into `operations/output/splash/` (gitignored).
-  The **only image operation that writes to disk instead of a bucket** — a splash
-  is drawn before the app has reached the network, so it has to be bundled into
-  the binary and therefore lives in the *client* repo. Pick a candidate by eye
-  and copy it across; the script prints the step, the way `env-remote` prints the
-  client's `EXPO_PUBLIC_*` lines. `-- --variant=dark` re-rolls one theme,
-  `-- --candidates=N` changes how many.
+- `generate-app-icon` — candidates for the app icon, at 1:1, into
+  `operations/output/icons/` (gitignored). `-- --only=<name>` rolls one.
+  The shipping icon is `bowl-overhead` plus its `bowl-overhead-dark` counterpart;
+  both are committed in the *client* repo as `icon-light.png` / `icon-dark.png`,
+  and the client's `scripts/generate-icons.mjs` derives every other icon and
+  splash asset from them.
 
-  Pinned to `gemini-3-pro-image-preview` rather than taking the Flash default:
-  the per-dish volume argument behind that default does not reach an asset
-  generated twice, ever, and shown on every launch.
+  **Icons want the opposite framing from the splash.** `generate-splash` fights
+  the model to stop it centring a subject in a margin; an icon is a 40pt object
+  under a squircle mask and *needs* that margin. The file says so at the top —
+  do not carry one lesson into the other.
 
-  **The dark variant is the whole reason `tone` exists** — see `libs/genai`
+- `generate-splash` — full-bleed launch-screen artwork, one render per theme,
+  into `operations/output/splash/` (gitignored). `-- --variant=dark` re-rolls one
+  theme, `-- --candidates=N` changes how many.
+
+  **Not what currently ships.** The launch screen was rebuilt as the app icon on
+  a flat matching colour, so nothing in the client reads this any more. Kept
+  because it works and full bleed is a plausible thing to want again — but read
+  the client's `CLAUDE.md` first, because `resizeMode: "cover"` does not actually
+  produce a full-screen image on iOS without a deprecated flag.
+
+  Both of these are **image operations that write to disk instead of a bucket** —
+  a splash or icon is drawn before the app has reached the network, so it has to
+  be bundled into the binary and therefore lives in the client repo. Pick a
+  candidate by eye and copy it across; the script prints the step, the way
+  `env-remote` prints the client's `EXPO_PUBLIC_*` lines.
+
+  Both are pinned to `gemini-3-pro-image-preview` rather than taking the Flash
+  default: the per-dish volume argument behind that default does not reach an
+  asset generated once, ever, and shown on every launch.
+
+  **The dark variants are the whole reason `tone` exists** — see `libs/genai`
   below. Four passes and twelve renders to get a dark ground out of a style built
   for cream; the failure and the fix are recorded on the `tone` option itself.
 - `backfill-course-tags` — one-off repair, already run on 2026-08-02. Fills a
@@ -376,6 +395,32 @@ mount path anyway; the nesting only made every import inside it `../../../`.
 | `POST /rest/chat` | `modules/chat` |
 | `GET /rest/health` | direct |
 
+**Every route above except `/rest/health` requires a Supabase access token**
+(`Authorization: Bearer <access_token>`), checked by `requireSupabaseUser` in
+`middleware/require-auth.ts`. The middleware is applied inside the `MOUNTS` loop
+rather than to the whole router, so a new feature module cannot be added
+unauthenticated by accident, and `/health` stays answerable without credentials.
+
+This lives in the app, not on the Function URL, and that is forced rather than
+chosen: a Function URL is `AuthType: NONE` or `AWS_IAM`, and `AWS_IAM` requires
+the caller to SigV4-sign every request with real AWS credentials — which a
+published React Native binary cannot hold without leaking. Cognito could issue
+temporary ones, at the cost of a second identity system beside the Supabase one
+the app already has. So the URL stays open and the app closes the door one hop
+later. `TODOS.md` records this; do not "fix" it by flipping the auth type.
+
+`ALLOW_UNAUTHENTICATED=true` disables the gate for local `curl` work. There is
+deliberately no positive `AUTH_REQUIRED` flag — forgetting to set anything has to
+be the *safe* outcome — and the startup banner shouts when the gate is off.
+
+**The client must send the header on every `/rest` call.** Both call sites are
+already updated: `use-sse-stream.ts` (the single choke point every SSE feature
+goes through) and `use-extract-ingredients.ts` (the one non-SSE call). The SSE
+hook reads the token from the auth *context* and holds it in a ref, deliberately
+**not** as an effect dependency — a token refresh mid-stream would otherwise tear
+down a live connection and re-issue the request, buying a second paid LLM call to
+replace one that was working.
+
 `/substitutes/generate` streams one frame per requested missing ingredient, in
 request order — the client sizes its loading skeletons by slicing its own request
 list and keys cards on `ingredientName`, so the service buffers out-of-order model
@@ -522,6 +567,49 @@ own top-level `modules/ai`, which broke the convention every other module
 follows — routes + controller + usecases + services — by owning no route at all.
 If a second consumer ever appears, promoting them back out is the moment to do
 it, not before.
+
+### Deployment: secrets and Terraform state
+
+Two things that look like ordinary infra config and are load-bearing:
+
+- **The Lambda holds no secrets in its environment.** It is given one variable,
+  `SSM_PARAMETER_PREFIX`, and `apps/api/src/load-secrets.ts` fetches the
+  parameters by path at cold start. Terraform used to read them itself and inject
+  the values, which put five plaintext secrets into the state file — and, with
+  versioning on, into every historical copy of it, so rotating a key never
+  removed the old one. Nothing sensitive reaches state now, which is the only
+  reason the S3 backend is safe to use. **Do not add a secret to the
+  `environment` block in `lambda.tf`**; it goes straight back into state and
+  nothing fails to tell you.
+
+  Because the parameter's *name* becomes the env var's name, adding a sixth
+  secret is `put-secrets.sh` plus a cold start — no `terraform apply`, no infra
+  change. Add it to `REQUIRED_KEYS` only if the app cannot boot without it.
+
+  The consequence to know: a missing parameter no longer fails at plan time, it
+  fails at the first invocation. `loadSecrets()` clears its memo on rejection, so
+  fixing the parameter is picked up by the next request without a redeploy.
+
+- **`lambda.ts` imports `./create-app` dynamically, and that is not a style
+  choice.** `libs/openai`, `libs/genai` and `libs/supabase` all construct their
+  client at module scope and throw on a missing key, so a static import would
+  evaluate that graph before the secrets arrived and the function would die at
+  cold start with `Missing OPENAI_API_KEY`. Deferring the import is what buys the
+  ordering — and it meant none of those libs had to change. `build-artifact.sh`
+  asserts both halves: that requiring `lambda.js` with **no** secrets in the
+  environment succeeds, and that `loadAppModule()` then loads the full graph
+  under Lambda's module semantics. The second check exists because the deferred
+  import would otherwise have silently gutted the `ERR_REQUIRE_ESM` guard.
+
+- **State lives in S3** (`fridgeezy-tfstate`, `api/terraform.tfstate`), locked
+  natively via `use_lockfile`. The bucket is created out-of-band — a config
+  cannot hold the state describing its own backend — and `infra/README.md` has
+  the four idempotent commands.
+
+One IAM subtlety worth keeping: `GetParametersByPath` authorizes against the
+**path node** (`parameter/fridgeezy/dev`), not against the children the `/*` form
+covers. `iam.tf` therefore lists both ARNs. Granting only the wildcard reads as
+correct, plans clean, and fails at runtime.
 
 ### Persistence
 

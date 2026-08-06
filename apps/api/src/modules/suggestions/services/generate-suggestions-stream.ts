@@ -76,7 +76,7 @@ const GeneratorRejectionSchema = z.object({
 const REJECTION_LINE = 1;
 
 function buildSuggestionsSystemPrompt(count: number): string {
-    return `You are a recipe suggestion assistant. Generate exactly ${count} authentic, real-world recipe suggestion${count === 1 ? "" : "s"} based on the user's request.
+    return `You are a recipe suggestion assistant. Generate up to ${count} well-known, real-world recipe suggestion${count === 1 ? "" : "s"} based on the user's request.
 
 The "Ingredients" line below may list literal ingredients, but it may ALSO be a dish name (e.g. "sandwich", "carbonara"), a meal or course concept (e.g. "breakfast", "quick dinner", "random recipe"), or a cuisine. Interpret it flexibly:
 - Literal ingredients -> real dishes that prominently feature them.
@@ -84,14 +84,16 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 - A meal/course or cuisine concept -> a varied set of authentic dishes that fit it.
 
 ## Rules
-- AUTHENTICITY IS PARAMOUNT: Only suggest real, well-documented recipes that exist in culinary traditions.
-- Each recipe MUST be a genuine, documented dish — never an invented or descriptive name (e.g., NOT "Indian Tomato Butter Chicken"). Do NOT add alternative names in parenthesis.
+- BEING WELL KNOWN IS PARAMOUNT: only suggest dishes that people actually ask for BY NAME within their own food culture. Known locally is enough — a dish every household in Oaxaca can name qualifies; it does not have to be famous worldwide.
+- Modern and fusion dishes are welcome when they are established in their own right (California Roll, Korean tacos, Banh Mi). Age and purity are not the test; recognition is.
+- Each recipe MUST have a REAL NAME people use for it — never an invented or descriptive one (NOT "Indian Tomato Butter Chicken", NOT "Persian Chicken with Yogurt and Walnuts"). If the only way you can label a dish is by listing what is in it, it is not an established dish: leave it out and pick one that has a name. Do NOT add alternative names in parenthesis.
+- Do NOT reach for obscure dishes to satisfy the exclusion list below. If the well-known dishes matching this request are already in the catalog, return FEWER dishes — even none. A short batch is correct; padding it with something nobody has heard of is not.
 - Include ALL essential ingredients that define the dish. Never omit core ingredients that make the recipe authentic.
-- THE ${count} MUST BE ${count} DIFFERENT DISHES. Never return a dish alongside a qualified version of itself ("Arancini" and "Arancini al Burro"), a dish alongside its own base ("Haemul Pajeon" and "Pajeon"), or the same dish under two names ("Som Tam" and "Green Papaya Salad"). If a request only really supports one of them, pick the best one and fill the other slot with a genuinely different dish.
+- EVERY DISH YOU RETURN MUST BE A DIFFERENT DISH. Never return a dish alongside a qualified version of itself ("Arancini" and "Arancini al Burro"), a dish alongside its own base ("Haemul Pajeon" and "Pajeon"), or the same dish under two names ("Som Tam" and "Green Papaya Salad"). If a request only really supports one of them, pick the best one — fill the other slot with a genuinely different dish if you have one, and drop the slot if you do not.
 - ${FOOD_ONLY_RULE}
 - When the request is ONLY for drinks and there is no food dish to offer, output exactly one line and nothing else: {"rejected":"not_food"}. Say it explicitly rather than returning nothing — silence and "I found nothing this time" are indistinguishable downstream, and the user is told the wrong one.
-- Only return nothing at all when the request genuinely cannot be satisfied authentically — a truly incompatible INGREDIENT combination (e.g., rosemary in Thai cuisine) or nonsensical input. A real FOOD dish name, cuisine, or meal/course concept is ALWAYS satisfiable, so NEVER return an empty result for those.
-- If an "Already in the catalog" list is given, NEVER suggest a dish on it, nor a translation or spelling variant of one — the user already has those. Suggest a different authentic dish that still fits the request.
+- Return nothing at all only when there is genuinely nothing left to give: a truly incompatible INGREDIENT combination (e.g., rosemary in Thai cuisine), nonsensical input, or every well-known dish fitting the request already being in the catalog. Short of that, a real FOOD dish name, cuisine, or meal/course concept is satisfiable — do not return empty out of caution.
+- If an "Already in the catalog" list is given, NEVER suggest a dish on it, nor a translation or spelling variant of one — the user already has those. Suggest a different well-known dish that still fits the request, or fewer dishes if there is no such dish left.
 
 ## Constraints
 ${BLACKLIST_RULE}
@@ -115,7 +117,7 @@ ${BLACKLIST_RULE}
 - MUST be the plain ingredient name only — NEVER include parentheses or qualifiers (e.g. "chicken breast", NOT "chicken breast (boneless)")
 
 ## Output Format
-Output EXACTLY ${count} recipe${count === 1 ? "" : "s"}, one JSON object per line (JSONL format). No markdown, no code blocks, no extra text.
+Output AT MOST ${count} recipe${count === 1 ? "" : "s"}, one JSON object per line (JSONL format). Aim for ${count}; return fewer whenever reaching ${count} would mean including a dish that is not well known. No markdown, no code blocks, no extra text.
 
 Each recipe object must include:
 - ${DISH_NAME_RULE}
@@ -209,8 +211,17 @@ export async function* generateSuggestionsStream(
      * is guaranteed to fail the same way.
      */
     let outOfScope = false;
-    /** The last pass produced no dish line at all — nothing to top up from. */
-    let generatedNothing = false;
+    /**
+     * How many dish lines the last pass actually wrote.
+     *
+     * The generator is now asked for AT MOST `count` and told to return fewer
+     * rather than reach for something obscure, so a short pass is a statement:
+     * every well-known dish fitting this request is already in the catalog.
+     * Topping that up asks the same exhausted question again, and the only way
+     * the model can answer differently is by going down the tail this whole
+     * change exists to stop. So a short pass ends the request.
+     */
+    let generatedLastPass = 0;
 
     for (let pass = 0; pass < MAX_PASSES; pass++) {
         const shortfall = SUGGESTIONS_PER_BATCH - emittedNames.length;
@@ -242,8 +253,8 @@ export async function* generateSuggestionsStream(
             onOutOfScope: () => {
                 outOfScope = true;
             },
-            onGeneratedNothing: () => {
-                generatedNothing = true;
+            onGenerated: (lines) => {
+                generatedLastPass = lines;
             },
         });
 
@@ -254,11 +265,12 @@ export async function* generateSuggestionsStream(
         // authenticity calls to withdraw the same cards. This is the one drop
         // reason that must break the loop rather than drive it.
         //
-        // Same for a pass that generated nothing: the top-up refills slots that
-        // were FILLED and then collapsed, and there is nothing to refill from.
-        // Re-asking an identical prompt that just returned empty spends a second
-        // generation call to return empty again.
-        if (outOfScope || generatedNothing) break;
+        // Same for a pass that came back SHORT. It filled every slot it could
+        // and stopped, which is the generator reporting saturation for this
+        // request — asking again cannot produce a dish it just declined to name
+        // without going down the tail. Only a pass that delivered a full `count`
+        // of lines and then lost some to dedup is worth refilling.
+        if (outOfScope || generatedLastPass < shortfall) break;
     }
 
     // Only when the request produced NOTHING. A request that yielded two real
@@ -283,8 +295,17 @@ interface GenerationPassOptions {
     onDelivered: (name: string) => void;
     /** Called when a dish was dropped as a drink — see `outOfScope` above. */
     onOutOfScope: () => void;
-    /** Called when the model produced no dish line at all — see `generatedAny`. */
-    onGeneratedNothing: () => void;
+    /** How many dish lines the model wrote — see `generatedLastPass` above. */
+    onGenerated: (lines: number) => void;
+}
+
+/** A promise plus the handles to settle it from elsewhere. */
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((r) => {
+        resolve = r;
+    });
+    return { promise, resolve };
 }
 
 /**
@@ -319,7 +340,7 @@ async function* runGenerationPass({
     emittedIds,
     onDelivered,
     onOutOfScope,
-    onGeneratedNothing,
+    onGenerated,
 }: GenerationPassOptions): AsyncGenerator<
     ProvisionalSuggestionDto | StreamedSuggestionDto | WithdrawnSuggestionDto
 > {
@@ -332,22 +353,41 @@ async function* runGenerationPass({
     });
 
     /**
-     * Did this pass produce any dish line at all?
+     * How many dish lines this pass produced.
      *
-     * Separate from "did any dish survive". A pass that generated four dishes
-     * and had all four collapsed by dedup SHOULD top up — that is what the
-     * second pass is for. A pass that generated nothing has nothing to top up
-     * *from*: the same prompt asked again returns the same nothing, for one more
-     * generation call.
+     * Separate from "how many survived". A pass that wrote four dishes and had
+     * all four collapsed by dedup SHOULD top up — that is what the second pass
+     * is for. A pass that wrote fewer than it was asked for is reporting that
+     * the well-known dishes for this request are exhausted, and topping that up
+     * only pushes it into the tail.
      */
-    let generatedAny = false;
+    let generatedLines = 0;
 
-    const pending: Promise<{
-        outcome: SuggestionOutcome;
+    /**
+     * One in-flight suggestion. Two promises rather than one because the card is
+     * emitted at the FIRST of them: `reviewed` settles as soon as the dish has a
+     * final name and has passed the gate, `outcome` only after dedup and the
+     * insert. Emitting at `reviewed` is what stops a card being renamed or
+     * withdrawn once the user can see it; emitting at `outcome` would also cover
+     * the rarer dedup withdrawals, at several more seconds of blank screen.
+     */
+    interface Pending {
         tempId: string;
-        /** Per-request, so it can only come from the frame the model wrote. */
-        adaptedFor?: string[];
-    }>[] = [];
+        /** The card to show, or `null` if the gate rejected the dish. */
+        reviewed: Promise<ProvisionalSuggestionDto | null>;
+        outcome: Promise<{
+            outcome: SuggestionOutcome;
+            tempId: string;
+            /** Per-request, so it can only come from the frame the model wrote. */
+            adaptedFor?: string[];
+        }>;
+        /** Whether the review has been read — separate from whether it produced a card. */
+        reviewHandled: boolean;
+        /** Whether a card for this slot ever reached the client. */
+        shown: boolean;
+    }
+
+    const pending: Pending[] = [];
     // Two line shapes, and the order matters: `processJsonlStream` reports the
     // index of the FIRST schema that matched, so the rejection line is second
     // and stays unambiguous — a dish never validates against it.
@@ -360,35 +400,44 @@ async function* runGenerationPass({
     const emit = function* (
         outcome: SuggestionOutcome,
         tempId: string,
+        shown: boolean,
         adaptedFor?: string[]
     ): Generator<StreamedSuggestionDto | WithdrawnSuggestionDto> {
+        // A withdrawal exists to take a card OFF the screen. Now that nothing is
+        // drawn until the gate has passed, most drops never had a card to begin
+        // with — sending one anyway makes the client reconcile a tempId it has
+        // never seen, which is indistinguishable from a card it missed.
+        const withdraw = function* (): Generator<WithdrawnSuggestionDto> {
+            if (shown) yield { tempId, withdrawn: true };
+        };
+
         // A dish the user already has as a recipe is not surfaced: this endpoint
         // returns suggestion cards, and re-offering something already in the
         // catalog is exactly the duplication being guarded against. The prompt
         // exclusion above makes this a rare fallback.
         //
-        // Withdrawn rather than silently skipped, because its provisional card
-        // has already been sent — saying nothing would leave a card on screen
-        // that never resolves and cannot be opened.
+        // Withdrawn rather than silently skipped when a card was already sent —
+        // saying nothing would leave a card on screen that never resolves and
+        // cannot be opened.
         if (outcome.kind === "existing_recipe") {
             console.log(
                 `[Suggestions] Withdrawing "${outcome.recipe.name}" — already in the catalog as a recipe`
             );
-            yield { tempId, withdrawn: true };
+            yield* withdraw();
             return;
         }
 
         // Same for a dish the authenticity gate rejected, and for one the batch
         // coordinator collapsed into an earlier sibling.
         //
-        // A drink is withdrawn like any other drop — the card is already on
-        // screen and has to come off — but it is also reported upward, because
-        // it is the one reason that says something about the REQUEST rather than
-        // about this dish. The caller uses that to stop topping up and to send
-        // the terminal frame.
+        // A drink is reported upward as well, because it is the one reason that
+        // says something about the REQUEST rather than about this dish. The
+        // caller uses that to stop topping up and to send the terminal frame —
+        // and it must still happen when nothing was drawn, since the gate now
+        // rejects the drink before any card exists.
         if (outcome.kind === "dropped") {
             if (outcome.reason === "not_food") onOutOfScope();
-            yield { tempId, withdrawn: true };
+            yield* withdraw();
             return;
         }
 
@@ -408,7 +457,7 @@ async function* runGenerationPass({
             console.log(
                 `[Suggestions] Withdrawing "${name}" — already shown in this feed`
             );
-            yield { tempId, withdrawn: true };
+            yield* withdraw();
             return;
         }
 
@@ -442,48 +491,75 @@ async function* runGenerationPass({
                 );
                 onOutOfScope();
             } else {
-                generatedAny = true;
+                generatedLines++;
                 const suggestion = next.value.parsed as GenerateSuggestionResponseDto;
                 const tempId = randomUUID();
+                const reviewed = deferred<ProvisionalSuggestionDto | null>();
 
-                pending.push(
-                    persistOrReuseSuggestion(suggestion, request, { batch }).then(
-                        (outcome) => ({
-                            outcome,
-                            tempId,
-                            adaptedFor: suggestion.adaptedFor,
-                        })
-                    )
-                );
-
-                // The card the model just wrote, sent before any database work.
-                // Everything after this point — the authenticity/naming review,
-                // embedding, dedup searches, ingredient/tag matching, the insert
-                // — changes nothing the user can see except resolving ids.
-                // Holding the card back for it was most of the wait.
-                yield provisionalCard(suggestion, tempId);
+                // The card is no longer sent off the model's raw line. It waits
+                // for the authenticity/naming review — one call, and the only
+                // step below that can still change what the card SAYS. Before
+                // this, an unauthentic dish was drawn and then withdrawn, and
+                // roughly a third of cards visibly renamed when the review
+                // corrected the generator's spelling.
+                //
+                // Everything after the review — dedup, embedding, ingredient and
+                // tag matching, the insert — only resolves ids, so the card
+                // still goes out well ahead of it.
+                pending.push({
+                    tempId,
+                    reviewed: reviewed.promise,
+                    shown: false,
+                    outcome: persistOrReuseSuggestion(suggestion, request, {
+                        batch,
+                        onReviewed: (dish) =>
+                            reviewed.resolve(
+                                dish ? provisionalCard(dish, tempId) : null
+                            ),
+                    }).then((outcome) => ({
+                        outcome,
+                        tempId,
+                        adaptedFor: suggestion.adaptedFor,
+                    })),
+                });
             }
         }
 
         // Drain everything already settled before reading more from the model,
         // so a card is never held back behind a line still being generated.
-        while (
-            pending.length > 0 &&
-            (done || (await isSettled(pending[0])))
-        ) {
-            const settled = await pending.shift();
+        //
+        // Both frames are gated on the HEAD of the queue, which is what keeps
+        // the client's list in generation order: a fast fourth dish must not
+        // show its card before a slow first one.
+        while (pending.length > 0) {
+            const head = pending[0];
 
-            if (settled) {
-                yield* emit(
-                    settled.outcome,
-                    settled.tempId,
-                    settled.adaptedFor
-                );
+            if (!head.shown) {
+                if (!done && !(await isSettled(head.reviewed))) break;
+
+                const card = await head.reviewed;
+                head.shown = card !== null;
+
+                // `null` means the gate rejected it — no card, and none of the
+                // frames below will reference this tempId either.
+                if (card) yield card;
             }
+
+            if (!done && !(await isSettled(head.outcome))) break;
+
+            pending.shift();
+            const settled = await head.outcome;
+
+            yield* emit(
+                settled.outcome,
+                settled.tempId,
+                head.shown,
+                settled.adaptedFor
+            );
         }
     }
 
-    if (!generatedAny) onGeneratedNothing();
+    onGenerated(generatedLines);
 }
 
 /**

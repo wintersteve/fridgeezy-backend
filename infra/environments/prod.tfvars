@@ -5,7 +5,9 @@ lambda_timeout = 300
 
 log_retention_days = 90
 
-# Public Function URL — the app carries no auth of its own yet.
+# NONE is the only workable value — see dev.tfvars for why AWS_IAM is not
+# reachable from a published mobile binary. /rest is gated in the app by a
+# Supabase access token; /health is not.
 function_url_auth_type = "NONE"
 
 # Spend ceiling and a guard on Supabase's connection pool. Enabled while the

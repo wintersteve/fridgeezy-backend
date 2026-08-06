@@ -6,7 +6,9 @@ import type { AddressInfo } from "node:net";
 import { pipeline } from "node:stream/promises";
 
 import { pendingBackgroundTaskCount, settleBackgroundTasks } from "./background-tasks";
-import { createApp } from "./create-app";
+import { loadSecrets } from "./load-secrets";
+
+// `./create-app` is deliberately NOT imported here — see `startServer`.
 
 /**
  * Connection-scoped headers, which must not be forwarded across a proxy hop
@@ -29,7 +31,14 @@ const DRAIN_SAFETY_MARGIN_MS = 2_000;
 let listening: Promise<number> | undefined;
 
 /**
- * Starts the Express app on a loopback port, once per execution environment.
+ * Loads configuration, then the app, then binds it to a loopback port.
+ *
+ * The import of `./create-app` is dynamic, and that is the whole point rather
+ * than a style choice. `libs/openai`, `libs/genai` and `libs/supabase` read
+ * their keys and throw at *module scope*, so a static import would evaluate
+ * that graph before `loadSecrets()` ever ran and the function would die at cold
+ * start with `Missing OPENAI_API_KEY`. Deferring the import is what lets the
+ * secrets arrive first — and it means none of those libs had to change.
  *
  * Proxying over a real socket rather than synthesising an `IncomingMessage` is
  * what keeps the raw-body path intact: `express-app.ts` deliberately omits
@@ -37,22 +46,46 @@ let listening: Promise<number> | undefined;
  * A genuine HTTP request satisfies that for free, where a hand-rolled mock would
  * have to reproduce stream semantics exactly.
  */
+async function startServer(): Promise<number> {
+    await loadSecrets();
+
+    const { createApp } = await import("./create-app");
+
+    return new Promise<number>((resolve, reject) => {
+        const server = http.createServer(createApp());
+
+        // SSE writes are small and frequent; Nagle would add up to 40ms of
+        // latency to each one.
+        server.on("connection", (socket) => socket.setNoDelay(true));
+        server.once("error", reject);
+
+        server.listen(0, "127.0.0.1", () => {
+            resolve((server.address() as AddressInfo).port);
+        });
+    });
+}
+
+/**
+ * Evaluates the app's module graph without starting a server or reading config.
+ *
+ * Exists for `build-artifact.sh`. Deferring `./create-app` means that merely
+ * requiring this file no longer pulls in the libs, so the artifact check that
+ * used to prove the graph loads under Lambda's module semantics would otherwise
+ * have quietly stopped proving anything — and that check guards the one failure
+ * running locally never reproduces (`ERR_REQUIRE_ESM`).
+ */
+export function loadAppModule(): Promise<unknown> {
+    return import("./create-app");
+}
+
+/** Starts the app once per execution environment and reuses it after that. */
 function listen(): Promise<number> {
     if (!listening) {
-        const started = new Promise<number>((resolve, reject) => {
-            const server = http.createServer(createApp());
+        const started = startServer();
 
-            // SSE writes are small and frequent; Nagle would add up to 40ms of
-            // latency to each one.
-            server.on("connection", (socket) => socket.setNoDelay(true));
-            server.once("error", reject);
-
-            server.listen(0, "127.0.0.1", () => {
-                resolve((server.address() as AddressInfo).port);
-            });
-        });
-
-        // Do not cache a failed bind — the next invocation should retry.
+        // Do not cache a failed start — the next invocation should retry. This
+        // now covers a failed SSM fetch as well as a failed bind, which is the
+        // reason `loadSecrets` does not cache its own rejection either.
         started.catch(() => {
             listening = undefined;
         });

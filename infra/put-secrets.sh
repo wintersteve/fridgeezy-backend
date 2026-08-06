@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Load the app's secrets from apps/api/.env into SSM Parameter Store, where
-# ssm.tf reads them at plan/apply time.
+# Load the app's secrets from apps/api/.env into SSM Parameter Store, where the
+# deployed function reads them at cold start.
 #
 # Values are never printed, never written to a temp file, and never passed
 # through the shell's history — only key names and value lengths are shown, so
@@ -23,10 +23,15 @@
 # change its type — this script deletes and recreates it, which is why it
 # reports "recreated" rather than "updated" in that case.
 #
-# NOTE: whatever lands here is read at apply time and injected as a Lambda
-# environment variable, so it ends up in Terraform state. State is local and
-# unencrypted today — see README.md ("State sensitivity"). The durable fix is
-# for the app to read SSM at cold start instead; iam.tf already grants it.
+# A parameter written here is picked up by the next cold start with no
+# `terraform apply` — the function is given the prefix, not the values, and
+# fetches by path. Rotating a key is this script plus a cold start, and nothing
+# in Terraform state has to change because nothing sensitive is in it.
+#
+# The parameter's NAME becomes the environment variable's name, so a new secret
+# needs no infra change: write it under the same prefix and read process.env for
+# it. Add it to REQUIRED_KEYS in apps/api/src/load-secrets.ts if the app cannot
+# boot without it.
 set -euo pipefail
 
 ENVIRONMENT="${ENVIRONMENT:-dev}"

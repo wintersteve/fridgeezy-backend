@@ -180,6 +180,14 @@
                     "forwardAllArgs": true
                 }
             },
+            "generate-app-icon": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/generate-app-icon.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
             "generate-splash": {
                 "executor": "nx:run-commands",
                 "options": {

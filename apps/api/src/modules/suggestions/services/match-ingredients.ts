@@ -18,7 +18,7 @@ import { adjudicateIngredient } from "./adjudicate-ingredient";
 const ACCEPT_THRESHOLD = 0.85;
 /**
  * Lower bound of the "gray band". Candidates in [GRAY_BAND_THRESHOLD,
- * ACCEPT_THRESHOLD) are handed to the LLM to decide same / new / invalid;
+ * ACCEPT_THRESHOLD) are handed to the LLM to decide same / new;
  * anything below is treated as no candidate.
  */
 const GRAY_BAND_THRESHOLD = 0.6;
@@ -135,10 +135,14 @@ export async function matchIngredients(
         // create) the category match.
         //
         // - similarity >= ACCEPT_THRESHOLD → auto-accept the match.
-        // - GRAY_BAND_THRESHOLD <= similarity < ACCEPT_THRESHOLD, or no candidate
-        //   → ask the LLM whether it's the same as the candidate, a genuinely new
-        //   ingredient, or not a real ingredient. Only real new ones are created;
-        //   junk is dropped rather than polluting the catalog.
+        // - GRAY_BAND_THRESHOLD <= similarity < ACCEPT_THRESHOLD → ask the LLM
+        //   whether it's the same as the candidate or a genuinely new ingredient.
+        // - No candidate → necessarily new; the LLM is asked only for the
+        //   category (see `adjudicateIngredient`).
+        //
+        // Every name reaching here ends up attached to the suggestion, one way or
+        // another. Nothing is ever dropped — see the note on `adjudicateIngredient`
+        // for why a junk row is the cheap error and a lost ingredient is not.
         const learnAlias = async (ingredientId: string, alias: string) => {
             const aliasResult = await ingredientsRepo.addAlias(
                 ingredientId,
@@ -180,7 +184,6 @@ export async function matchIngredients(
         // used to run one ingredient at a time; run them concurrently.
         type Resolution =
             | { kind: "accept"; name: string; ingredientId: string; similarity: number }
-            | { kind: "invalid"; name: string }
             | { kind: "create"; name: string; embedding: number[]; category?: string }
             | { kind: "skip"; name: string };
 
@@ -234,9 +237,6 @@ export async function matchIngredients(
                         similarity: candidate.similarity,
                     };
                 }
-                if (adjudication.decision === "invalid") {
-                    return { kind: "invalid", name };
-                }
                 return {
                     kind: "create",
                     name,
@@ -260,13 +260,6 @@ export async function matchIngredients(
                     confidence: r.similarity,
                 });
                 await learnAlias(r.ingredientId, r.name);
-                continue;
-            }
-
-            if (r.kind === "invalid") {
-                console.warn(
-                    `[Ingredients] Skipping "${r.name}" — adjudged not a real ingredient`
-                );
                 continue;
             }
 

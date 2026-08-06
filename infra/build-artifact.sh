@@ -90,23 +90,46 @@ fi
 # and Lambda dies with ERR_REQUIRE_ESM. Bundling the workspace libs is what
 # actually fixes it; this is here to notice if that ever regresses.
 #
-# Env vars are stubbed because several libs throw at *import* on a missing key:
-# this checks that modules load, not that config is valid.
+# Two loads, not one, because the handler now defers `./create-app` so that
+# secrets can be fetched from SSM before the libs read their keys:
+#
+#  1. Requiring lambda.js with NO secrets in the environment must succeed. This
+#     is the property the SSM change depends on, and it is invisible in a normal
+#     run — a laptop with a .env satisfies the old import-time reads either way.
+#  2. `loadAppModule()` then forces the deferred graph, with stubs, because
+#     several libs throw at *import* on a missing key. Without this the
+#     ERR_REQUIRE_ESM check above would silently stop covering anything: the
+#     deferred import means requiring lambda.js no longer touches a single lib.
 echo "==> verifying the handler loads the way Lambda loads it"
 probe="$(mktemp -d)"
 trap 'rm -rf "$probe"' EXIT
 (cd "$DIST" && tar cf - .) | (cd "$probe" && tar xf -)
 
 if ! (cd "$probe" && \
-    SUPABASE_URL=http://stub SUPABASE_ANON_KEY=stub SUPABASE_SERVICE_ROLE_KEY=stub \
-    OPENAI_API_KEY=stub GOOGLE_API_KEY=stub \
+    env -u SUPABASE_URL -u SUPABASE_ANON_KEY -u SUPABASE_SERVICE_ROLE_KEY \
+        -u OPENAI_API_KEY -u GOOGLE_API_KEY -u SSM_PARAMETER_PREFIX \
     node --no-experimental-require-module -e "
         globalThis.awslambda = { streamifyResponse: (f) => f, HttpResponseStream: { from: (s) => s } };
         if (typeof require('./lambda.js').handler !== 'function') {
             throw new Error('lambda.js exports no handler');
         }
     " 2>&1); then
-    echo "    handler does not load under Lambda's module semantics" >&2
+    echo "    handler does not load without secrets in the environment" >&2
+    echo "    (a lib is being imported before load-secrets.ts runs)" >&2
+    exit 1
+fi
+
+if ! (cd "$probe" && \
+    SUPABASE_URL=http://stub SUPABASE_ANON_KEY=stub SUPABASE_SERVICE_ROLE_KEY=stub \
+    OPENAI_API_KEY=stub GOOGLE_API_KEY=stub \
+    node --no-experimental-require-module -e "
+        globalThis.awslambda = { streamifyResponse: (f) => f, HttpResponseStream: { from: (s) => s } };
+        require('./lambda.js').loadAppModule().then(
+            (m) => { if (typeof m.createApp !== 'function') throw new Error('no createApp'); },
+            (e) => { console.error(e); process.exit(1); }
+        );
+    " 2>&1); then
+    echo "    the app module graph does not load under Lambda's module semantics" >&2
     echo "    (outside the repo, with require(esm) disabled)" >&2
     exit 1
 fi

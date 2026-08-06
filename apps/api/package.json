@@ -162,6 +162,7 @@
         }
     },
     "dependencies": {
+        "@aws-sdk/client-ssm": "^3.1104.0",
         "@fridgeezy/domain": "0.0.1",
         "@fridgeezy/genai": "0.0.1",
         "@fridgeezy/llm": "0.0.1",

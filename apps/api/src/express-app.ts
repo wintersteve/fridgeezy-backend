@@ -9,7 +9,11 @@ export function createExpressApp() {
         cors({
             origin: "*",
             methods: ["GET", "POST", "OPTIONS"],
-            allowedHeaders: ["Content-Type"],
+            // Authorization must be listed or a browser preflight strips it and
+            // every request arrives looking unauthenticated. React Native's fetch
+            // does not preflight, so this is invisible from the app and only bites
+            // a browser caller — which is exactly why it is easy to miss.
+            allowedHeaders: ["Content-Type", "Authorization"],
         })
     );
 

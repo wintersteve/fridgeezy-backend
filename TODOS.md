@@ -508,6 +508,57 @@ data migration, not just a code edit.
       on Sonnet 4.6/5, 512 on Opus 5, 4096 on Opus 4.6 and Haiku 4.5) — no error,
       and no write either, so marking the short adjudicator prompts costs nothing
       and simply does nothing on most models.
+- [x] **Re-baselined `step-structure.eval.ts`** (2026-08-06). Owed by the caching
+      reorder above: moving `## CRITICAL: Ingredient Constraints` to the *end* of
+      `buildRecipeSystemPrompt` was verified as a pure textual reorder, but this
+      eval measures precisely the constraint that moved. Ran `--only=baseline`
+      (the shipped prompt; the four variants are exploratory ideas from 2026-08-03
+      and unrelated), compared against the 2026-08-03 output:
+
+      | | 08-03 (block at line 3) | 08-06 (block at end) |
+      | --- | --- | --- |
+      | steps referencing an unlisted ingredient | 0 | **0** |
+      | listed ingredients missing from output | 0 | **0** |
+      | ingredients without quantity/unit | 0 | **0** |
+      | dual-unit temperatures / any °F | 0 / 0 | **0 / 0** |
+      | duration + temperature field coverage | 100% | **100%** |
+
+      **The constraint holds in both directions** — steps invent no ingredients,
+      and none of the listed ones are dropped. Total steps moved 28 → 25, which is
+      **noise, not a finding**: n=1 per dish, and this harness has form here (the
+      model-migration baseline scored 0/4 then 4/4 on tag cardinality across
+      consecutive single-sample runs, which is why that one takes `--repeat`).
+      Read it as "no regression detected", not as "the prompt got tighter".
+- [x] **`eval-step-structure` nx target added** (2026-08-06). It was the only eval
+      in `src/evals/` without one, so it was absent from `CLAUDE.md`'s list and
+      had to be run as a bare `npx jiti` from `apps/api/` — which is a good part
+      of why the re-baseline it owed nearly got lost in prose.
+      Carries `forwardAllArgs: true`, matching `eval-model-migration` and for the
+      same reason: without it `-- --only=baseline` is swallowed and all five
+      variants run, quintupling the spend with no error to say so.
+- [x] **`--repeat` added to `step-structure.eval.ts`** (2026-08-06), matching the
+      flag `eval-model-migration` grew for the same reason. Default stays 1 so an
+      exploratory run is cheap.
+      **It reports spread, not just a total** — `steps/run` becomes
+      `mean (min-max)`, because a bare total hides precisely what the repeats were
+      paid for. Running `--repeat=3 --only=baseline` (9 generations of the
+      byte-identical shipped prompt) gave **8.8 (6-12)**:
+
+      | dish | run 1 | run 2 | run 3 |
+      | --- | --- | --- | --- |
+      | Roast Chicken | 7 | 8 | 8 |
+      | Beef Bourguignon | 11 | 12 | 12 |
+      | Lemon Ricotta Pancakes | 6 | 7 | 8 |
+
+      **A 2x spread on one prompt.** So the earlier 28 → 25 → 30 totals were not
+      merely noisy, they were noise on a metric whose range is this wide — any
+      single-run comparison of the steps column is meaningless, including
+      between variants. The quality columns held across all 9 generations
+      (0 dual-unit, 0 °F, 100% duration and temperature coverage): those are the
+      signals worth reading.
+      At `--repeat=1` the footer now says so explicitly rather than leaving the
+      reader to infer it, and every generation is written to the output file with
+      a `run` index instead of the last one overwriting its siblings.
 - [ ] Set a cost baseline: compare Bedrock token spend + Lambda compute vs the
       current OpenAI + Gemini bill on representative volume. **The logging above
       is the input to this** — read real `[LLM]` totals per `label` rather than

@@ -349,6 +349,91 @@ export type Database = {
           },
         ]
       }
+      menu_courses: {
+        Row: {
+          course_type: string
+          created_at: string
+          description: string | null
+          difficulty: Database["public"]["Enums"]["difficulty_type"] | null
+          id: string
+          image: string | null
+          is_recipe: boolean
+          menu_id: string
+          name: string
+          position: number
+          recipe_id: string
+        }
+        Insert: {
+          course_type: string
+          created_at?: string
+          description?: string | null
+          difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
+          id?: string
+          image?: string | null
+          is_recipe?: boolean
+          menu_id: string
+          name: string
+          position?: number
+          recipe_id: string
+        }
+        Update: {
+          course_type?: string
+          created_at?: string
+          description?: string | null
+          difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
+          id?: string
+          image?: string | null
+          is_recipe?: boolean
+          menu_id?: string
+          name?: string
+          position?: number
+          recipe_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_courses_menu_id_fkey"
+            columns: ["menu_id"]
+            isOneToOne: false
+            referencedRelation: "menus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menus: {
+        Row: {
+          created_at: string
+          id: string
+          main_recipe_id: string
+          name: string
+          profile_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          main_recipe_id: string
+          name: string
+          profile_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          main_recipe_id?: string
+          name?: string
+          profile_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menus_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profile_blacklisted_ingredients: {
         Row: {
           created_at: string

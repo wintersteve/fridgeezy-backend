@@ -83,6 +83,22 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
   raw ingredients and only the compose card read them. Buckets cannot be renamed
   in place, so `20260805000001_dish_tiles_bucket.sql` creates the new one and the
   old is left standing until any client holding the previous URLs has aged out.
+- `generate-splash` — the app's launch screen: the placeholder's washes at full
+  bleed, one render per theme, into `operations/output/splash/` (gitignored).
+  The **only image operation that writes to disk instead of a bucket** — a splash
+  is drawn before the app has reached the network, so it has to be bundled into
+  the binary and therefore lives in the *client* repo. Pick a candidate by eye
+  and copy it across; the script prints the step, the way `env-remote` prints the
+  client's `EXPO_PUBLIC_*` lines. `-- --variant=dark` re-rolls one theme,
+  `-- --candidates=N` changes how many.
+
+  Pinned to `gemini-3-pro-image-preview` rather than taking the Flash default:
+  the per-dish volume argument behind that default does not reach an asset
+  generated twice, ever, and shown on every launch.
+
+  **The dark variant is the whole reason `tone` exists** — see `libs/genai`
+  below. Four passes and twelve renders to get a dark ground out of a style built
+  for cream; the failure and the fix are recorded on the `tone` option itself.
 - `backfill-course-tags` — one-off repair, already run on 2026-08-02. Fills a
   course tag on suggestions and recipes that have none, classifying each dish
   with an LLM. Dry run unless `COURSE_APPLY=true`; idempotent, so it is safe
@@ -249,7 +265,21 @@ precedes `'_'`. Ingredients are **not** seeded by `db reset`; run
 
 Evals (`npx nx run @fridgeezy/api:<target>`): `eval`, `calibrate`,
 `calibrate-ingredients`, `calibrate-authenticity`, `eval-model-migration`,
-`check-streaming-conformance`, `check-batch-dedup`.
+`eval-step-structure`, `check-streaming-conformance`, `check-batch-dedup`.
+
+`eval-step-structure` takes `-- --only=baseline` to run just the shipped prompt
+instead of all five variants — a fifth of the spend, and the only variant that
+reflects production — and `-- --repeat=N` to generate each dish N times.
+
+**Its step count needs repeats to mean anything.** Nine generations of the
+byte-identical shipped prompt spread **6 to 12 steps** (mean 8.8), and one dish
+alone gave 6/7/8. So a single-run difference in that column is not a small
+signal, it is no signal — that applies to comparisons between variants, not just
+across dates. `--repeat` reports `mean (min-max)` for exactly this reason, and at
+`--repeat=1` the footer says the number is unusable rather than leaving you to
+infer it. The quality columns (dual-unit temperatures, °F, duration and
+temperature field coverage) held at 0/0/100%/100% across all nine — those are the
+stable signals.
 
 `check-batch-dedup` is the odd one out and the cheapest thing here: no database,
 no LLM, no API key, runs in milliseconds. It drives the intra-batch dedup
@@ -427,6 +457,29 @@ those frames incrementally, which is why frame shapes are part of the contract.
   screen still have to look like one kitchen. The `"ceramic"` output is
   byte-identical to what the 2026-08-04 A/B rounds were run against; if you
   touch this builder again, check that it still is.
+
+  `tone` is the sharpest-edged of all, and the one to be careful with. It
+  defaults to `"high-key"` — the pale chalky register every surface in the app
+  shares — and `"low-key"` exists for exactly one surface, the launch screen's
+  dark variant. **A `ground` alone will not give you a dark image.** Measured
+  2026-08-06 over twelve renders: asking for `#141110` and changing nothing else
+  returns cream, and so does moving `Tone`, `Palette` and `Light` as well. The
+  line that actually decides it is `Rendering`, because *watercolour is
+  transparent pigment on white paper* — ask for it on black and the model puts
+  the paper back. Low-key swaps the medium for opaque gouache and chalk pastel.
+
+  That makes it four of the eight fixed-style lines, so **low-key is a sibling
+  of the house style rather than a setting of it**. Do not put one on a surface
+  that sits beside a recipe hero or a cuisine tile; unlike `camera: "overhead"`
+  the mismatch would not be subtle. The high-key output is verified
+  byte-identical across all four existing call-site shapes — re-check that if
+  you touch it.
+
+  One more thing the low-key work surfaced: "full bleed" means opposite things
+  on the two grounds. On cream, bare ground is a void, so the subject is told to
+  *cover* every corner. Tell a dark ground the same and it obeys — covering the
+  dark with pale pigment and handing back a light picture. Dark asks the blooms
+  to *reach* the edges while the ground stays the majority of the frame.
 
   **`padPngToSquare` is not a step every image takes.** It exists because one
   recipe asset is cropped three ways, and it works by shrinking the subject

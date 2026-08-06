@@ -109,6 +109,39 @@ export interface FoodIllustrationStyleOptions {
      */
     camera?: "three-quarter" | "overhead";
     /**
+     * Where the values sit. `"high-key"` (the default) is the pale, chalky
+     * register every surface in the app shares.
+     *
+     * `"low-key"` exists for one surface — the launch screen's dark-theme
+     * variant — and only because `ground` alone could not produce it. Measured
+     * 2026-08-06: three renders asked for `ground: "#141110"` with everything
+     * else unchanged all came back on **cream**, not on the dark ground. Three
+     * separate lines were outvoting the ground and it takes all three to fix:
+     *
+     * - `Tone` says every value sits in the *upper, lighter half* of the range.
+     * - `Palette` pins cream `#FFF5EE` and warm stone `#FAF8F6` as fixed.
+     * - `Light` asks for a cast shadow *from* the subject *onto* the ground,
+     *   which only makes sense if the ground is the lighter of the two.
+     *
+     * So this is not a tone switch in the photographic sense; it is the smallest
+     * set of lines that have to move together for a dark ground to survive, in
+     * the same way `vessel` swaps two. Changing `Tone` alone was tried first and
+     * produced a pale image with a dark border, which is worse than either.
+     *
+     * **It shares the discipline of the rule it replaces.** Both are treatments
+     * of saturation and value only, and neither says anything about *hue* —
+     * that is the line `Tone`'s own comment draws, and widening it here would
+     * reproduce the peach-shard tiramisu from the other direction.
+     *
+     * Nothing in the app pairs a low-key image with a high-key one on the same
+     * screen, which is the only reason this is safe: the launch screen is alone
+     * by definition. **Do not reach for it on a surface that sits next to a
+     * recipe hero or a cuisine tile** — that is the "two different kitchens"
+     * failure the whole file exists to prevent, and unlike `camera: "overhead"`
+     * it would not be a subtle one.
+     */
+    tone?: "high-key" | "low-key";
+    /**
      * The colour the scene is painted on. Defaults to the app's `#FDFBF9`
      * ground, which is what every surface but one wants.
      *
@@ -184,6 +217,73 @@ const CAMERA_RULE: Record<CameraMode, string> = {
     overhead: `- Camera: perfectly overhead bird's-eye, 90 degrees, straight down. No perspective tilt at all: a round vessel reads as a true circle, a rectangular one as a true rectangle, and nothing shows a side wall or a front face. Every vessel lies flat to the picture plane.`,
 };
 
+/** Where the values sit — see `tone`, and the three lines it has to move. */
+type ToneMode = NonNullable<FoodIllustrationStyleOptions["tone"]>;
+
+const TONE_RULE: Record<ToneMode, string> = {
+    "high-key": `- Tone: high-key, pastel and softly washed throughout. Every value sits in the upper, lighter half of the range, as if a thin veil of warm cream were laid over the whole image — colours are chalky, faded and gently muted rather than rich, punchy or glossy. Even the darkest element stays a soft warm mid-tone; contrast between light and dark is low and edges between colours are soft. This is a treatment of saturation and value only: it must never change *which* colour a food is, only how pale and quiet it reads.`,
+    "low-key": `- Tone: low-key and deep throughout. Every value sits in the lower, darker half of the range: the ground is the darkest thing in the picture and everything else rests only a little above it, the way pigment glows on dark water. There is no cream, no white and no pale wash anywhere — nothing is bleached toward the light end. Colours stay chalky and gently muted rather than rich, punchy or glossy; even the lightest element stays a soft warm mid-tone, and contrast between light and dark is low with soft edges between colours. This is a treatment of saturation and value only: it must never change *which* colour a food is, only how deep and quiet it reads.`,
+};
+
+/**
+ * The light, which depends on the tone as well as the vessel.
+ *
+ * High-key casts one shadow from the subject onto the ground. That sentence is
+ * an instruction about which of the two is lighter, and on a dark ground it
+ * inverts the whole image — see `tone`. Low-key therefore removes the source
+ * and the cast shadow rather than trying to re-aim them.
+ */
+const lightRule = (vessel: VesselMode, tone: ToneMode) =>
+    tone === "high-key"
+        ? `- Light: soft diffuse studio daylight from the upper left, casting exactly one gentle, soft-edged, low-contrast shadow from the ${vessel === "none" ? "subject" : "vessel"} toward the lower right. No other shadows anywhere — no dappled light, no foliage or window patterns, no shadows from objects outside the frame. No hard specular highlights.`
+        : `- Light: soft ambient glow with no visible source and no cast shadow anywhere — the ${vessel === "none" ? "subject" : "vessel"} is lit from within rather than from outside, so nothing throws a shadow onto the ground and the ground is never lit into a pool. No dappled light, no foliage or window patterns, no hard specular highlights.`;
+
+/**
+ * The palette, which pins the ground and the linework.
+ *
+ * Low-key drops the two fixed creams — they are the vessel-and-ground colours
+ * of a light scene, and naming them is half of why a dark ground came back
+ * cream — and darkens the linework, because a `#5C5450` line is *lighter* than
+ * a `#141110` ground and reads as a highlight rather than a contour. It keeps
+ * both accents and the same "food keeps its own hues" clause: those are about
+ * hue, which neither tone is allowed to touch.
+ */
+/**
+ * The medium, which is the line that actually decides whether a dark ground
+ * survives — and the one it took two failed rounds to find.
+ *
+ * Round one moved `ground` alone: three renders came back on cream. Round two
+ * moved `Tone`, `Palette` and `Light` as well: three more came back on cream,
+ * one of them with a bowl in it. The reason is in this line and not in any of
+ * those. **Watercolour is a transparent medium on white paper.** Asking for
+ * "watercolour-like washes with soft, slightly bleeding edges" on a black
+ * ground asks for something the medium is not, and the model resolves the
+ * contradiction the way a painter would — by putting the paper back.
+ *
+ * So low-key swaps the medium for an opaque one. Gouache used as body colour
+ * and soft chalk pastel both cover a dark ground instead of glazing over it,
+ * and a soft edge becomes pigment blending into pigment rather than paper
+ * showing through. That is a real change of material, not a filter over the
+ * same picture, which is why this is the fourth of the eight FIXED STYLE lines
+ * that low-key rewrites.
+ *
+ * Four of eight is the honest cost, and it is worth naming: what stays shared
+ * is the camera, the vessel, the framing, the two accents, the "food keeps its
+ * own hues" clause and the whole trailer. What changes is how the paint behaves.
+ * A low-key surface is a sibling of the house style rather than a setting of it
+ * — which is exactly why `tone`'s doc comment forbids putting one next to a
+ * recipe hero.
+ */
+const RENDERING_MEDIUM: Record<ToneMode, string> = {
+    "high-key": `delicate hand-drawn linework, gentle gouache and watercolour-like washes with soft, slightly bleeding edges, clean flat-leaning shapes; minimal, airy and warm.`,
+    "low-key": `delicate hand-drawn linework, and soft OPAQUE gouache and chalk pastel laid down over a dark ground. The pigment is body colour that covers the darkness beneath it, never a transparent wash that lets a pale paper glow through — every soft edge is pigment blending into pigment. Clean flat-leaning shapes; minimal and warm. This is not watercolour, and there is no white or cream paper anywhere in the picture.`,
+};
+
+const paletteRule = (tone: ToneMode, ground: { hex: string }) =>
+    tone === "high-key"
+        ? `- Palette: the vessel, background and linework are fixed — cream #FFF5EE, warm stone #FAF8F6, ground ${ground.hex}, with warm grey #5C5450 only as sparse, fine linework — never a near-black outline; peach #F4A67A and sage green #93C5A8 are the accent tones. The food keeps its own true hues, rendered in the same warm register. No saturated primaries, no neon, no pure black.`
+        : `- Palette: the background and linework are fixed — ground ${ground.hex}, with warm dark grey #3A322C only as sparse, fine linework; peach #F4A67A and sage green #93C5A8 are the accent tones, and they sit as soft glows rising out of the dark rather than as bright shapes laid on top of it. The food keeps its own true hues, deepened into the same warm register. No saturated primaries, no neon, and no cream or white anywhere.`;
+
 /**
  * A function of the ground, not a constant table, because the colour varies per
  * surface. `VESSEL_RULE` above stays a table: it names no colour that moves.
@@ -199,6 +299,7 @@ const backgroundRule = (
 export const buildFoodIllustrationStyle = ({
     vessel = "ceramic",
     camera = "three-quarter",
+    tone = "high-key",
     ground = { name: "warm cream", hex: "#FDFBF9" },
     framing,
     mood,
@@ -209,10 +310,10 @@ ${CAMERA_RULE[camera]}
 ${VESSEL_RULE[vessel]}
 - Framing: ${framing}
 ${backgroundRule(vessel, ground)}
-- Light: soft diffuse studio daylight from the upper left, casting exactly one gentle, soft-edged, low-contrast shadow from the ${vessel === "none" ? "subject" : "vessel"} toward the lower right. No other shadows anywhere — no dappled light, no foliage or window patterns, no shadows from objects outside the frame. No hard specular highlights.
-- Palette: the vessel, background and linework are fixed — cream #FFF5EE, warm stone #FAF8F6, ground ${ground.hex}, with warm grey #5C5450 only as sparse, fine linework — never a near-black outline; peach #F4A67A and sage green #93C5A8 are the accent tones. The food keeps its own true hues, rendered in the same warm register. No saturated primaries, no neon, no pure black.
-- Tone: high-key, pastel and softly washed throughout. Every value sits in the upper, lighter half of the range, as if a thin veil of warm cream were laid over the whole image — colours are chalky, faded and gently muted rather than rich, punchy or glossy. Even the darkest element stays a soft warm mid-tone; contrast between light and dark is low and edges between colours are soft. This is a treatment of saturation and value only: it must never change *which* colour a food is, only how pale and quiet it reads.
-- Rendering: refined modern editorial illustration — delicate hand-drawn linework, gentle gouache and watercolour-like washes with soft, slightly bleeding edges, clean flat-leaning shapes; minimal, airy and warm.${renderingEmphasis ? ` ${renderingEmphasis}` : ""} Not photorealistic, not 3D-rendered, not cartoonish, not high-contrast.
+${lightRule(vessel, tone)}
+${paletteRule(tone, ground)}
+${TONE_RULE[tone]}
+- Rendering: refined modern editorial illustration — ${RENDERING_MEDIUM[tone]}${renderingEmphasis ? ` ${renderingEmphasis}` : ""} Not photorealistic, not 3D-rendered, not cartoonish, not high-contrast.
 
 Mood: ${mood}
 

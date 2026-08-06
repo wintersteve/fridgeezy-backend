@@ -150,6 +150,14 @@
                     "command": "npx jiti src/evals/batch-dedup.check.ts",
                     "cwd": "apps/api"
                 }
+            },
+            "eval-step-structure": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/step-structure.eval.ts",
+                    "cwd": "apps/api",
+                    "forwardAllArgs": true
+                }
             }
         }
     },

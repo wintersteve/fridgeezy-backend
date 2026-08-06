@@ -13,14 +13,34 @@ config();
 // say so. Whichever database you just changed is the one to generate from.
 const useLocal = process.argv.includes("--local");
 
+// Only for the log line — `--linked` resolves the project from the CLI's own
+// link state, so this is no longer required for the command to work.
 const projectId = process.env.SUPABASE_PROJECT_ID;
 
-if (!useLocal && !projectId) {
-    console.error("Missing SUPABASE_PROJECT_ID in .env (or pass --local)");
-    process.exit(1);
-}
+/**
+ * A direct Postgres connection string. Optional, and the only escape hatch from
+ * the platform.
+ *
+ * Both remote flags — `--project-id` and `--linked` — introspect through
+ * Supabase's hosted pg-meta service, so both go down together the moment the
+ * project trips a quota: a cached-egress cap left `gen types` answering
+ * "Service for this project is restricted" while `migration up --linked` was
+ * still applying migrations against the same database perfectly happily. Only
+ * `--db-url` skips the platform and runs the introspection queries itself.
+ *
+ * Set `SUPABASE_DB_URL` in apps/database/.env to the connection string from
+ * Settings → Database to make that the default.
+ */
+const dbUrl = process.env.SUPABASE_DB_URL;
 
-const source = useLocal ? "--local" : `--project-id ${projectId}`;
+// `--linked` over `--project-id` for the fallback: same route, but it takes the
+// project from the CLI's link state rather than needing the id in .env, so it
+// cannot disagree with the database the migrations were just applied to.
+const source = useLocal
+    ? "--local"
+    : dbUrl
+      ? `--db-url '${dbUrl}'`
+      : "--linked";
 
 const outputPath = resolve(
     process.cwd(),
@@ -28,13 +48,27 @@ const outputPath = resolve(
 );
 
 try {
-    console.log(
-        `Generating types from ${useLocal ? "the LOCAL stack" : `remote project ${projectId}`}…`
-    );
+    const target = useLocal
+        ? "the LOCAL stack"
+        : dbUrl
+          ? "the database at SUPABASE_DB_URL"
+          : `the linked project${projectId ? ` (${projectId})` : ""}`;
+
+    console.log(`Generating types from ${target}…`);
 
     const types = execSync(`supabase gen types typescript ${source}`, {
         stdio: ["ignore", "pipe", "inherit"],
     }).toString();
+
+    // The CLI has been known to exit 0 with nothing on stdout. Writing that
+    // would replace the checked-in types with an empty file and break both
+    // repos, so the output has to look like types before it is trusted.
+    if (!types.includes("export type Database")) {
+        console.error(
+            "Refusing to write: the CLI returned no Database type. Left the existing file alone."
+        );
+        process.exit(1);
+    }
 
     writeFileSync(outputPath, types);
 

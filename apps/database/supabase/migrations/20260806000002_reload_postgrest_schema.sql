@@ -1,0 +1,13 @@
+-- Tells PostgREST to re-read the schema after 20260806000001 added two tables.
+--
+-- Written to chase a 42P01 "relation public.menus does not exist" that turned
+-- out to be the wrong database entirely — the client's EXPO_PUBLIC_SUPABASE_URL
+-- points at the LOCAL stack over the LAN, which had not had the migration
+-- applied yet. Nothing was wrong with the remote's schema cache.
+--
+-- Kept rather than deleted: it is already recorded in both migration ledgers,
+-- and removing an applied migration desyncs every database that ran it. Harmless
+-- where it lands — a notification nobody is listening to — and occasionally
+-- useful, since PostgREST does answer 42P01 from a stale cache when the event
+-- trigger that normally refreshes it has not fired.
+notify pgrst, 'reload schema';

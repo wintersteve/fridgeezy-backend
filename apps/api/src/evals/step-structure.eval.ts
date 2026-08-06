@@ -313,68 +313,124 @@ const scoreSteps = (steps: StepLine[], into: Score): Score => {
 const pct = (part: number, whole: number) =>
     whole === 0 ? "  n/a" : `${((part / whole) * 100).toFixed(0).padStart(4)}%`;
 
+/**
+ * How many times to generate each dish.
+ *
+ * **One sample per dish is not a measurement of step count.** Three runs of the
+ * byte-identical shipped prompt produced 28, 25 and 30 steps — so a variant that
+ * "reduced steps by three" against a single baseline run has demonstrated
+ * nothing. The same trap is documented on `eval-model-migration`, which grew its
+ * own `--repeat` after the baseline scored 0/4 then 4/4 on tag cardinality
+ * across consecutive runs.
+ *
+ * Default stays 1 so an exploratory run is cheap; use >= 5 before believing a
+ * difference. Cost is linear: each repeat is another full recipe generation per
+ * dish per variant.
+ */
+const REPEAT = Math.max(
+    1,
+    Number(
+        process.argv
+            .find((arg) => arg.startsWith("--repeat="))
+            ?.slice("--repeat=".length) ?? 1
+    )
+);
+
+/** Per-run step counts, so the table can show spread rather than just a total. */
+type Spread = number[];
+
+/**
+ * `mean (min–max)` — the shape that makes noise obvious at a glance.
+ *
+ * A bare total hides exactly what repeats were added to reveal: 28 and 30 look
+ * like a trend until you see they came from the same prompt.
+ */
+const spread = (values: Spread): string => {
+    if (values.length === 0) return "n/a";
+    const total = values.reduce((sum, v) => sum + v, 0);
+    if (values.length === 1) return String(total);
+
+    const mean = (total / values.length).toFixed(1);
+    return `${mean} (${Math.min(...values)}-${Math.max(...values)})`;
+};
+
 async function runVariant(
     variant: string,
     extraRules: string,
     units: string,
     tags: string
-) {
+): Promise<{ score: Score; stepSpread: Spread }> {
     const score = emptyScore();
     const captured = [];
+    /** One entry per generation, NOT per dish — that is what makes it a spread. */
+    const stepSpread: Spread = [];
 
     for (const dish of DISHES) {
-        const system =
-            buildRecipeSystemPrompt(units, tags, dish.ingredients) + extraRules;
-        const user = buildRecipeUserPrompt(
-            dish.name,
-            dish.difficulty,
-            dish.ingredients,
-            dish.servings
-        );
+        for (let run = 0; run < REPEAT; run++) {
+            const system =
+                buildRecipeSystemPrompt(units, tags, dish.ingredients) +
+                extraRules;
+            const user = buildRecipeUserPrompt(
+                dish.name,
+                dish.difficulty,
+                dish.ingredients,
+                dish.servings
+            );
 
-        let raw = "";
-        // Same model the production path names, so the variants are measured
-        // against what actually generates recipes today.
-        for await (const chunk of generateStream({
-            model: { openai: "gpt-4.1" },
-            system,
-            user,
-        })) {
-            raw += chunk.choices[0]?.delta?.content ?? "";
+            let raw = "";
+            // Same model the production path names, so the variants are measured
+            // against what actually generates recipes today.
+            for await (const chunk of generateStream({
+                model: { openai: "gpt-4.1" },
+                system,
+                user,
+            })) {
+                raw += chunk.choices[0]?.delta?.content ?? "";
+            }
+
+            const lines = parseJsonl(raw);
+            const steps = lines.filter((line) => line.type === "instruction");
+            const ingredients = lines.filter(
+                (line) => line.type === "ingredient"
+            );
+            scoreSteps(steps, score);
+            const mismatches = scoreQuantitySums(
+                ingredients as IngredientLine[],
+                steps,
+                score
+            );
+
+            stepSpread.push(steps.length);
+
+            captured.push({
+                dish: dish.name,
+                // Present even at REPEAT=1 so the file shape does not change
+                // with the flag — a reader diffing two runs should not have to
+                // account for a key appearing.
+                run: run + 1,
+                ingredients,
+                steps,
+                quantityMismatches: mismatches,
+            });
+
+            console.log(
+                `    ${dish.name}${REPEAT > 1 ? ` [${run + 1}/${REPEAT}]` : ""}: ${steps.length} steps` +
+                    (mismatches.length
+                        ? `, ${mismatches.length} quantity mismatches ` +
+                          `(e.g. ${mismatches[0].name} ${mismatches[0].declared} → ${mismatches[0].summed})`
+                        : "")
+            );
         }
-
-        const lines = parseJsonl(raw);
-        const steps = lines.filter((line) => line.type === "instruction");
-        const ingredients = lines.filter((line) => line.type === "ingredient");
-        scoreSteps(steps, score);
-        const mismatches = scoreQuantitySums(
-            ingredients as IngredientLine[],
-            steps,
-            score
-        );
-
-        captured.push({
-            dish: dish.name,
-            ingredients,
-            steps,
-            quantityMismatches: mismatches,
-        });
-
-        console.log(
-            `    ${dish.name}: ${steps.length} steps` +
-                (mismatches.length
-                    ? `, ${mismatches.length} quantity mismatches ` +
-                      `(e.g. ${mismatches[0].name} ${mismatches[0].declared} → ${mismatches[0].summed})`
-                    : "")
-        );
     }
 
+    // Every generation, not just the last of each dish — an overwrite here would
+    // discard exactly the samples the repeats were paid for.
     writeFileSync(
         join(OUT_DIR, `${variant}.json`),
         JSON.stringify(captured, null, 2)
     );
 
-    return score;
+    return { score, stepSpread };
 }
 
 async function main() {
@@ -385,6 +441,7 @@ async function main() {
     const tags = formatTagsForPrompt(metadata.tags);
 
     const scores: Record<string, Score> = {};
+    const spreads: Record<string, Spread> = {};
 
     // `--only=d_split,c_quantities` re-runs a subset. Each full pass is a dozen
     // gpt-4.1 recipe generations, so iterating on one variant shouldn't pay for
@@ -394,14 +451,21 @@ async function main() {
 
     for (const [variant, rules] of Object.entries(VARIANTS)) {
         if (only && !only.includes(variant)) continue;
-        console.log(`\n=== ${variant} ===`);
-        scores[variant] = await runVariant(variant, rules, units, tags);
+        console.log(
+            `\n=== ${variant}${REPEAT > 1 ? ` (${REPEAT} runs per dish)` : ""} ===`
+        );
+        const result = await runVariant(variant, rules, units, tags);
+        scores[variant] = result.score;
+        spreads[variant] = result.stepSpread;
     }
 
     console.log("\n\n=== Results ===\n");
     const header = [
         "variant".padEnd(14),
-        "steps",
+        // Widened for the `mean (min-max)` form. Every other column is a total
+        // or a ratio and stays comparable across repeat counts; this one does
+        // not, which is exactly why it reports its own spread.
+        REPEAT > 1 ? "steps/run".padEnd(15) : "steps",
         " dual°",
         "  any°F",
         "dur.fld",
@@ -417,7 +481,9 @@ async function main() {
         console.log(
             [
                 variant.padEnd(14),
-                String(s.steps).padStart(5),
+                REPEAT > 1
+                    ? spread(spreads[variant] ?? []).padEnd(15)
+                    : String(s.steps).padStart(5),
                 String(s.dualUnit).padStart(6),
                 String(s.anyFahrenheit).padStart(7),
                 pct(s.durationField, s.proseDuration).padStart(7),
@@ -436,6 +502,12 @@ async function main() {
         `\ndual° / any°F are step counts (lower is better).` +
             `\ndur.fld / tmp.fld are coverage: of the steps whose prose states one,` +
             ` how many carry the structured field.` +
+            (REPEAT > 1
+                ? `\nsteps/run is mean (min-max) across ${REPEAT} runs per dish.` +
+                  ` Every other column is a total over all ${REPEAT * DISHES.length} generations.`
+                : `\n\n⚠ ONE run per dish — step count is NOISE at this sample size.` +
+                  ` Three runs of the identical shipped prompt gave 28 / 25 / 30.` +
+                  `\n  Use --repeat=5 before believing any difference in the steps column.`) +
             `\n\nRaw generations: ${OUT_DIR}`
     );
 }

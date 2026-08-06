@@ -55,3 +55,7 @@ apps/database/supabase/.temp/
 apps/database/supabase/.branches/
 # raw generations captured by the eval targets — a record of one run, not source
 apps/api/eval-output/
+
+# Generated image candidates. Curated by hand and committed in the CLIENT repo
+# (they are bundled into the app binary), so the rolls themselves are scratch.
+apps/database/operations/output/

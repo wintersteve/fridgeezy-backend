@@ -11,6 +11,8 @@ export * from './cooking-actions';
 export * from './dietary-rules';
 export * from './ingredient-aliases';
 export * from './ingredients';
+export * from './menu-courses';
+export * from './menus';
 export * from './profile-blacklisted-ingredients';
 export * from './profile-dietary-preferences';
 export * from './profile-recipe-interactions';

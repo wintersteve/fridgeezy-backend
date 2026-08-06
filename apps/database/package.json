@@ -180,6 +180,14 @@
                     "forwardAllArgs": true
                 }
             },
+            "generate-splash": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/generate-splash.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
             "backfill-course-tags": {
                 "executor": "nx:run-commands",
                 "options": {

@@ -30,6 +30,11 @@ resource "aws_lambda_function" "api" {
       LLM_PROVIDER     = var.llm_provider
       BEDROCK_MODEL_ID = var.bedrock_model_id
 
+      # Paid gate. Not a secret — it says whether to enforce, not what to
+      # enforce with, so it belongs here rather than in SSM alongside
+      # REVENUECAT_WEBHOOK_SECRET.
+      REQUIRE_ENTITLEMENT = var.require_entitlement ? "true" : "false"
+
       # Secrets are NOT here, and must not be added back. Terraform used to read
       # the five SSM parameters through `data` sources and set them as env vars,
       # which meant every value sat in plaintext in the state file — and in every

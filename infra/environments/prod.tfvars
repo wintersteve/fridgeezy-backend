@@ -10,6 +10,12 @@ log_retention_days = 90
 # Supabase access token; /health is not.
 function_url_auth_type = "NONE"
 
+# The paid gate. Stated explicitly rather than left to the variable default,
+# because "false" is the dangerous value to arrive at by omission: prod running
+# unenforced is free LLM spend for anyone who signs up. Prod has never been
+# applied — when it first is, this should almost certainly already be true.
+require_entitlement = false
+
 # Spend ceiling and a guard on Supabase's connection pool. Enabled while the
 # Function URL is still unauthenticated: uncapped, a leaked URL bills OpenAI and
 # Gemini without limit. 50 was the figure picked when this was written; no

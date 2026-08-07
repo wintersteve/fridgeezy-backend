@@ -218,6 +218,33 @@ variable "bedrock_model_arn_patterns" {
 }
 
 # ---------------------------------------------------------------------------
+# Billing
+# ---------------------------------------------------------------------------
+
+variable "require_entitlement" {
+  description = <<-EOT
+    Whether /rest requires an active subscription (REQUIRE_ENTITLEMENT).
+
+    Defaults to FALSE, which inverts how `function_url_auth_type` and the auth
+    middleware work, and does so deliberately. Enforcement cannot be the default
+    while the paywall is not live end to end: with no way to obtain an
+    entitlement, enforcing returns 402 to every request and takes the product
+    offline rather than protecting the spend.
+
+    This is a rollout switch for a feature that is not live, not a standing
+    setting. Set it true in the same release that ships purchasing, then delete
+    both this variable and the flag in `middleware/require-entitlement.ts` and
+    make the gate unconditional — a permanent flag is how enforcement ends up
+    off in production with nothing to say so.
+
+    The startup banner reports the state on every boot, and shouts when it is
+    off, precisely because this default is the dangerous one to forget.
+  EOT
+  type        = bool
+  default     = false
+}
+
+# ---------------------------------------------------------------------------
 # Observability
 # ---------------------------------------------------------------------------
 

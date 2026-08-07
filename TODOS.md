@@ -1,1012 +1,444 @@
-# TODOS — Migrate to AWS Lambda + Amazon Bedrock
+# TODOS
 
-Created 2026-07-28.
+The repo's working list. **Completed items were removed on 2026-08-07** — this
+file is what is left to do, not a record of what was done.
 
-Goal: move the orchestration server (`apps/api`) from a long-running Express
-process onto **AWS Lambda**, and move model inference from **OpenAI + Google
-Gemini** onto **Amazon Bedrock**.
+Two places hold the record instead, and neither is this file:
 
-These are two independent migrations bundled into one effort:
-- **Hosting:** Express → Lambda (compute).
-- **Inference:** OpenAI/Gemini → Bedrock (models).
+- **`CLAUDE.md`** holds the durable knowledge: architecture, the entitlement and
+  share-route decisions, the embedding-dimension constraint, the art-direction
+  rules. Anything a future change must not break belongs there, not here.
+- **git history** holds the narrative — what was tried, measured, and rejected.
+  `git log -p TODOS.md` recovers the full Lambda/Bedrock migration record,
+  including every finding trimmed out of this rewrite.
 
-Do them as separate, independently-shippable phases — don't couple a model swap
-to a hosting swap in the same PR, or a regression becomes impossible to bisect.
-
-**This file is broader than its title.** It is the repo's TODO list, so it also
-carries the food-only scope decision, the auth gaps, and — added 2026-08-06 — an
-**MVP readiness** section. Read that one first if the question is "can this
-ship": the migration below is the most thoroughly tracked work here and the
-least load-bearing on a release, which is a trap this file set for itself.
-
-## Status as of 2026-08-06 — read this before the phases
-
-The two halves are in very different places, and the file's structure hides it:
-
-- **Hosting is DONE and deployed.** Phase 3 is complete and verified against real
-  AWS. Lambda is what serves traffic today. Nothing below reopens that, and
-  nothing about the Bedrock decision changes it — they are independent, which is
-  the point of the split above.
-- **Inference is BUILT but PARKED.** Phase 1 ported all 11 text call sites; no
-  module in `apps/api` imports a provider SDK. `LLM_PROVIDER` still defaults to
-  `openai`, so **no traffic has ever run on Bedrock**, and none can: the account's
-  Anthropic entitlement gate blocks every model (see Phase 0's last checkbox).
-
-**The open question is no longer "can we build it" but "should we switch", and
-that is deliberately being answered with measurements rather than estimates.**
-What a cutover buys is operational — IAM instead of an API key, one AWS bill,
-in-region inference — against a token bill estimated at ~2x, recoverable toward
-parity with prompt caching and per-call-site model choice, and a full prompt
-re-validation on a set of prompts tuned against `gpt-4.1`/`gpt-4o`. The
-instrumentation to replace those estimates with real numbers landed 2026-08-06
-(Phase 5, first checkbox); the comparison itself still waits on the console gate.
-
-**Do not delete `libs/bedrock` while parked.** It costs nothing to carry — it has
-no runtime path — and it holds account-specific findings that exist nowhere else:
-the inference-profile ID form, the `AnthropicBedrockMantle` entitlement gap, the
-`data:`-prefix trap, and the fact that neither `list-foundation-models` nor
-`get-foundation-model-availability` is a usable access check. It is also the
-difference between a `gpt-4.1` deprecation being a config change and a project.
+What stays below is open work, plus the findings that still *bind* it.
 
 ---
 
-## ⚠️ Read first — known risks this migration takes on
+# 1. RevenueCat go-live
 
-These were flagged during evaluation. They don't block the work, but they must
-be owned deliberately, not discovered in prod.
+**Status: both halves are built, nothing is switched on.** The server can record
+and enforce a subscription; the client can sell one. What is missing is
+configuration in three consoles and one deploy. See the step-by-step at the
+bottom of this file — the checkboxes here are the summary.
 
-- **Accuracy re-validation (highest risk).** Every prompt is tuned and validated
-  on `gpt-4.1` / `gpt-4o`. Bedrock serves Claude / Nova / Titan, not those
-  models. Recipe authenticity + structure adherence must be re-validated against
-  the new model family before cutover. Accuracy is the #1 product priority — treat
-  the eval harness (Phase 0) as a prerequisite, not a nicety.
-- **SSE + Lambda needs Function URLs, not API Gateway.** The entire app streams
-  (recipes, suggestions, chat). API Gateway REST/HTTP APIs buffer the response
-  and break SSE. Streaming requires Lambda **response streaming** via a Function
-  URL (or ALB). See Phase 3.
-- **Idle-wait billing.** A recipe stream holds ~15–30s mostly waiting on the
-  model. Lambda bills that wall-clock time. Acceptable at low volume; revisit if
-  volume grows (a container would be cheaper past ~25–30k streaming req/month).
-- **Embeddings swap is a corpus-wide migration**, not a code change. See Phase 4.
+- [ ] App Store Connect: paid-apps agreement, subscription group, two products.
+- [ ] RevenueCat: entitlement, an offering **identified `default`**, packages,
+      App Store shared secret.
+- [ ] Webhook: URL + `Authorization` value, matched into `apps/api/.env`, then
+      `put-secrets.sh` and a cold start.
+- [ ] `REQUIRE_ENTITLEMENT=true`, then **delete the flag** and make the gate
+      unconditional so it cannot end up off in production quietly.
+- [ ] Sandbox purchase and restore, on a device, on a development build.
 
----
+## Known gaps, deliberately shipped open
 
-## Current-state inventory (what has to move)
-
-Model call sites today:
-
-| Operation | File | Model |
-|---|---|---|
-| Suggestions (4× JSONL) | `apps/api/src/modules/suggestions/services/generate-suggestions-stream.ts` | `gpt-4.1` |
-| Single suggestion | `apps/api/src/modules/suggestions/services/stream-single-suggestion.ts` | `gpt-4.1` |
-| Full recipe | `apps/api/src/modules/recipes/usecases/generate-recipe/generate-recipe.ts` | `gpt-4.1` |
-| Modify recipe | `apps/api/src/modules/recipes/usecases/modify-recipe/modify-recipe.ts` | `gpt-4.1` |
-| Escalate difficulty | `apps/api/src/modules/recipes/usecases/escalate-difficulty/escalate-difficulty.ts` | `gpt-4.1` |
-| Compose suggestions | `apps/api/src/modules/recipes/services/generate-compose-suggestions.ts` | `gpt-4.1` |
-| Promote | `apps/api/src/modules/suggestions/usecases/promote/promote.ts` | `gpt-4.1` |
-| Substitutes | `apps/api/src/modules/substitutes/services/generate-substitutes-stream.ts` | `gpt-4.1` |
-| Chat / recipe-chat | `chat.schema.ts` default `gpt-4o` | `gpt-4o` |
-| Ingredient extraction (vision) | `apps/api/src/modules/ingredients/usecases/extract-ingredients/extract-ingredients.ts` | `gpt-4o` |
-| Embeddings | `libs/openai/src/lib/modules/embeddings/*` | `text-embedding-3-small` |
-| Recipe images | `libs/genai/*` | `gemini-2.5-flash-image` |
-
-Shared streaming plumbing that must keep working regardless of provider:
-`processJsonlStream` + `extractStableJsonFields` (`libs/streaming-server`,
-`apps/api/src/modules/suggestions/services/extract-stable-json-fields.ts`).
-
-**Substitutes was missing from this table** until 2026-08-01. The endpoint was
-built after this inventory was written, so it was neither listed here nor covered
-by the Phase 0 eval — meaning the Phase 1 gate could have passed without ever
-exercising it. Both are fixed. Add new streaming endpoints to this table *and* to
-the harness when they land, or the gate quietly narrows.
+- [ ] **The purchase-to-webhook window.** A user is entitled on-device seconds
+      before the webhook lands, so a fresh purchase can see one 402. Fix is a
+      fallback read of RevenueCat's REST API on a miss, bounded to users with no
+      active row so it costs nothing on the common path. Needs a sixth secret and
+      is unmeasurable until real purchases exist.
+- [ ] **`TRANSFER` is received and not applied** — logged at error level. The
+      top-level `app_user_id` does not reliably identify which side of the
+      transfer the event is about, so the generic path is a coin flip between
+      revoking a payer and granting a non-payer. Happens when someone restores
+      onto a second account: rare, not hypothetical. Do it from a real payload
+      rather than from the docs.
+- [ ] **Android is not configured at all.** `REVENUECAT_API_KEY` has an empty
+      string for Android (`core/revenuecat/constants`), so none of this works
+      there — silently, as a no-op rather than an error. Fine if iOS ships first.
+- [ ] **Decide what a 402 should *do* in the client.** Today it shows copy.
+      Auto-redirecting to the paywall was deliberately not built: right after a
+      real purchase the device says subscribed while the server has not yet seen
+      the webhook, so a redirect sends a paying user to a paywall they cannot
+      satisfy. Fix the window above first.
 
 ---
 
-## Phase 0 — Decisions & eval harness (do before writing migration code)
+# 2. No per-user rate limiting
 
-- [x] **Pick the Bedrock text model.** Claude, as expected. Which Claude is
-      constrained by account access, not preference: **Sonnet 4.6**
-      (`eu.anthropic.claude-sonnet-4-6`) is the best model actually invocable
-      today. Sonnet 5 is the target once access lands — it is the current Sonnet
-      and its adaptive-thinking/effort surface is what the harness already sends.
-      Nova is not worth evaluating until Claude has a baseline to beat.
-- [x] **Pick the vision model** for ingredient extraction: same model as the text
-      path (Claude on Bedrock takes image input). Worth knowing for later:
-      high-resolution vision (2576px long edge, ~3x the image tokens) arrives at
-      Sonnet 5 — Sonnet 4.6 caps at 1568px, so re-check extraction accuracy
-      rather than assuming it carries over.
-- [x] **Decide embeddings target: Cohere Embed v4** (`eu.cohere.embed-v4:0`,
-      available in eu-central-1) over Titan v2. Reason: v4 emits 1536-dim
-      vectors, matching the 24 existing `vector(1536)` columns, so no column
-      migration for those. Titan v2 maxes at 1024 and would force one.
-      **Correction to Phase 4's framing:** matching dimensions does *not* avoid
-      the re-embed — the vector spaces differ, so the whole corpus must be
-      re-embedded regardless. Matching dimensions only avoids the schema change.
-      The 10 `vector(3072)` columns have no Bedrock equivalent at that width and
-      need a column change either way.
-- [x] **Decide image model:** keep Gemini (option a). Images aren't what this
-      migration is for, and Bedrock has no drop-in for the illustration style.
-- [x] **Build an eval harness** — `apps/api/src/evals/model-migration/`
-      (see its README). Fixed input set, byte-identical prompts, five scorers
-      (real dish / core ingredients / tag cardinality / valid JSONL / nutrition
-      non-zero) plus a leak counter. Run with
-      `npx nx run @fridgeezy/api:eval-model-migration -- --repeat=5`.
-      **Use `--repeat`:** the baseline scored 0/4 then 4/4 on tag cardinality
-      across consecutive single-sample runs — one sample per fixture is noise.
-- [x] Choose AWS region: **eu-central-1**. Serves the Claude family and matches
-      where the Lambda infra is defined.
-- [ ] ⚠️ **BLOCKED — console action required.** Bedrock returns *"Model use case
-      details have not been submitted for this account"*. Submit the Anthropic
-      use-case form in the Bedrock console, then request access for the models in
-      `BLOCKED_ON_MODEL_ACCESS` (`candidates.ts`): Sonnet 5, Opus 4.8, Opus 5.
-      Neither step is possible from the CLI. **The Bedrock half of the eval
-      cannot run until this lands** — the OpenAI baseline half works today.
-      **Re-probed 2026-07-30 and it got worse:** the gate now also catches
-      `eu.anthropic.claude-sonnet-4-6`, recorded above as the best invocable model
-      — so *no* Anthropic model runs on this account today, and the eval has no
-      Bedrock candidate at all, not just a limited one. Non-Anthropic Bedrock is
-      unaffected: `eu.cohere.embed-v4:0` and `eu.amazon.nova-micro-v1:0` both
-      invoke fine in eu-central-1, so this is Anthropic entitlement, not Bedrock
-      access. Cohere Embed v4 was confirmed to return **1536-dim** vectors on this
-      account, which settles the Phase 4 embedding decision empirically.
+Authentication bounds *who* can spend, not *how much*. Once item 1 is live,
+entitlement becomes the ceiling and this drops in priority — until then anyone
+who can sign up can loop the feed, and `reserved_concurrent_executions`
+(dev 5 / prod 50) caps concurrency rather than volume.
 
-### Phase 0 findings that change Phase 1
-
-- **`AnthropicBedrockMantle` does not work on this account.** Every model ID
-  returns 404/403 on the Mantle endpoint across eu-central-1, us-east-1, and
-  us-west-2 — requests reach Anthropic and are rejected, so it is entitlement,
-  not a client bug. The harness uses the legacy `AnthropicBedrock`
-  (`bedrock-runtime`) client, which works. Phase 1's "use the Mantle client"
-  instruction needs revisiting.
-- **Model IDs must be inference profiles, not foundation models.** Bare
-  `anthropic.*` IDs fail with *"Invocation … with on-demand throughput isn't
-  supported"*; the `eu.anthropic.*` profile form works. Note `aws bedrock
-  list-foundation-models` returns the wrong form, and
-  `get-foundation-model-availability` reported `AUTHORIZED / AVAILABLE` for
-  models that then returned 403 — neither is a usable access check.
-- **The JSONL port is smaller than Phase 1 assumes.** `processJsonlStream` is
-  structurally typed against `{choices:[{delta:{content}}]}`, not against the
-  OpenAI SDK types, so a Bedrock adapter that emits that shape drops in with no
-  change to `processJsonlStream` or `extractStableJsonFields`.
-- **Do not disable thinking to save tokens on the streaming paths.** On Claude it
-  can leak `<thinking>` tags into the *visible* response, which corrupts the
-  JSONL line it lands on and gets that line silently dropped. Prefer adaptive
-  thinking at low/medium effort. The harness carries a `no-thinking` candidate
-  and a leak counter specifically to measure this.
+The Function URL is `AuthType: NONE` by design and cannot change (see CLAUDE.md),
+so any limit has to live in the app, alongside `requireSupabaseUser` and
+`requireEntitlement` in the `MOUNTS` loop.
 
 ---
 
-## Phase 1 — Bedrock inference swap (model layer only, still on Express)
+# 3. Auth — email confirmation and social sign-in
 
-Ship this while still running the existing Express server locally, so the model
-change is validated in isolation before touching hosting.
+Nothing here is started.
 
-- [x] Add a Bedrock client lib (mirror `libs/openai` / `libs/genai` shape):
-      **`libs/bedrock`** (`@fridgeezy/bedrock`, see its README) — client +
-      `streamCompletion` (OpenAI-shaped chunks, thinking deltas filtered out) +
-      `createCompletion` for the non-streaming call sites. Region and model come
-      from `AWS_REGION` / `BEDROCK_MODEL_ID`; auth via the AWS credential chain
-      (IAM role in Lambda, profile locally), so there is nothing to validate at
-      import.
-      **Corrects this checkbox's original instructions, per the Phase 0 findings:**
-      use the legacy **`AnthropicBedrock`** client — `AnthropicBedrockMantle` is
-      not entitled on this account — and model IDs must be **inference profiles**
-      (`eu.anthropic.*`), not the bare `anthropic.*` foundation-model form.
-      *Builds and lints; unvalidated against a live model.* A real call reaches
-      Bedrock and returns the account's use-case gate, which proves credentials,
-      region, model-ID form and request shape are right; response parsing is
-      unexercised until access lands.
-- [x] Introduce a thin **provider abstraction** so call sites don't hard-code the
-      SDK — one `generateStream(...)` that yields text deltas. This keeps
-      `processJsonlStream` unchanged (it accumulates a text stream and doesn't
-      care about the provider) and lets you A/B OpenAI vs Bedrock behind a flag.
-      **`libs/llm`** (`@fridgeezy/llm`, see its README): `generateStream` +
-      `generateCompletion`, provider from `LLM_PROVIDER` (**default `openai`**, so
-      landing it moves no traffic; an unknown value throws) with a per-call
-      `provider` override for A/B. Models are named per provider
-      (`{ openai: "gpt-4.1" }`), Bedrock falling back to `BEDROCK_MODEL_ID`.
-      Verified live: provider resolution, and the OpenAI branch streaming through
-      the real `processJsonlStream` into parsed JSONL.
-      **Asymmetries it deliberately does not paper over:** `maxTokens` is
-      Bedrock-only (OpenAI stays uncapped so the baseline is unchanged); `json`
-      maps to `response_format` on OpenAI but is a no-op on Bedrock, where the
-      prompt must ask for JSON; `thinking`/`effort` are Bedrock-only.
-      **Found while building it:** `libs/openai` throws at *import* on a missing
-      `OPENAI_API_KEY`, so the facade imports each client lazily — otherwise a
-      Bedrock-only Lambda would still need an OpenAI key to boot. Watch for the
-      same trap in any other module that imports the OpenAI client at top level.
-- [x] Port the streaming shape: OpenAI `chat.completions.create({stream:true})`
-      → Bedrock/Anthropic Messages streaming. The translation is
-      `toCompletionChunks` (`libs/bedrock`), split out of `streamCompletion` so it
-      can be driven from recorded events instead of a live model — which is what
-      makes it verifiable while account access is still gated.
-      Verified by `apps/api/src/evals/model-migration/streaming-conformance.check.ts`
-      (`npx nx run @fridgeezy/api:check-streaming-conformance`) — **offline,
-      deterministic, no keys, no spend**, so it can gate CI later. 20 checks
-      across five chunking regimes (1 char → whole payload) assert: thinking
-      deltas never reach visible text; JSONL parses byte-identically to the
-      OpenAI baseline; and revealed fields are monotonic, never revised after
-      being shown, complete, and in prompt order.
-      Confirmed to fail when it should: inverting the thinking filter turns 18 of
-      20 red, including a key corrupted to
-      `"ingr<thinking>reconsidering</thinking>edients"`.
-      **Finding — reveal granularity is coarser on Bedrock.** Anthropic's larger
-      deltas produce **3 reveal frames where OpenAI produces 6** for the same
-      object. Still correct (monotonic, stable, ordered), but the single-suggestion
-      card will animate in fewer, bigger jumps. A product call, not a bug —
-      decide it when porting `streamSingleSuggestion`, not after.
-      **Blocker for the next checkbox — now resolved,** see below.
-- [x] Swap each text call site (table above) behind the flag. Keep system/user
-      prompts **byte-identical** at first — change only the transport — so the
-      eval isolates model behavior from prompt changes.
-      Done for all 11 text call sites: the 8 streaming ones (suggestions batch +
-      single, recipe generate/modify/escalate, promote, compose, substitutes) now
-      call `generateStream`, and the 3 one-shot adjudicators (dish dedup,
-      ingredient validation, authenticity) call `generateCompletion`. Prompts are
-      untouched. **`LLM_PROVIDER` still defaults to `openai`, so this moves no
-      traffic** — it only makes the Bedrock path reachable by env var.
-      **`generateCompletion` and `createCompletion` had to be written first.**
-      Both READMEs documented them as existing; neither did. Written now, with
-      `createCompletion` split into `toCompletionText` so the response transform
-      is drivable from a recorded response, mirroring `toCompletionChunks`.
-      **Found: the token cap does not carry across providers.** The adjudicators
-      cap OpenAI at 10-30 tokens — ample for `{"same":true}`, but a thinking model
-      spends that before emitting any visible text, and Anthropic rejects a cap
-      that doesn't clear the thinking budget. `generateCompletion` therefore takes
-      a `TokenLimit` (`{ openai?, bedrock? }`) rather than one number, the same way
-      `ModelSelection` already handles model IDs.
-      **The Bedrock caps are now set** (2026-08-06): 1024 on the two short
-      adjudicators, 2048 on authenticity, 8000 on extraction. Still unvalidated
-      against a live model — the numbers clear a low/medium-effort thinking pass
-      by construction, not by measurement — but they are no longer inheriting the
-      streaming fallback, which would have allowed 32k billed output tokens on a
-      `{"same":true}` verdict.
-- [x] **Send an explicit thinking mode on every Bedrock request** (2026-08-06).
-      `buildParams` previously omitted `thinking` and `output_config` unless a
-      call site passed them. Omission is not "off": Sonnet 4.6 reads an absent
-      `thinking` as no thinking, Sonnet 5 reads it as adaptive, and an absent
-      `effort` is `high` on both. So a `BEDROCK_MODEL_ID` bump would have changed
-      the bill and the truncation risk with nothing to flag it — thinking bills as
-      output and shares `max_tokens` with the visible text. Both fields are now
-      sent unconditionally from `DEFAULT_THINKING`/`DEFAULT_EFFORT`
-      (adaptive/medium, matching the eval's leading candidate), and
-      `BEDROCK_MAX_TOKENS` went 16k → 32k because the old figure budgeted for a
-      full recipe JSONL *before* thinking took a share of it.
-      **There is deliberately no "omit both" state.** Haiku 4.5 and Sonnet 4.5
-      reject this pair, so pointing `BEDROCK_MODEL_ID` at either has to come
-      through `build-params.ts` rather than silently half-working.
-      **The `client?: OpenAI` seam is gone**, replaced by an optional `provider`.
-      It could only ever inject an OpenAI client, so it could not express the A/B
-      it existed for; nothing passed one. That also resolves the previous
-      checkbox's blocker: `streamSingleSuggestion`'s reveal loop is now the
-      exported `accumulateSuggestionReveals`, and the conformance check drives
-      **that function** instead of a verbatim copy — 20/20 still pass, with
-      identical reveal counts, so the collapse changed no behaviour.
-      **`OPENAI_API_KEY` is still required to boot** — but by 2026-08-06 only
-      because of **embeddings**. Chat and ingredient extraction were both ported
-      (chat calls `generateChatStream` from `@fridgeezy/llm`; extraction calls
-      `generateCompletion`), so the only production code left importing
-      `libs/openai` at top level is `generateEmbedding` / `generateBatchEmbeddings`
-      — which throws at import. That is Phase 4, and Phase 4 is recommended cut,
-      so **the key cannot be dropped without reversing that decision.** See the
-      note at the head of Phase 4.
-- [x] Port the **vision** path (ingredient extraction) to the Bedrock vision model.
-      Extraction is one-shot, so it runs through `generateCompletion` with an
-      `image` parameter rather than needing its own entry point. The providers
-      differ only in the wrapper: OpenAI takes one `image_url` string with base64
-      as a data URI, Anthropic a `source` object naming `media_type` separately —
-      `toAnthropicImageBlock` handles that, and strips a `data:` prefix if the
-      caller passes one, since sending it inside the base64 field fails
-      server-side with an opaque error.
-      **`generateCompletion` now returns `{ text, finishReason }`.** Extraction
-      caps output and reports a specific "try a clearer image" error when the
-      model is cut off, and truncation is only distinguishable from plain bad
-      JSON by the stop reason — the old bare-string return threw that away. The
-      three adjudicators read `.text` and ignore it.
-      **`detail: "high"` has no Anthropic counterpart.** Anthropic picks the
-      resolution itself, and Sonnet 4.6 caps the long edge at 1568px against
-      Sonnet 5's 2576px. Extraction accuracy on busy images is therefore a
-      per-model question this translation does *not* preserve — measure it, per
-      the Phase 0 note, rather than assuming it carries over.
-      Verified on the OpenAI branch end to end with a real photo: 12 ingredients
-      with correct hierarchy (`red_bell_pepper` -> `bell_pepper`). Offline
-      coverage for the Anthropic wrapper is in the conformance check, now 40
-      assertions.
-      **This completes the call-site swap.** No module in `apps/api` imports a
-      provider SDK any more; `openai` has been dropped from its dependencies. The
-      only remaining direct `@fridgeezy/openai` imports are `generateEmbedding`
-      (Phase 4, a corpus migration) and the eval harness's deliberate baseline.
-- [ ] Run the Phase 0 eval harness on every path. Re-tune prompts only where the
-      new model regresses; record before/after scores.
-- [ ] **Gate:** do not proceed to hosting until authenticity + structure scores
-      match or beat the OpenAI baseline on the eval set.
+**The thing that makes both items confusing:** `supabase/config.toml` `[auth]`
+configures the **local** stack only. The hosted project's auth is configured in
+the Supabase dashboard and does *not* read this file, so a setting can be correct
+locally and absent in production with nothing to flag the drift. (Newer CLI
+versions can push config; this repo's pinned 2.72.2 predates relying on that.)
+Treat every item below as two pieces of work — local `config.toml` and the
+dashboard — until that changes.
+
+## Email confirmations
+
+`enable_confirmations = false` (`config.toml:203`). Sign-up returns a session
+immediately with no verified email. That is right for local — there is no real
+inbox, and anything sent lands in Mailpit on `:54324` — but it means the address
+on an account is **unverified**, so password reset, transactional mail, account
+recovery and support identity all rest on nothing.
+
+- [ ] Turn confirmations on for the hosted project (dashboard).
+- [ ] Configure SMTP — `[auth.email.smtp]` is commented out, and without a real
+      sender, enabling confirmations locks people out rather than verifying them.
+- [ ] Decide the local story: leaving it `false` locally is convenient, but then
+      the confirmation flow is only ever exercised in production.
+- [ ] Check the client handles the unconfirmed state — a sign-up that returns no
+      session because confirmation is pending is a different branch from one that
+      returns a session, and today only the second exists
+      (`features/auth/screens/sign-up/password/password-screen.tsx`).
+
+## OpenID Connect / social sign-in
+
+`[auth.external.apple]`, `[auth.external.google]` and `[auth.external.facebook]`
+all sit at `enabled = false` (`config.toml:299-325`); the client offers
+email/password only.
+
+- [ ] Pick the providers. **Apple is not optional if any other social login ships
+      on iOS** — review requires Sign in with Apple alongside third-party
+      sign-in, so "just add Google" is really "add Google and Apple".
+- [ ] Provider setup: OAuth client IDs, secrets via env substitution
+      (`secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"`). Never in
+      `config.toml`.
+- [ ] Redirect handling. The app's scheme is `fridgeezy` (`app.json`), so the
+      callback is `fridgeezy://…` and must be added to `additional_redirect_urls`
+      locally **and** to the dashboard's allow-list. `site_url` is still the CLI
+      default `http://127.0.0.1:3000`.
+- [ ] `skip_nonce_check` — required for local Google sign-in. Local only, never
+      in the hosted project.
+- [ ] Account linking. `enable_manual_linking = false` today, so a user who signs
+      up with email and later uses Google with the same address gets a **second
+      account**, silently. Decide before shipping the first provider —
+      retrofitting a merge across existing rows is far worse than choosing up
+      front.
+- [ ] Client UI + `signInWithOAuth`, which needs an in-app browser session rather
+      than the current password screens.
 
 ---
 
-## Phase 2 — MCP session state (unblock Lambda) — RESOLVED BY REMOVAL
+# 4. Smaller, but each one is user-visible
 
-- [x] Deleted 2026-07-31. The `/mcp` endpoint, its `StreamableHTTPServerTransport`
-      session map, and the `@modelcontextprotocol/sdk` dependency are gone. The
-      endpoint had no caller (the RN client only ever hit `/rest`) and was in fact
-      unreachable — `app.all("/mcp", …)` doesn't strip the mount path, so its
-      router's `POST /chat` never matched. Chat keeps using the tool *definitions*
-      (`modules/ai/tools`) converted to OpenAI function schemas. No session state
-      is left to externalize, so nothing blocks Lambda here.
-
----
-
-## Phase 3 — Lambda hosting
-
-- [x] Wrap the app for Lambda — took option (a): `apps/api/src/lambda.ts` binds
-      the app to a loopback port and proxies each invocation to it. Route
-      assembly moved to `create-app.ts`, shared with `main.ts`, so local and
-      Lambda serve the same app. The loopback hop is what preserves the raw-body
-      handling `express-app.ts` depends on.
-- [x] Use **Lambda response streaming** (`awslambda.streamifyResponse`) via a
-      **Function URL**. Verified locally that chunks surface at the producer's
-      cadence rather than being buffered. **Do not** front the streaming
-      endpoints with API Gateway — it buffers and breaks SSE.
-- [x] Keep the parallel fire-and-forget image generation working — both call
-      sites (`generate-recipe.ts`, `promote.ts`) now register through
-      `apps/api/src/background-tasks.ts`, and the handler drains that registry
-      after the response closes but before returning. Client latency is
-      unaffected; billed duration is not. If image generation starts dominating
-      duration, move it to a separate async invocation / queue — the registry is
-      the seam for that.
-- **Merge note:** `create-app.ts` originally also mounted `app.all("/mcp", …)`.
-  That route was dropped when Phase 3 merged into a main where the MCP transport
-  had already been removed (Phase 2, resolved by removal), so `createApp` now
-  mounts `/rest` only.
-- [x] IAM role for the function — `iam.tf`: CloudWatch Logs, Bedrock invoke
-      (both streaming and not), SSM parameter read, and `kms:Decrypt` for the
-      SecureString parameters. Supabase is reached over HTTPS with keys from env,
-      so it needs no IAM.
-- [x] Port env/config — five SSM parameters (`OPENAI_API_KEY`, `GOOGLE_API_KEY`,
-      `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) loaded by
-      `put-secrets.sh` and injected as Lambda env vars (`lambda.tf:26-38`). No
-      `dotenv` in Lambda. **Caveat:** Terraform reads these at apply time, so the
-      values land in state in plaintext — see the follow-up below.
-- [x] IaC: **Terraform**, checked in at [`infra/`](infra/README.md). Defines the
-      function, Function URL (`RESPONSE_STREAM`), IAM (logs + Bedrock + SSM),
-      log group, and per-environment tfvars. The session-store item is gone with
-      Phase 2 (resolved by removal); the S3 state backend is still open.
-- [x] Set `max` timeout headroom and a sane memory size — 300s / 1024 MB,
-      `nodejs22.x` on arm64. Cold start measured on the deployed function:
-      **~1.0–1.9s** to first byte, ~70–120ms warm.
-- [x] Reserved concurrency as a **spend** ceiling, not a capacity plan — the
-      Function URL is unauthenticated and every route behind it costs OpenAI and
-      Gemini credits, so an uncapped function bills without limit if the URL
-      leaks. dev = 5 (applied), prod = 50 (config only; prod has never been
-      applied — state contains `fridgeezy-dev-api` alone).
-
-**Verified against real AWS on 2026-08-03** — this was the open question behind
-the whole `lambda.ts` loopback design, and it holds. Chunks surface at the
-producer's cadence through the Function URL, not batched at the end:
-
-| Endpoint | Observed |
-| --- | --- |
-| `/rest/chat` | first byte 1.865s cold, then deltas 30–40ms apart |
-| `/rest/suggestions/generate` | cards at 3.18 / 3.62 / 4.21 / 5.01s, `[DONE]` 5.87s |
-
-Test it by timestamping each SSE line (`curl -sN` piped through a read loop) — a
-buffered response puts every line at the same offset, a real stream spreads them.
-
-All three hosting follow-ups closed **2026-08-06**, in the order the middle one
-required — secrets first, then the state move, so the dirty state never reached
-S3 at all:
-
-- [x] **Secrets out of Terraform state.** `apps/api/src/load-secrets.ts` fetches
-      the five parameters by path at cold start; Terraform now sets only
-      `SSM_PARAMETER_PREFIX`. Verified on the deployed function: its environment
-      holds no secret, and cold start is **1.15s** — inside the 1.0–1.9s band
-      measured on 2026-08-03, so the extra round trip did not cost anything
-      noticeable.
-
-      Two things this turned up that were not in the plan:
-
-      1. **`iam.tf` did not actually grant the read**, contrary to the note that
-         said it did. `GetParametersByPath` authorizes against the *path node*
-         (`parameter/fridgeezy/dev`), not the children that `parameter/…/*`
-         covers, so the first deploy returned 502 with `not authorized to
-         perform: ssm:GetParametersByPath`. Both ARNs are listed now.
-      2. **`lambda.ts` has to import `./create-app` dynamically.** Three libs
-         construct their client and throw at module scope, so a static import
-         evaluates them before the fetch can run. The deferred import also
-         gutted the artifact's `ERR_REQUIRE_ESM` check — requiring `lambda.js`
-         no longer touches a lib — so `build-artifact.sh` now runs two loads:
-         one with no secrets at all (proving the deferral) and one that forces
-         the graph via `loadAppModule()`.
-
-      The keys were in plaintext in the local state file until this landed. It
-      was never tracked by git (`git log --all -- infra/terraform.tfstate` is
-      empty) and the file has been removed, so the exposure was one laptop's
-      disk — but **rotating the five keys is the only thing that makes that
-      exposure certainly over**, and it is now cheap: `put-secrets.sh` plus a
-      cold start, no `terraform apply`.
-- [x] **S3 state backend.** `fridgeezy-tfstate`, key `api/terraform.tfstate`,
-      versioning + AES256 + public-access-block, locked via `use_lockfile`.
-      Migrated with `init -migrate-state`; `plan` is clean against it and the
-      local copies are gone. The public-access-block was added to the README
-      bootstrap — it was missing, and a state file names every resource, ARN and
-      account id in the deployment.
-- [x] **Auth on the Function URL** — closed, but **not** the way this item said,
-      and the original wording was wrong. "Switch to `AWS_IAM` once the client
-      can sign requests" describes something that cannot happen: `AWS_IAM`
-      requires the caller to SigV4-sign with real AWS credentials, and a
-      published React Native binary cannot hold one without leaking it. Cognito
-      could vend temporary credentials, at the cost of running a second identity
-      system next to the Supabase one the app already has.
-
-      So the URL stays `AuthType: NONE` and the gate lives in the app:
-      `requireSupabaseUser` rejects any `/rest` request without a valid Supabase
-      access token, applied inside the `MOUNTS` loop so a new module cannot be
-      mounted unauthenticated by accident. `/health` stays open — and so does the
-      share page, which this item originally swept up by mistake; see the
-      regression note below.
-
-      Verified on the deployed function: `/rest/health` 200 without a token,
-      `/rest/suggestions/generate` and `/rest/chat` **401** without one and with
-      a garbage one, and a real token minted against local Supabase passes the
-      gate. The 401 lands *before* any LLM call, which is the point — the
-      concurrency cap only bounded the bill, it never prevented the spend.
-
-      Client sends the header from `use-sse-stream.ts` (the one choke point all
-      SSE features share) and `use-extract-ingredients.ts`. The SSE hook keeps
-      the token in a **ref, not a dependency**: a mid-stream token refresh would
-      otherwise re-run the connection effect, killing a live stream and paying
-      for a second generation to replace it.
-
-      Still open, deliberately: **no per-user rate limiting.** Authentication
-      bounds *who* can spend, not *how much* — anyone who can sign up can still
-      loop the feed. `reserved_concurrent_executions` (dev 5 / prod 50) remains
-      the only ceiling on the bill. **This compounds with the monetization gap**
-      recorded under MVP readiness below — sign-up is free and unlimited
-      generation is free, so the two are one exposure rather than two items.
-
-- [x] **The gate broke recipe sharing, and it was fixed 2026-08-06** — the same
-      day it landed, but only because someone went looking. Nothing failed.
-
-      `GET /rest/recipes/:recipeId/share` serves an Open Graph page so a shared
-      link renders a card with the dish's image, name and gloss. It was added
-      **2026-08-04**; the gate landed **2026-08-06** and applied
-      `requireSupabaseUser` to every mount, this one included. **A link preview is
-      fetched by the receiving application** — iMessage, WhatsApp, Slack — and by
-      the browser of whoever taps the link, none of which can hold a Supabase
-      session. So every share returned `401` with no preview and no page.
-
-      It was invisible from both sides: `ALLOW_UNAUTHENTICATED` is unset locally,
-      so it broke in development too, and the client repo's TODOS.md still
-      described previews as working — written two days before the gate existed.
-      **A doc written before a change is not evidence about it.**
-
-      The fix keeps the property this item was built for. Opening a route is a
-      **positive declaration**, never an omission: the module exports a second
-      router (`RecipesPublicRoutes`) carrying only that route, and names it as
-      `publicRouter` on its `MOUNTS` entry, which mounts it at the same prefix
-      *ahead of* the gated one. Anything it does not match falls through to the
-      gate, so `POST` to the same path is still `401` — only the declared method
-      and path are open. A module that omits `publicRouter` — every one but
-      `recipes` — is gated in full, exactly as before.
-
-      Verified against the built artifact with local Supabase: a real recipe id
-      returns `200 text/html` with the full OG set, image, `<title>` and the
-      `fridgeezy://` deep link, **with no token**; all **10** other `/rest` routes
-      still `401`; `POST` to the share path `401`; `/health` `200`.
-
-      **The banner now names them.** Open routes print `← open` and are counted on
-      the `auth` line (`2 open routes`). This class of bug is silent by
-      construction — nothing throws, nothing logs, the endpoint simply answers the
-      wrong thing to a caller nobody tests as — so the check has to be something
-      you see on every boot rather than something you remember to run.
-
-      **Before gating or ungating anything, ask who the caller is.** For `/share`
-      it is not the app. Two more routes will want this same seam and for the same
-      reason: `/.well-known/apple-app-site-association` and
-      `/.well-known/assetlinks.json`, needed by the deferred universal-links work
-      in the client repo's TODOS.md, are fetched by Apple and Google.
+- [ ] **No crash reporting in production.** `EXPO_PUBLIC_SENTRY_DSN` is unset, so
+      `initReporting()` no-ops. Needs a native rebuild for `@sentry/react-native`,
+      so it is not a same-day fix on release day.
+- [ ] **"Recommend" in Settings does nothing** — `settings-screen.tsx:68` has an
+      empty `onPress`. Wire it to the share sheet or remove the row.
+- [ ] **`pantry_items` still exists in the live DB** despite
+      `20260727000007_drop_pantry_items` being recorded as applied, so the type
+      generator keeps emitting a table that should be gone. A migration recorded
+      as applied that did not apply means the ledger and the database disagree —
+      worth understanding rather than papering over.
 
 ---
 
-## Phase 4 — Embeddings migration (corpus-wide — easy to miss)
+# 5. Food-only scope — open product decisions
 
-> **Recommended to CUT, 2026-08-06.** This is the weakest item on the list and
-> the most expensive. Phase 0 already established that matching dimensions
-> (Cohere Embed v4 at 1536) avoids the *schema* change but **not the re-embed** —
-> the vector spaces differ, so the whole corpus goes back through the model, and
-> the 10 `vector(3072)` columns need migrating either way. Against that:
-> embeddings are the one place OpenAI is meaningfully cheaper, the corpus is small
-> enough that either bill is trivial, and stored vectors must be built by the same
-> code as query vectors — so `buildSuggestionSignature` and `embed-suggestions`
-> have to move together or similarity silently degrades rather than erroring.
->
-> The only benefit is dropping the OpenAI key — and **embeddings are now the ONLY
-> thing holding it.** Chat and ingredient extraction are both ported, so this
-> phase is no longer one of several blockers, it is the last one.
->
-> That cuts both ways and the tension is worth stating plainly: cutting Phase 4
-> means `OPENAI_API_KEY` stays a hard boot requirement forever, so the "one
-> credential, one bill" benefit that motivates the whole Bedrock migration is
-> unreachable. Either accept that the migration buys only *text inference* on IAM
-> and the AWS bill, or reverse this and do the corpus re-embed. Do not carry both
-> positions at once.
+The gate itself is done and covered by `DRINKS` / `FOOD_WITH_DRINK` in
+`dedup-authenticity.eval.ts`; the rule and its rationale are in CLAUDE.md. What
+is left is product, not code:
 
-Switching off `text-embedding-3-small` changes vector dimensions, so this is a
-data migration, not just a code edit.
-
-- [ ] Confirm the new embedding model's dimension vs the current pgvector column.
-- [ ] Migrate the pgvector column dimension (new column or table).
-- [ ] **Re-embed the entire recipe/ingredient corpus** with the new model and
-      backfill.
-- [ ] Update `use-find-recipes` / FTS+vector search paths to the new column.
-- [ ] Validate recommendation quality against the old embeddings before dropping
-      the old column.
-
----
-
-## Phase 5 — Observability, cost, cutover
-
-- [x] Add per-request token + latency logging (2026-08-06). `reportUsage` in
-      `libs/llm` emits one `[LLM] {...}` JSON line per model call, from *both*
-      providers and both entry points (`generateStream`, `generateCompletion`),
-      carrying `provider`, `model`, `label`, `inputTokens`, `cachedInputTokens`,
-      `outputTokens`, `latencyMs` and `streamed`.
-      **It lives in the facade, not at the call sites.** That is what makes the
-      two providers comparable at all — the counts are normalised to one shape
-      regardless of which SDK produced them (OpenAI reports
-      `prompt_tokens`/`completion_tokens` with hits folded into the prompt total;
-      Anthropic reports `input_tokens`/`output_tokens` with the cache split
-      disjoint), and a new call site is instrumented by construction.
-      **`label` is set at all 12 call sites and matters more under Bedrock**,
-      where every path runs the same `BEDROCK_MODEL_ID` and the model field stops
-      distinguishing them.
-      Two provider-specific details worth keeping: OpenAI streaming reports no
-      usage at all without `stream_options: { include_usage: true }`, and it
-      arrives as a final chunk with an EMPTY `choices` array — safe only because
-      `processJsonlStream` reads `choices[0]?.delta?.content` and skips falsy
-      content. On Bedrock the counts arrive split across `message_start` (input)
-      and the final `message_delta` (output), so `toCompletionChunks` accumulates
-      and fires `onUsage` once at the end.
-      Query it with CloudWatch Logs Insights:
-      `filter @message like /\[LLM\]/ | stats sum(inputTokens), sum(cachedInputTokens), sum(outputTokens), avg(latencyMs) by label, provider`
-- [x] **Fix the cache-hostile prompts** (2026-08-06). Prompt caching is a *prefix*
-      match on both providers — automatic on OpenAI, explicit `cache_control` on
-      Anthropic — so anything volatile placed early invalidates everything behind
-      it, silently and at full price.
-      `buildRecipeSystemPrompt` (`generate-recipe.ts`) and `buildSystemPrompt`
-      (`promote.ts`) both interpolated `ingredientNames` — the one thing that
-      changes on every request — at **line 3**, ahead of the units table, tag
-      list, category guide, tagging/duration rules and the whole output format.
-      The two largest prompts in the app cached nothing. Both blocks moved to the
-      end; verified as a pure reorder (no prompt line added or removed).
-      Measured on `gpt-4o-mini` with a 3.8k-token prefix: first call 3832 input /
-      0 cached, identical repeat **120 input / 3712 cached** — 97% of the prompt
-      off full rate, on the streamed path too.
-      **`step-structure.eval.ts` needs re-running to re-baseline** — it measures
-      exactly the constraint that moved.
-      Deliberately NOT changed: `buildSuggestionsSystemPrompt(count)` interpolates
-      `count` in line 1, but the main pass always passes `SUGGESTIONS_PER_BATCH`,
-      so ~90% of calls share a prefix and only the rare top-up diverges. Not worth
-      a prompt change. `escalate-difficulty`'s two difficulty strings are likewise
-      low-cardinality (at most 6 prefixes) and cache per-combination.
-- [x] **Prompt caching on the Bedrock branch** (2026-08-06). The two providers do
-      not meet in the middle: OpenAI caches prefixes automatically — which is why
-      the `buildRecipeSystemPrompt` reorder paid off with no further code — while
-      Anthropic requires **explicit `cache_control` breakpoints** and Bedrock does
-      not offer the automatic kind at all. Without this, flipping
-      `LLM_PROVIDER=bedrock` lost every cache hit the OpenAI branch gets free, so
-      any cost comparison would have measured Bedrock at its worst.
-      `buildParams` now sends `system` as a content block carrying
-      `cache_control: {type: "ephemeral"}` instead of a bare string. **One
-      breakpoint is all there is to place:** render order is
-      `tools` → `system` → `messages`, this client sends no tools, and the user
-      turn is per-request by definition — so the end of `system` is the end of
-      everything cacheable, and the other three breakpoints the API allows have
-      nothing to mark.
-      **5-minute TTL over the 1-hour one**, deliberately: the hour doubles the
-      write premium and needs three reads rather than two to break even, which
-      suits steady traffic. This runs on Lambda behind bursty session-shaped
-      usage — a batch's calls land seconds apart, the next batch may be hours off.
-      Covered offline by `check-streaming-conformance` (50 assertions, up from
-      45): the breakpoint is on the system block, the text survives the wrapping,
-      the **user turn carries none**, and a call with no system omits the field
-      rather than sending an empty block. Confirmed to fail when it should —
-      reverting to the bare string turns 3 red.
-      **A prefix below the model's minimum silently does not cache** (1024 tokens
-      on Sonnet 4.6/5, 512 on Opus 5, 4096 on Opus 4.6 and Haiku 4.5) — no error,
-      and no write either, so marking the short adjudicator prompts costs nothing
-      and simply does nothing on most models.
-- [x] **Re-baselined `step-structure.eval.ts`** (2026-08-06). Owed by the caching
-      reorder above: moving `## CRITICAL: Ingredient Constraints` to the *end* of
-      `buildRecipeSystemPrompt` was verified as a pure textual reorder, but this
-      eval measures precisely the constraint that moved. Ran `--only=baseline`
-      (the shipped prompt; the four variants are exploratory ideas from 2026-08-03
-      and unrelated), compared against the 2026-08-03 output:
-
-      | | 08-03 (block at line 3) | 08-06 (block at end) |
-      | --- | --- | --- |
-      | steps referencing an unlisted ingredient | 0 | **0** |
-      | listed ingredients missing from output | 0 | **0** |
-      | ingredients without quantity/unit | 0 | **0** |
-      | dual-unit temperatures / any °F | 0 / 0 | **0 / 0** |
-      | duration + temperature field coverage | 100% | **100%** |
-
-      **The constraint holds in both directions** — steps invent no ingredients,
-      and none of the listed ones are dropped. Total steps moved 28 → 25, which is
-      **noise, not a finding**: n=1 per dish, and this harness has form here (the
-      model-migration baseline scored 0/4 then 4/4 on tag cardinality across
-      consecutive single-sample runs, which is why that one takes `--repeat`).
-      Read it as "no regression detected", not as "the prompt got tighter".
-- [x] **`eval-step-structure` nx target added** (2026-08-06). It was the only eval
-      in `src/evals/` without one, so it was absent from `CLAUDE.md`'s list and
-      had to be run as a bare `npx jiti` from `apps/api/` — which is a good part
-      of why the re-baseline it owed nearly got lost in prose.
-      Carries `forwardAllArgs: true`, matching `eval-model-migration` and for the
-      same reason: without it `-- --only=baseline` is swallowed and all five
-      variants run, quintupling the spend with no error to say so.
-- [x] **`--repeat` added to `step-structure.eval.ts`** (2026-08-06), matching the
-      flag `eval-model-migration` grew for the same reason. Default stays 1 so an
-      exploratory run is cheap.
-      **It reports spread, not just a total** — `steps/run` becomes
-      `mean (min-max)`, because a bare total hides precisely what the repeats were
-      paid for. Running `--repeat=3 --only=baseline` (9 generations of the
-      byte-identical shipped prompt) gave **8.8 (6-12)**:
-
-      | dish | run 1 | run 2 | run 3 |
-      | --- | --- | --- | --- |
-      | Roast Chicken | 7 | 8 | 8 |
-      | Beef Bourguignon | 11 | 12 | 12 |
-      | Lemon Ricotta Pancakes | 6 | 7 | 8 |
-
-      **A 2x spread on one prompt.** So the earlier 28 → 25 → 30 totals were not
-      merely noisy, they were noise on a metric whose range is this wide — any
-      single-run comparison of the steps column is meaningless, including
-      between variants. The quality columns held across all 9 generations
-      (0 dual-unit, 0 °F, 100% duration and temperature coverage): those are the
-      signals worth reading.
-      At `--repeat=1` the footer now says so explicitly rather than leaving the
-      reader to infer it, and every generation is written to the output file with
-      a `run` index instead of the last one overwriting its siblings.
-- [ ] Set a cost baseline: compare Bedrock token spend + Lambda compute vs the
-      current OpenAI + Gemini bill on representative volume. **The logging above
-      is the input to this** — read real `[LLM]` totals per `label` rather than
-      estimating from prompt length, and note that Bedrock is priced separately
-      from the first-party Anthropic API. Half of this is measurable today: the
-      OpenAI side needs no account access.
-- [ ] Roll out behind the provider flag: shadow / percentage cutover, watch eval
-      scores and error rates, keep OpenAI as instant rollback.
-- [ ] Decommission OpenAI paths once Bedrock is stable and validated.
-- [ ] Update `CLAUDE.md` (backend) — the Overview/Routing sections now describe the
-      current Express + OpenAI setup; document the Bedrock + Lambda architecture
-      once it lands.
-
----
-
-## Explicitly out of scope / defer
-
-- Moving images off Gemini (keep unless a reason emerges — see Phase 0).
-- Any prompt rewrite beyond what evals prove is needed for the model swap.
-- Multi-region / HA — single region first.
-- **Bedrock Guardrails.** Evaluated 2026-08-06, not worth adopting here, and not
-  a reason to move inference either way — it has a standalone `ApplyGuardrail`
-  API, so it is callable against arbitrary text without invoking a Bedrock model.
-  Feature by feature: contextual grounding is strictly worse than what
-  `verifySuggestionAuthenticity` already does (a generic grounding check would
-  never catch a ceviche with no seafood); PII redaction has no subject matter
-  here; denied-topics would stop `/rest/chat` being used as a free
-  general-purpose LLM, but the actual fix for that is **auth on the Function
-  URL** — already open under Phase 3 — and a content filter treats the symptom
-  while still billing for every filtered request; image content filtering is
-  already handled at the model layer by both providers.
-- Bedrock Knowledge Bases, Agents, and Model Evaluation. Each has a
-  purpose-built in-repo equivalent that fits better: pgvector with custom text
-  builders, `usecases/`, and the eval harnesses respectively.
-
-### Alternative NOT evaluated when this file was written
-
-**Claude Platform on AWS** — Anthropic-operated rather than partner-operated,
-reached through AWS infrastructure with SigV4 auth, IAM access control and AWS
-Marketplace billing, at same-day feature parity with the first-party API. Bare
-model IDs (no `anthropic.` prefix, no inference profiles), an `AnthropicAWS`
-client, and a required `workspace_id`.
-
-Worth probing before committing to Bedrock, because it delivers the three things
-actually motivating this migration — IAM instead of an API key, one AWS bill,
-in-region inference — **without** Bedrock's feature subset, which drops Message
-Batches, the Files and Models APIs, and every server-side tool. `libs/bedrock` is
-one client construction and two response transforms, and `libs/llm` already
-resolves providers by name, so evaluating it is roughly a day. It carries its own
-entitlement question, which may or may not be easier than the one currently
-blocking Bedrock.
-
----
-
-# Scope: food only — done 2026-08-06
-
-Drinks are out of scope and are now gated. Two enforcement points, deliberately:
-`FOOD_ONLY_RULE` (`constraint-rules.ts`, shared by the batch, single and compose
-generators) as the cheap first line, and a `not_food` status on
-`verifySuggestionAuthenticity` as the actual gate. Covered by `DRINKS` and
-`FOOD_WITH_DRINK` in `dedup-authenticity.eval.ts` — 24/24 passing, with the
-pre-existing `GUTTED_DISHES` and invention fixtures unregressed.
-
-**The axis is "is its purpose to be drunk", not "does it contain alcohol",** and
-that was a deliberate call rather than a convenient one. Alcohol as an *ingredient*
-is fine and must stay fine — coq au vin, tiramisu, beer-battered fish — while a
-virgin daiquiri is as out of scope as the original. Cutting on alcohol instead
-would have stripped wine and beer out of a large slice of European cooking while
-still admitting smoothies.
-
-- [x] **Client copy for the rejection** (2026-08-06). `useSuggestionFeed` returns
-      `rejectedReason: "not_food" | null`, `generateMore` is a no-op while it is
-      set, and `search-screen.tsx` derives a third empty state from it
-      (`browseEmpty`) — "No drinks, just food", with a `glass-cocktail-off` glyph
-      tinted `onBackgroundVariant` rather than `error`, because nothing went
-      wrong. Verified on the simulator by forcing the branch; the copy wraps over
-      three lines with no clipping.
-      **The wording lives in the client and the backend sends a code, never a
-      sentence.** There is no i18n library in the client today, so "so it can be
-      localised" is aspirational — the live reason is that copy in a packed
-      tarball cannot be changed without rebuilding it.
-
-Still open, both product decisions rather than bugs:
-
-- [ ] **Give the feed a free-text path, or accept the state is defensive.** The
-      empty state above is currently **unreachable on that screen**: the AI feed
-      is driven entirely by structured filters (fridge ingredients, course,
-      cuisine, difficulty), and typing tears it down in favour of a catalogue-only
-      `ilike` search (`aiEnabled = shouldUseAI && !isSearching`). A drinks-only
-      request cannot be expressed there. The user-facing path that CAN ask for a
-      mojito is **chat**, which drops the dish and lets the assistant explain
-      itself in prose. So the value delivered today is the database protection —
-      no drinks persisted or mislabelled, on every path — and the empty state is
-      there for the day free text reaches the feed.
+- [ ] **Give the feed a free-text path, or accept the empty state is defensive.**
+      "No drinks, just food" is currently **unreachable on that screen**: the AI
+      feed is driven entirely by structured filters, and typing tears it down in
+      favour of a catalogue-only `ilike` search
+      (`aiEnabled = shouldUseAI && !isSearching`). A drinks-only request cannot be
+      expressed there. The path that *can* ask for a mojito is **chat**, which
+      drops the dish and explains itself in prose. So the delivered value today is
+      the database protection, on every path.
 - [ ] **Decide whether drinks ever get a home.** If smoothies and lassi are wanted
       later, the taxonomy needs a `drink` course tag and a `dish_form` value
       before the gate can be narrowed to alcohol — a migration plus a seed change,
       not a prompt edit. Until then "anything drunk" is the honest line, because
       the tag vocabulary cannot represent a beverage.
 
-## App Store note
+## App Store rating note
 
-Alcohol does not block release — the relevant rule prohibits *encouraging
-excessive consumption*, not recipes containing it — but it does move the age
-rating, and **generated content has to be rated for what it CAN produce, not what
-it was designed to produce**. Before this gate a reviewer could type "mojito" and
-get a cocktail, which makes the app one that teaches you to make alcoholic drinks
-regardless of intent. The gate is what makes "this app does not produce cocktail
+Alcohol does not block release — the rule prohibits *encouraging excessive
+consumption*, not recipes containing it — but it moves the age rating, and
+**generated content is rated for what it CAN produce, not what it was designed to
+produce**. The drinks gate is what makes "this app does not produce cocktail
 recipes" a property of the system rather than a hope about the model.
 
-Note that food recipes still reference alcohol as an ingredient, so the mild tier
-applies either way; rejecting drinks does not get you to "no alcohol references"
-and chasing that is not worth breaking real dishes for. **Walk the current
-App Store Connect questionnaire before declaring a rating** — the tiers were
-revised recently and under-declaring is enforced after the fact.
+Food recipes still reference alcohol as an ingredient, so the mild tier applies
+either way; chasing "no alcohol references" is not worth breaking real dishes for.
+**Walk the current App Store Connect questionnaire before declaring a rating** —
+the tiers were revised recently and under-declaring is enforced after the fact.
 
 ---
 
-# MVP readiness — audited 2026-08-06
+# 6. Bedrock inference — BUILT, PARKED, BLOCKED
 
-**Why this section exists.** Everything above is the Lambda/Bedrock migration,
-and it is tracked in unusual depth — which is exactly what made it possible to
-believe the project was further along than it is. Hosting being done and
-inference being one env var away says nothing about whether the product can
-ship. This section is the gap between "the infrastructure works" and "this is an
-MVP", found by walking the route surface and both repos rather than by reading
-the plan.
+All 11 text call sites and the vision path go through `@fridgeezy/llm`; no module
+in `apps/api` imports a provider SDK. `LLM_PROVIDER` defaults to `openai`, so **no
+traffic has ever run on Bedrock** — and none can, because the account's Anthropic
+entitlement gate blocks every model.
 
-Most of it lives in the **client** repo, which has its own TODOS.md. It is
-recorded here anyway, because these are the items that decide whether anything
-in this repo is worth deploying, and the client's list is organised by round of
-UI work rather than by release readiness.
+Hosting is a separate, finished migration: Lambda serves traffic today, and
+nothing about the Bedrock decision touches it.
 
-## 1. Monetization — backend built 2026-08-06, client half outstanding
+**The open question is "should we switch", not "can we build it".** A cutover buys
+IAM instead of an API key, one AWS bill and in-region inference, against a token
+bill estimated at ~2x and a full prompt re-validation on prompts tuned to
+`gpt-4.1`/`gpt-4o`.
 
-**The biggest gap on this list, and the one nothing else substitutes for.**
-Status: the server can enforce a subscription and record one; the client still
-cannot sell one, so the gate ships disabled. Nothing is live until both halves
-land in the same release.
+- [ ] ⚠️ **BLOCKED — console action, not possible from the CLI.** Bedrock returns
+      *"Model use case details have not been submitted for this account"*. Submit
+      the Anthropic use-case form in the Bedrock console, then request access for
+      the models in `BLOCKED_ON_MODEL_ACCESS` (`candidates.ts`). **Re-probed
+      2026-07-30 and it got worse:** the gate now also catches
+      `eu.anthropic.claude-sonnet-4-6`, so *no* Anthropic model runs on this
+      account and the eval has no Bedrock candidate at all. Non-Anthropic Bedrock
+      is unaffected — `eu.cohere.embed-v4:0` and `eu.amazon.nova-micro-v1:0` both
+      invoke fine in eu-central-1 — so this is Anthropic entitlement, not Bedrock
+      access.
+- [ ] Run `eval-model-migration` on every path once access lands; re-tune prompts
+      only where the new model regresses, and record before/after scores.
+- [ ] **Gate:** do not cut over until authenticity + structure scores match or
+      beat the OpenAI baseline.
+- [ ] Cost baseline: real `[LLM]` totals per `label` from CloudWatch, not
+      estimates from prompt length. **Half of this is measurable today** — the
+      OpenAI side needs no account access.
+- [ ] Roll out behind `LLM_PROVIDER`: shadow / percentage cutover, watch eval
+      scores and error rates, keep OpenAI as instant rollback.
+- [ ] Decommission the OpenAI paths once Bedrock is stable and validated.
 
-The RevenueCat SDK is fully wired in the client — offerings, customer info, a
-purchase mutation, an app-user-id hook. The paywall screen renders real prices
-off the live offering and its button says **"Start free trial"**. The purchase
-call is commented out (`subscription-screen.tsx:49-52`): `handleContinue` sets
-`onboarding_completed` and navigates into the app. The enforcement half is
-commented out too — `app/(tabs)/_layout.tsx:140` and the "Redirect if not
-subscribed" block at `:152-158`.
+## Findings that still bind this work
 
-So the paywall is a slide people tap through. Two separate consequences, worth
-not collapsing into one:
+Kept because the open items above depend on them, and they exist nowhere else.
 
-- **There is no revenue path.** Every LLM call the app makes is a cost with no
-  offsetting charge, on an unlimited free tier nobody chose.
-- **A paywall whose button does not purchase is an App Store review problem**,
-  independent of the revenue question. It is a purchase flow that does not
-  purchase.
+- **Do not delete `libs/bedrock` while parked.** It has no runtime path and costs
+  nothing to carry, and it holds account-specific findings recorded nowhere else.
+  It is also the difference between a `gpt-4.1` deprecation being a config change
+  and a project.
+- **Model IDs must be inference profiles** (`eu.anthropic.*`), not bare
+  `anthropic.*` foundation-model IDs, which fail with *"Invocation … with
+  on-demand throughput isn't supported"*. Note that `aws bedrock
+  list-foundation-models` returns the **wrong form**, and
+  `get-foundation-model-availability` reported `AUTHORIZED / AVAILABLE` for models
+  that then returned 403 — **neither is a usable access check.**
+- **`AnthropicBedrockMantle` is not entitled on this account** — 404/403 across
+  eu-central-1, us-east-1 and us-west-2. Use the legacy `AnthropicBedrock`
+  (`bedrock-runtime`) client, which works.
+- **Do not disable thinking to save tokens on the streaming paths.** On Claude it
+  leaks `<thinking>` tags into the *visible* response, corrupting the JSONL line
+  it lands on so that line is silently dropped. Prefer adaptive thinking at
+  low/medium effort; the harness carries a leak counter for exactly this.
+- **Accuracy re-validation is the highest risk in the whole migration.** Every
+  prompt is tuned on `gpt-4.1`/`gpt-4o`. Accuracy is the #1 product priority, so
+  the eval harness is a prerequisite, not a nicety.
+- **Idle-wait billing.** A recipe stream holds ~15–30s mostly waiting on the
+  model, and Lambda bills that wall-clock time. Acceptable at low volume; a
+  container is cheaper past roughly 25–30k streaming requests/month.
+- **Add new streaming endpoints to `eval-model-migration` when they land.**
+  Substitutes was built after the original inventory and was therefore neither
+  listed nor covered, meaning the gate could have passed without ever exercising
+  it. The gate quietly narrows every time this is forgotten.
 
-**The backend has no entitlement concept at all.** Grepping `apps/api` and
-`libs` for subscription/entitlement/quota returns nothing but unrelated prose.
-`requireSupabaseUser` establishes *that* a caller is signed in and never *what
-they are entitled to* — which is the right split, but it means the server cannot
-enforce a plan even once the client sells one. **Whatever is decided about the
-paywall, the check has to exist server-side**: a client-side-only gate is
-bypassed by anyone willing to call the Function URL directly, and the URL is
-`AuthType: NONE` by design (Phase 3).
+## Alternative never evaluated
 
-- [x] **Decided 2026-08-06: ship paid.** Least new work of the options — the SDK,
-      the screen and the products already exist — and entitlement then doubles as
-      the spend ceiling, which is why rate limiting stays deferred below.
-- [x] **Backend entitlement, built 2026-08-06.** Everything the server needs is
-      in place and verified end to end against local Supabase:
+**Claude Platform on AWS** — Anthropic-operated rather than partner-operated,
+reached through AWS with SigV4, IAM and Marketplace billing, at same-day feature
+parity with the first-party API. Bare model IDs, an `AnthropicAWS` client, a
+required `workspace_id`.
 
-      - `profile_entitlements` (`20260806000004_profile_entitlements.sql`) —
-        webhook-written, RLS select-only so no client role can write it, keyed on
-        `auth.users.id` because the client configures RevenueCat with
-        `appUserID: user.data.id`. **Keep those in step**; changing the client's
-        appUserID orphans every future event.
-      - `POST /rest/billing/revenuecat` — open by necessity (RevenueCat holds no
-        session) and protected by a constant-time shared-secret check, because
-        **RevenueCat does not HMAC-sign its webhooks** the way Stripe does. It
-        writes, so unlike `/share` being reachable is not the same as being safe.
-      - `requireEntitlement` — after `requireSupabaseUser` on every mount but
-        `billing`, answering **402** so the client can tell "show the paywall"
-        from "sign in again".
-
-      Verified: 402 with no entitlement → passes after `INITIAL_PURCHASE` → 402
-      after `REFUND`; a replayed event and an out-of-order older `EXPIRATION` are
-      both ignored; `CANCELLATION` keeps access to expiry. Those last three are
-      the ones that are easy to get wrong and expensive when wrong.
-
-      **Activity is derived, not stored**, and the rule exists twice —
-      `entitlement_is_active()` in SQL, `isEntitlementActive` in TS. They must
-      agree; a divergence lets the wrong people in with nothing to flag it.
-- [x] **Client purchase + gate wired 2026-08-07** (client repo, item 8 in its
-      TODOS.md). Purchase before `onboarding_completed` — the other order loops a
-      cancelled purchase between the tabs and the paywall; user-cancellation
-      treated as normal rather than an error; **Restore Purchases added**, which
-      App Store review requires and which doubles as the manual recovery path for
-      a webhook that never arrived; both mutations invalidate `["REVENUECAT"]`;
-      the gate reads `entitlements.active` so it matches what this repo stores;
-      store-localized prices replace hardcoded dollar literals in two places; and
-      a 402 now maps to a `payment_required` SSE kind that is shown to the user
-      but deliberately **not** reported to Sentry.
-      **Still needs a device:** a real sandbox purchase and restore. Nothing
-      below a running app tests this.
-- [ ] **Turn the gate on, then delete the flag.** `REQUIRE_ENTITLEMENT` defaults
-      to off and must, because nobody can buy anything yet — enabling it today
-      takes the product offline rather than protecting the spend. Flip it in the
-      same release that ships purchasing, then make the gate unconditional and
-      remove the flag, so it cannot end up off in production quietly.
-- [ ] **Configure the webhook.** Point RevenueCat at
-      `<function-url>/rest/billing/revenuecat`, set the same `Authorization`
-      value there and in `apps/api/.env`, then `put-secrets.sh` (already carries
-      `REVENUECAT_WEBHOOK_SECRET`) plus a cold start — no `terraform apply`,
-      since the Lambda is given a prefix rather than values. **The secret has to
-      match in two places and nothing reports drift** except every event failing.
-- [ ] **Close the purchase-to-webhook window**, or decide to live with it. A user
-      is entitled on-device seconds before the webhook lands, so a fresh purchase
-      can see one 402. Fix is a fallback read of RevenueCat's REST API on a miss,
-      bounded to users with no active row so it costs nothing on the common path.
-      Needs a sixth secret and is unmeasurable until real purchases exist.
-- [ ] **Handle `TRANSFER`.** Received, logged at error level, and deliberately
-      not applied: the top-level `app_user_id` does not reliably identify which
-      side of the transfer the event is about, so the generic path is a coin flip
-      between revoking a payer and granting a non-payer. Happens when someone
-      restores purchases onto a second account — rare, not hypothetical. Do it
-      from a real payload rather than from the docs.
-- [ ] **Android is not configured at all.** `REVENUECAT_API_KEY` has an empty
-      string for Android (`core/revenuecat/constants`), so none of this works
-      there. Fine if iOS ships first — but it is a silent no-op, not an error.
-
-## 2. No per-user rate limiting
-
-Already recorded under Phase 3 and repeated here because it belongs to this
-question rather than to the migration: authentication bounds *who* can spend,
-not *how much*. With item 1 unfinished, sign-up is free and generation is
-unlimited, so these two are **one exposure, not two items** — and the only
-ceiling on the bill is `reserved_concurrent_executions` (dev 5 / prod 50), which
-caps concurrency rather than volume.
-
-## 3. Auth — email confirmation and social sign-in
-
-See the section below, unchanged and still unstarted. Both are MVP items rather
-than nice-to-haves: an unverified email means password reset and account
-recovery rest on nothing, and Apple sign-in becomes mandatory the moment any
-other social provider ships on iOS.
-
-## 4. Smaller, but each one is user-visible
-
-- [ ] **Subscription prices are hardcoded display strings.**
-      `use-subscription-info.ts:47-49` returns `"$4.99/month"` / `"$29.99/year"`
-      rather than reading the product. Wrong in every non-US storefront, and it
-      will silently disagree with what the store actually charges.
-- [ ] **No crash reporting in production.** `EXPO_PUBLIC_SENTRY_DSN` is unset, so
-      `initReporting()` no-ops. Carried on the client's list since the last
-      round; it also needs a native rebuild for `@sentry/react-native`, so it is
-      not a same-day fix on release day.
-- [ ] **"Recommend" in Settings does nothing** — `settings-screen.tsx:68` has an
-      empty `onPress`. Either wire it to the share sheet or remove the row.
-- [ ] **`pantry_items` still exists in the live DB** despite
-      `20260727000007_drop_pantry_items` being recorded as applied, so the type
-      generator keeps emitting a table that should be gone. Carried on the
-      client's list; it is a schema-drift symptom worth understanding rather than
-      a cosmetic annoyance — a migration recorded as applied that did not apply
-      means the ledger and the database disagree.
-
-## What is deliberately NOT on this list
-
-So these do not get relitigated as MVP blockers:
-
-- **Bedrock inference.** Built, parked, blocked on an AWS console entitlement,
-  zero traffic. `LLM_PROVIDER` defaults to `openai` and the product ships on
-  OpenAI today.
-- **Phase 4 embeddings.** Recommended cut. Note the tension already stated
-  there: cutting it means `OPENAI_API_KEY` stays a hard boot requirement, so the
-  "one credential, one bill" benefit is unreachable. Pick one position.
-- **Universal links.** Blocked on buying a domain, fully specified in the client
-  repo. Sharing works without it — the link opens a browser and the page offers
-  a button.
-- **The drinks free-text empty state.** Unreachable by design today; the
-  database protection is the delivered value.
+Worth probing before committing to Bedrock: it delivers the three things actually
+motivating this migration **without** Bedrock's feature subset (which drops
+Message Batches, the Files and Models APIs, and every server-side tool).
+`libs/bedrock` is one client construction and two response transforms, and
+`libs/llm` already resolves providers by name, so evaluating it is roughly a day.
+It carries its own entitlement question, which may or may not be easier.
 
 ---
 
-# Auth — unrelated to the migration above
+# 7. Embeddings migration — RECOMMENDED CUT
 
-Kept in this file because it is the repo's TODO list, not because it belongs to
-the Lambda/Bedrock work. Nothing here is started, and all of it is referenced by
-**MVP readiness item 3** above.
+> Cutting this means **`OPENAI_API_KEY` stays a hard boot requirement forever**,
+> so the "one credential, one bill" benefit motivating the whole Bedrock
+> migration is unreachable. Either accept that the migration buys only *text
+> inference* on IAM and the AWS bill, or reverse this and do the corpus re-embed.
+> **Do not carry both positions at once.**
 
-**First, the thing that makes both items confusing:** `supabase/config.toml`
-`[auth]` configures the **local** stack only. The hosted project's auth is
-configured in the Supabase dashboard and does *not* read this file, so a setting
-can be correct locally and absent in production with nothing to flag the drift.
-(Newer CLI versions can push config; this repo's pinned 2.72.2 predates relying
-on that.) Treat every item below as two pieces of work — local `config.toml`
-and the dashboard — until that changes.
+Embeddings are now the only thing holding the OpenAI key — chat and ingredient
+extraction are both ported. Against doing it: embeddings are the one place OpenAI
+is meaningfully cheaper, and matching dimensions (Cohere Embed v4 at 1536,
+confirmed empirically on this account) avoids the *schema* change but **not the
+re-embed**, because the vector spaces differ. The 10 `vector(3072)` columns need
+migrating either way.
 
-## Email confirmations
+If it is ever reversed:
 
-`enable_confirmations = false` (`config.toml:203`). Sign-up returns a session
-immediately with no verified email, which is deliberate and right for local:
-there is no real inbox, and anything sent lands in Mailpit on `:54324`.
+- [ ] Migrate the pgvector column dimensions.
+- [ ] Re-embed the entire corpus and backfill.
+- [ ] Update `use-find-recipes` / FTS+vector search paths to the new column.
+- [ ] Validate recommendation quality against the old embeddings before dropping
+      the old column.
 
-It means the address on an account is **unverified** — nobody has proven they
-own it — so anything built on "the user's email" (password reset, transactional
-mail, account recovery, support identity) rests on nothing until this changes.
+**Stored vectors must be built by the same code as query vectors** — so
+`buildSuggestionSignature` and `embed-suggestions` move together or similarity
+silently degrades rather than erroring.
 
-- [ ] Turn confirmations on for the hosted project (dashboard).
-- [ ] Configure SMTP — `[auth.email.smtp]` is commented out, and without a real
-      sender, enabling confirmations locks people out rather than verifying them.
-- [ ] Decide the local story: leaving it `false` locally is fine and convenient,
-      but then the confirmation flow is only ever exercised in production. If
-      that flow gets non-trivial, enable it locally and read the mail in Mailpit.
-- [ ] Check the client handles the unconfirmed state — a sign-up that returns no
-      session because confirmation is pending is a different branch from a
-      sign-up that returns one, and today only the second exists
-      (`features/auth/screens/sign-up/password/password-screen.tsx`).
+---
 
-## OpenID Connect / social sign-in (Google, Apple, …)
+# 8. Deferred — universal links for recipe sharing
 
-Not wired up anywhere: `[auth.external.apple]`, `[auth.external.google]` and
-`[auth.external.facebook]` all sit at `enabled = false` (`config.toml:299-325`),
-and the client offers email/password only.
+**Blocked on buying a domain.** Sharing works today: the link opens a browser and
+the page offers an "Open in Fridgeezy" button. What is missing is the link itself
+opening the app, which needs `associatedDomains` (an entitlement, so a native
+rebuild) plus `/.well-known/apple-app-site-association` and
+`/.well-known/assetlinks.json` served from that same origin.
 
-- [ ] Pick the providers. **Apple is not optional if any other social login
-      ships on iOS** — App Store review requires Sign in with Apple alongside
-      third-party sign-in, so "just add Google" is really "add Google and Apple".
-- [ ] Provider setup: OAuth client IDs, and secrets via env substitution —
-      `secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"` is the pattern
-      already in the file. Secrets never go in `config.toml`.
-- [ ] Redirect handling. The app's scheme is `fridgeezy` (`app.json`), so the
-      callback is `fridgeezy://…` and must be added to
-      `additional_redirect_urls` locally **and** to the dashboard's allow-list.
-      `site_url` is still the CLI default `http://127.0.0.1:3000`.
-- [ ] `skip_nonce_check` — the comment in `config.toml` notes it is required for
-      local Google sign-in. Set it locally only; never in the hosted project.
-- [ ] Account linking. `enable_manual_linking = false` today, so a user who signs
-      up with email and later uses Google with the same address gets a **second
-      account**, silently. Decide the policy before shipping the first provider,
-      because retrofitting a merge across existing rows is far worse than
-      choosing up front.
-- [ ] Client UI + the `signInWithOAuth` flow, which needs an in-app browser
-      session rather than the current password screens.
+**Not the Lambda Function URL** — putting a shared AWS-owned host in the app's
+entitlement means claiming a domain we do not control, and the value is baked into
+a native build. Point a custom domain at the Function URL instead.
+
+Those two well-known routes need the **`publicRouter` seam** (CLAUDE.md, Routing):
+they are fetched by Apple and Google, which hold no Supabase session. Full detail
+in the client repo's TODOS.md.
+
+---
+
+# Out of scope
+
+- Moving images off Gemini.
+- Prompt rewrites beyond what evals prove necessary for a model swap.
+- Multi-region / HA.
+- **Bedrock Guardrails** — evaluated and rejected. Contextual grounding is
+  strictly worse than `verifySuggestionAuthenticity` (a generic grounding check
+  would never catch a ceviche with no seafood); PII redaction has no subject
+  matter here; denied-topics would stop `/rest/chat` being a free general-purpose
+  LLM, but auth already closed that and a content filter still bills for every
+  filtered request.
+- **Bedrock Knowledge Bases, Agents, Model Evaluation** — each has a
+  purpose-built in-repo equivalent that fits better: pgvector with custom text
+  builders, `usecases/`, and the eval harnesses.
+
+---
+
+# Appendix — RevenueCat go-live, step by step
+
+Everything in item 1, in order. Steps 1–2 are prerequisites that have nothing to
+do with this repo and are the slowest; do them first.
+
+## 1. App Store Connect
+
+1. **Paid Applications agreement** must be active, with banking and tax details
+   complete. **Nothing else works until this is done** — products stay in
+   "Missing Metadata" and RevenueCat returns empty offerings, which looks like a
+   code bug and is not one.
+2. Create a **subscription group**, then two subscriptions in it — monthly and
+   annual. Note each **product ID**.
+3. Set the **14-day free trial** as an introductory offer on each, since the
+   paywall copy promises one ("First 14 days free").
+4. Create a **Sandbox tester** account (Users and Access → Sandbox Testers).
+
+## 2. RevenueCat dashboard
+
+1. Project → add an **iOS app**, bundle id `com.anonymous.fridgeezy`.
+2. Paste the **App Store Connect shared secret** (App Store Connect → App
+   Information), or RevenueCat cannot validate receipts.
+3. **Products** — import or add the two product IDs from step 1.
+4. **Entitlement** — create one (e.g. `premium`) and attach both products. The
+   identifier is stored as `entitlement_id` but nothing branches on it: the
+   client gate and the server check both ask only whether *any* entitlement is
+   active.
+5. **Offering** — this one is exact. The client reads
+   `offerings.all.default.availablePackages`, so the offering's identifier must
+   literally be **`default`**. Add a monthly and an annual package to it.
+   An offering named anything else yields an empty paywall with no error.
+6. Confirm the **iOS public SDK key** matches the one hardcoded in
+   `src/core/revenuecat/constants/index.ts` (`appl_PypeQOMOR…`).
+
+## 3. Webhook
+
+1. RevenueCat → Integrations → **Webhooks**.
+2. URL: `<function-url>/rest/billing/revenuecat`
+   (`terraform -chdir=infra output` for the Function URL.)
+3. **Authorization header value:** generate a long random string, e.g.
+   `openssl rand -base64 32`.
+
+   **The comparison is against the whole header, verbatim.** Whatever you type
+   into RevenueCat must equal `REVENUECAT_WEBHOOK_SECRET` exactly — if you type
+   `Bearer abc123` there, the env var must be `Bearer abc123` too. RevenueCat
+   does not HMAC-sign its webhooks the way Stripe does, so this shared secret is
+   the *entire* protection on a route that writes entitlements. Treat it like a
+   password.
+4. Send the dashboard's **test event**. Expect `200 {"received":true}` and
+   `[billing] test event acknowledged` in CloudWatch. A 401 means the two values
+   differ.
+
+## 4. This repo
+
+1. Add to `apps/api/.env`:
+
+   ```
+   REVENUECAT_WEBHOOK_SECRET=<the same string>
+   REQUIRE_ENTITLEMENT=true
+   ```
+
+2. Push the secret to SSM — it is already in `put-secrets.sh`:
+
+   ```bash
+   ./infra/put-secrets.sh              # dry run, shows what it would write
+   APPLY=true ./infra/put-secrets.sh
+   ```
+
+3. Flip the gate in `infra/environments/dev.tfvars`:
+
+   ```
+   require_entitlement = true
+   ```
+
+   The variable and the `lambda.tf` wiring already exist, so this is the only
+   edit. It is **not** a secret — it says whether to enforce, not what to enforce
+   with — so it lives in the env block rather than SSM.
+4. Build and deploy:
+
+   ```bash
+   ./infra/build-artifact.sh
+   terraform -chdir=infra apply -var-file=environments/dev.tfvars
+   ```
+
+5. Confirm on the deployed function: the startup banner's `billing` line should
+   read `active subscription required`. While anything is missing it says so —
+   `⚠ NOT ENFORCED` if the flag is unset, or `⚠ enforced, but
+   REVENUECAT_WEBHOOK_SECRET is unset` if the secret did not arrive.
+
+## 5. Device
+
+`react-native-purchases` is native, so **Expo Go cannot test any of this** — you
+need a development build.
+
+```bash
+npx expo prebuild --clean
+npx expo run:ios --device
+```
+
+Then, signed into the Sandbox tester account:
+
+1. Sign up as a new user → paywall appears.
+2. Buy the monthly package → confirmation screen → tabs open.
+3. Check CloudWatch for `[billing] INITIAL_PURCHASE for <uuid> — applied`, and
+   `profile_entitlements` for the row.
+4. **Kill and relaunch.** The gate must let you in without a second purchase.
+5. **Test the lapsed path, not just first-run**: sign in as a user with no
+   subscription, confirm the paywall, then **Restore purchases**. This is the
+   path where a stale RevenueCat query bounced the user back to the paywall, so
+   it is the one worth exercising deliberately.
+6. Restore on a second account to see the "Nothing to restore" toast.
+
+## 6. Afterwards
+
+- [ ] Delete the `REQUIRE_ENTITLEMENT` flag and make `requireEntitlement`
+      unconditional. It exists only to sequence this rollout.
+- [ ] Add the Android SDK key and repeat from step 2 for a Play Store app.

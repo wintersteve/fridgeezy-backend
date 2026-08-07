@@ -56,6 +56,12 @@ export const RecipeSuggestionInputSchema = z.object({
         .describe(
             "Dish names that must NOT be returned: every dish already shown earlier in THIS conversation, plus the dish the user wants an accompaniment FOR ('what sauce goes with apple strudel' -> ['apple strudel']). Without it the search matches the accompanied dish and hands back the same card."
         ),
+    difficulty: z
+        .enum(["easy", "medium", "hard"])
+        .optional()
+        .describe(
+            "How involved the dish should be. Set this ONLY when the user actually signals it: 'something quick', 'simple', 'easy', 'weeknight', 'no fuss' -> 'easy'; 'a bit special', 'impressive' -> 'medium'; 'a project', 'restaurant-level', 'go all out' -> 'hard'. OMIT it whenever they say nothing about effort — the user's own saved skill level is then applied, and setting this on a hunch overrides their preference."
+        ),
     dietaryRestrictions: z
         .array(z.string())
         .optional()

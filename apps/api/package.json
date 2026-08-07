@@ -84,7 +84,7 @@
             "serve": {
                 "continuous": true,
                 "executor": "@nx/js:node",
-                "defaultConfiguration": "development",
+                "defaultConfiguration": "production",
                 "dependsOn": [
                     "build"
                 ],
@@ -93,7 +93,7 @@
                     "runBuildTargetDependencies": false
                 },
                 "configurations": {
-                    "development": {
+                    "dev": {
                         "buildTarget": "@fridgeezy/api:build:development"
                     },
                     "production": {

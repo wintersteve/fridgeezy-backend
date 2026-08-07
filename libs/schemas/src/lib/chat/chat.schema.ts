@@ -46,6 +46,15 @@ export const ChatRequestSchema = z.object({
      * Recipes that normally contain any of these are excluded.
      */
     blacklist: z.array(z.string()).optional(),
+    /**
+     * The user's saved skill level, used as the DEFAULT difficulty for anything
+     * generated this turn. Unlike the two above it is not forced onto the tool
+     * call: a request that asks for something quick, simple or elaborate says
+     * so in the message, and the model's own reading of that wins. This only
+     * fills the silence — before it existed, every dish suggested in chat was
+     * whatever difficulty the generator happened to pick.
+     */
+    difficulty: z.enum(["easy", "medium", "hard"]).optional(),
 });
 
 // Export types

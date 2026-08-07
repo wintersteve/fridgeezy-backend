@@ -113,6 +113,18 @@ export interface RecipeSuggestionInput {
     dietaryRestrictions?: string[];
     /** Ingredients to never suggest (allergies/dislikes). */
     blacklist?: string[];
+    /**
+     * How involved a GENERATED dish should be — the model's reading of the
+     * request when the user signalled one ("something quick"), otherwise their
+     * saved skill level, defaulted in by the caller.
+     *
+     * Stage 3 only. The catalogue stages are left alone deliberately: filtering
+     * existing recipes by difficulty would empty the result on a catalogue that
+     * skews medium, and a stage that already found a dish answering the question
+     * should return it. The hint is about what we WRITE, not about refusing what
+     * we already have.
+     */
+    difficulty?: "easy" | "medium" | "hard";
 }
 
 export interface RecipeSuggestionItem {
@@ -198,6 +210,7 @@ export async function searchRecipeSuggestions(
         component,
         dietaryRestrictions,
         blacklist,
+        difficulty,
     } = input;
     const { onPartialSuggestion } = options;
 
@@ -418,6 +431,7 @@ export async function searchRecipeSuggestions(
                         component,
                         dietaryRestrictions,
                         blacklist,
+                        difficulty,
                     },
                     {
                         onField: (fields) => {
@@ -485,6 +499,7 @@ export async function searchRecipeSuggestions(
                     component,
                     dietaryRestrictions,
                     blacklist,
+                    difficulty,
                 });
 
                 for await (const suggestion of stream) {

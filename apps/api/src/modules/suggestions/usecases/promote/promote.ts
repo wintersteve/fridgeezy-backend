@@ -23,7 +23,10 @@ import {
     STEP_DURATION_RULES,
     INGREDIENT_CATEGORY_GUIDE,
 } from "../../../recipes/services";
-import { generateAndUploadRecipeImage } from "../../../recipes/services/create-recipe-image";
+import {
+    generateAndUploadRecipeImage,
+    getRecipeImagePublicUrl,
+} from "../../../recipes/services/create-recipe-image";
 import { persistRecipeWithIngredientIds } from "../../../recipes/services/persist-recipe";
 import { fetchEnrichedSuggestion } from "../../services";
 
@@ -155,7 +158,9 @@ const buildUserPrompt = ({
 }: UserPromptInput) =>
     [
         `Generate a detailed ${difficulty} level recipe for: ${name}`,
-        gloss ? `The dish was offered to the user as: "${gloss}" — write the recipe for THAT dish, and keep "shortDescription" consistent with it.` : "",
+        gloss
+            ? `The dish was offered to the user as: "${gloss}" — write the recipe for THAT dish, and keep "shortDescription" consistent with it.`
+            : "",
         `Use ONLY these ingredients: ${ingredientNames.join(", ")}`,
         `Servings: ${servings}`,
     ]
@@ -282,7 +287,9 @@ export const promoteSuggestion = createStreamHandler({
         // with the entire recipe generation instead of waiting for the header.
         // Fire-and-forget: persistence reads the deterministic URL either way.
         // Tracked so Lambda can let it finish before freezing the environment.
-        trackBackgroundTask(generateAndUploadRecipeImage(suggestion.name)).catch((error) => {
+        trackBackgroundTask(
+            generateAndUploadRecipeImage(suggestion.name)
+        ).catch((error) => {
             console.error("Image generation failed:", error);
         });
 
@@ -334,7 +341,9 @@ export const promoteSuggestion = createStreamHandler({
             // After stream completes, persist the recipe and yield final message with ID
             if (lastResult?.type === "complete" && lastResult.recipe) {
                 // Persist using ingredient IDs directly (no canonical_id lookup needed)
-                const persistResult = await persistRecipeWithIngredientIds(lastResult.recipe);
+                const persistResult = await persistRecipeWithIngredientIds(
+                    lastResult.recipe
+                );
 
                 if (persistResult.success) {
                     console.log(
@@ -371,10 +380,21 @@ export const promoteSuggestion = createStreamHandler({
                         );
                     }
 
-                    // Yield final completion with recipe ID
+                    // Yield final completion with recipe ID and hero image.
+                    //
+                    // The image URL is deterministic in the name, so it is the
+                    // same string `persistRecipeWithIngredientIds` just wrote to
+                    // the row — known here whether or not the (background)
+                    // upload has landed. Sending it saves the client a
+                    // round-trip it was losing races against: it recorded the
+                    // promoted suggestion the moment this id arrived, then had
+                    // to wait on a separate recipe fetch for the image, and a
+                    // user who backed out first left the card with no image at
+                    // all.
                     yield {
                         ...lastResult,
                         id: persistResult.value,
+                        image: getRecipeImagePublicUrl(lastResult.recipe.name),
                     };
                 } else {
                     console.error(
@@ -393,7 +413,15 @@ export const promoteSuggestion = createStreamHandler({
                     if (raced.success && raced.value) {
                         const suggestionsRepo = new SuggestionsRepository();
                         await suggestionsRepo.delete(id);
-                        yield { ...lastResult, id: raced.value };
+                        // Same dish name, so the same deterministic URL — the
+                        // row that won the race stored this too.
+                        yield {
+                            ...lastResult,
+                            id: raced.value,
+                            image: getRecipeImagePublicUrl(
+                                lastResult.recipe.name
+                            ),
+                        };
                     } else {
                         // Yield completion without ID if persistence failed
                         yield lastResult;

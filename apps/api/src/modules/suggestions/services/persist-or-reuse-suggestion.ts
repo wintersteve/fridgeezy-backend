@@ -7,6 +7,7 @@ import { SuggestionsRepository } from "@fridgeezy/supabase";
 
 import { adjudicateSameDish } from "./adjudicate-suggestion";
 import { fetchEnrichedSuggestion } from "./fetch-enriched-suggestion";
+import { findKnownDish } from "./find-known-dish";
 import { findRecipeForDish } from "./find-recipe-for-dish";
 import { findSuggestionByName } from "./find-suggestion-by-name";
 import { persistSuggestion } from "./persist-suggestion";
@@ -100,6 +101,18 @@ export async function persistOrReuseSuggestion(
     };
 
     try {
+        // Step 0: have we already got this exact dish? Two indexed lookups, no
+        // LLM and no embedding. A hit means the dish was reviewed when it was
+        // first stored and its stored name IS the canonical one, so re-asking
+        // the model about it buys nothing — and the review is 77% of the token
+        // cost of a batch. A miss falls through to the unchanged pipeline.
+        // See `findKnownDish` for why this does not undo the review-first order.
+        const known = await findKnownDish(suggestion.name, suggestion.name_alt);
+
+        if (known) {
+            return settle(known);
+        }
+
         // Step 1: is this a real dish, and what is it actually called? Keeps
         // inventions and hallucinations out of the discovery catalog, and gives
         // every layer below one stable name to key on.

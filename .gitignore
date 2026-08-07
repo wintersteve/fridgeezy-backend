@@ -59,3 +59,14 @@ apps/api/eval-output/
 # Generated image candidates. Curated by hand and committed in the CLIENT repo
 # (they are bundled into the app binary), so the rolls themselves are scratch.
 apps/database/operations/output/
+
+# Env files. Derived by the `env-local` / `env-remote` targets, never authored.
+#
+# The glob matters as much as the bare name: `.env.production` holds the REMOTE
+# service-role key, and a pattern of `.env` alone does not match it. Until this
+# block existed the only thing keeping any of them out of a commit was a
+# personal `~/.gitignore` — which is per-machine, so the protection did not
+# exist for anyone else and would not have survived this repo being cloned.
+.env
+.env.*
+!.env.example

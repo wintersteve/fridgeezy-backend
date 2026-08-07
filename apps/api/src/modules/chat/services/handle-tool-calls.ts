@@ -40,7 +40,8 @@ async function handleSingleToolCall(
     toolCall: ToolCall,
     tools: ToolRegistry,
     argOverrides: Record<string, Record<string, unknown>> = {},
-    toolContext: Record<string, ToolCallContext> = {}
+    toolContext: Record<string, ToolCallContext> = {},
+    argDefaults: Record<string, Record<string, unknown>> = {}
 ): Promise<ChatMessage> {
     const tool = tools[toolCall.function.name];
 
@@ -55,8 +56,27 @@ async function handleSingleToolCall(
     }
 
     try {
+        // Three layers, and the order is the whole point. Defaults sit UNDER the
+        // model's arguments, so it wins by saying something; overrides sit over
+        // them, so it cannot say otherwise. A user preference belongs in the
+        // first (the request may contradict it) and a hard constraint like the
+        // diet in the second.
+        //
+        // `undefined` in the model's arguments would beat a default under a
+        // plain spread, so absent keys are stripped first — an unset optional in
+        // the tool schema must read as "not answered", not as "answered null".
+        const modelArgs = Object.fromEntries(
+            Object.entries(
+                JSON.parse(toolCall.function.arguments) as Record<
+                    string,
+                    unknown
+                >
+            ).filter(([, value]) => value !== undefined)
+        );
+
         const args = {
-            ...JSON.parse(toolCall.function.arguments),
+            ...argDefaults[toolCall.function.name],
+            ...modelArgs,
             ...argOverrides[toolCall.function.name],
         };
         const result = await tool.handler(
@@ -90,8 +110,7 @@ async function handleSingleToolCall(
             role: "tool",
             tool_call_id: toolCall.id,
             content: JSON.stringify({
-                error:
-                    error instanceof Error ? error.message : "Unknown error",
+                error: error instanceof Error ? error.message : "Unknown error",
             }),
         };
     }
@@ -104,11 +123,18 @@ export async function handleToolCalls(
     toolCalls: ToolCall[],
     tools: ToolRegistry,
     argOverrides: Record<string, Record<string, unknown>> = {},
-    toolContext: Record<string, ToolCallContext> = {}
+    toolContext: Record<string, ToolCallContext> = {},
+    argDefaults: Record<string, Record<string, unknown>> = {}
 ): Promise<ChatMessage[]> {
     const results = await Promise.all(
         toolCalls.map((toolCall) =>
-            handleSingleToolCall(toolCall, tools, argOverrides, toolContext)
+            handleSingleToolCall(
+                toolCall,
+                tools,
+                argOverrides,
+                toolContext,
+                argDefaults
+            )
         )
     );
 

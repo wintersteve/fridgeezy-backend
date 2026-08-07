@@ -56,7 +56,128 @@ bottom of this file — the checkboxes here are the summary.
 
 ---
 
-# 2. No per-user rate limiting
+# 2. Dietary tier — the monetisation bet
+
+**A €14.99/month "cook confidently with an allergy or intolerance" tier.**
+Modelled at **+72% revenue per install** against the €4.99 plan, and roughly a
+third of that comes from *halved churn* rather than the higher price: a coeliac
+does not cancel in a quiet month.
+
+**Most of this is already built and switched off.** `20260803000003` /
+`20260803000004` are the right architecture for a safety claim — properties
+(`contains dairy`) rather than diets (`is vegan`), `dietary_rules` mapping diets
+to forbidden properties as data, and three-valued logic that fails closed:
+`dietary_classified_at IS NULL` means *nobody has looked*, and the views treat
+that exactly like disqualifying. Halal/kosher and the quantitative diets are
+deliberately excluded and honestly labelled as model-tagged instead.
+
+- [ ] **Run the classifier. This is the whole foundation and it is one command.**
+      **337 of 337 ingredients have `dietary_classified_at = NULL`**, so
+      `recipe_dietary` and `recipe_suggestion_dietary` return nothing and every
+      dietary filter silently falls through to `shouldUseAI`. The deterministic
+      system is complete and inert.
+      ```bash
+      DIET_ONLY="soy sauce,gelatin,oat milk,honey,worcestershire sauce" \
+        npx nx run @fridgeezy/database:classify-ingredient-diet   # dry run first
+      DIET_APPLY=true npx nx run @fridgeezy/database:classify-ingredient-diet
+      ```
+      Check the scattered hard cases first — the script's own comment warns that
+      a capped dry run otherwise only ever sees the letter A. Costs cents.
+      **Worth doing regardless of the tier**: it makes the free plan's existing
+      dietary filters work at all.
+- [ ] **Close the generation gap — the main engineering work.** The deterministic
+      rule protects `find_recipes` (catalogue search) only. The AI feed honours
+      restrictions *in the prompt*, i.e. by model judgement, which is precisely
+      what the tier promises to replace. Generated dishes already have their
+      ingredients matched to catalogue rows by `matchIngredients`, so the same
+      rule can be applied after the fact — suppress or badge any generated
+      suggestion that does not provably clear the user's restrictions. Without
+      this the tier's promise is false on its most-used surface.
+- [ ] **Severity levels**: preference / intolerance / allergy. Today a restriction
+      is one thing. An allergy should hard-block; a preference can show with a
+      badge.
+- [ ] **Surface "unknown" as its own state.** Never collapse unverified into safe
+      *or* unsafe. "We can't verify this dish for you" is the honest answer and
+      the data already models it.
+- [ ] **Household sharing**: one coeliac in a house of four is the real scenario,
+      so the strictest member's restrictions apply to shared suggestions. Pairs
+      with the household plan below.
+
+## Also: a household plan — the best return per hour on the list
+
+**€7.99 for up to 5 people, modelled at +21% revenue per install for roughly a
+day's work.** Food is a household activity and the app already has the concepts:
+shared fridge, shopping lists, menus, collections. Apple Family Sharing does the
+distribution, and the marginal serving cost of the second person is far below the
+marginal revenue because they browse the same catalogue.
+
+- [ ] Second RevenueCat product + package in the `default` offering. Nothing in
+      the gate changes — it asks only whether *any* entitlement is active.
+- [ ] Decide what "household" means in the data: a shared profile group, or a
+      per-user entitlement flag that unlocks sharing. The former is a migration,
+      the latter is not.
+- [ ] **Validate the segment before building.** The 12%-of-payers assumption is
+      mine, not measured. Add "managing a food allergy or intolerance?" to
+      onboarding and count. Under ~5% and this is the wrong bet — a fortnight and
+      one screen to find out.
+
+## The safety boundary — non-negotiable
+
+**Allergen safety derives only from `dietary_properties`. No LLM in the safety
+path, ever.**
+
+The argument is in this repo's own eval data: `GUTTED_DISHES` in
+`dedup-authenticity.eval.ts` holds a "Ceviche de Mariscos" whose ingredients are
+lime, onion, chili, sweet potato and corn — no seafood — scoring `canonical` at
+**0.95**. The gate read the *name*. Apply that failure mode to "is this
+gluten-free" and someone is hospitalised.
+
+Cross-contamination is **out of scope and must be said so**: ingredient
+properties cannot see a shared fryer or a "may contain traces" line. Ship the
+tier with wording that it is a cooking aid, not medical advice.
+
+---
+
+# 3. Cost levers
+
+Measured from the `[LLM]` logs, not estimated: a four-card suggestion batch costs
+**~$0.022**, of which `authenticity.verify` is **77%**. A recipe image is $0.14 —
+7× the token cost of the recipe it illustrates.
+
+- [x] **Skip the authenticity call on an exact catalogue hit** (2026-08-07).
+      `findKnownDish` runs before the review: two indexed lookups, no LLM and no
+      embedding. A hit settles immediately with the existing recipe or suggestion;
+      a miss falls through to the unchanged pipeline.
+      **This does not undo the review-first ordering.** That fix was about running
+      the review *concurrently* with dedup and awaiting it last, so every layer
+      compared a non-canonical name. This is a sequential pre-check on an exact
+      string match — it either answers definitively or defers, and nothing
+      downstream ever sees a different name than it would have. Recipes are
+      checked before suggestions inside it, for the same stale-row reason the main
+      pipeline orders its layers that way.
+      Deliberately does **not** catch a renamed dish (`Pain Aux Bananes`): that
+      misses here and is renamed by the review exactly as before. The pre-check
+      only skips work when the answer is already certain.
+- [ ] **Measure what it actually saves.** The saving is entirely a function of
+      catalogue hit rate, which is unknown — and the feed uses the catalogue as an
+      *exclusion list*, so it actively asks for dishes it does not have. Count
+      `findKnownDish` hits against total suggestions over a real session before
+      claiming a number.
+- [ ] **Decide on deferred image generation — I now think this is wrong.** It was
+      pitched as "$0.14 per promoted-then-abandoned recipe is pure waste", but
+      that contradicts the later finding that images are a **capital cost, not a
+      running one**: generation short-circuits on a deterministic storage path, so
+      each dish is drawn once, ever, for all users. An abandoned recipe still
+      leaves the image for the next person. It is only waste for a dish nobody
+      ever promotes again, and the prompt refuses obscure dishes, so that tail is
+      bounded. Against that, deferring means the recipe screen shows
+      `bowl-placeholder` instead of a dish photo — a visible downgrade on the
+      app's best surface. **Recommend dropping this**; revisit only if the logs
+      show a long tail of one-off dishes.
+
+---
+
+# 4. No per-user rate limiting
 
 Authentication bounds *who* can spend, not *how much*. Once item 1 is live,
 entitlement becomes the ceiling and this drops in priority — until then anyone
@@ -69,7 +190,7 @@ so any limit has to live in the app, alongside `requireSupabaseUser` and
 
 ---
 
-# 3. Auth — email confirmation and social sign-in
+# 5. Auth — email confirmation and social sign-in
 
 Nothing here is started.
 
@@ -127,7 +248,7 @@ email/password only.
 
 ---
 
-# 4. Smaller, but each one is user-visible
+# 6. Smaller, but each one is user-visible
 
 - [ ] **No crash reporting in production.** `EXPO_PUBLIC_SENTRY_DSN` is unset, so
       `initReporting()` no-ops. Needs a native rebuild for `@sentry/react-native`,
@@ -142,7 +263,7 @@ email/password only.
 
 ---
 
-# 5. Food-only scope — open product decisions
+# 7. Food-only scope — open product decisions
 
 The gate itself is done and covered by `DRINKS` / `FOOD_WITH_DRINK` in
 `dedup-authenticity.eval.ts`; the rule and its rationale are in CLAUDE.md. What
@@ -177,7 +298,7 @@ the tiers were revised recently and under-declaring is enforced after the fact.
 
 ---
 
-# 6. Bedrock inference — BUILT, PARKED, BLOCKED
+# 8. Bedrock inference — BUILT, PARKED, BLOCKED
 
 All 11 text call sites and the vision path go through `@fridgeezy/llm`; no module
 in `apps/api` imports a provider SDK. `LLM_PROVIDER` defaults to `openai`, so **no
@@ -261,7 +382,7 @@ It carries its own entitlement question, which may or may not be easier.
 
 ---
 
-# 7. Embeddings migration — RECOMMENDED CUT
+# 9. Embeddings migration — RECOMMENDED CUT
 
 > Cutting this means **`OPENAI_API_KEY` stays a hard boot requirement forever**,
 > so the "one credential, one bill" benefit motivating the whole Bedrock
@@ -290,7 +411,7 @@ silently degrades rather than erroring.
 
 ---
 
-# 8. Deferred — universal links for recipe sharing
+# 10. Deferred — universal links for recipe sharing
 
 **Blocked on buying a domain.** Sharing works today: the link opens a browser and
 the page offers an "Open in Fridgeezy" button. What is missing is the link itself

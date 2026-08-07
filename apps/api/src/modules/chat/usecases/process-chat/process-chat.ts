@@ -188,6 +188,17 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                                         );
                                     },
                                 },
+                            },
+                            // A DEFAULT, not an override: the user's saved skill
+                            // level applies unless they asked for something else
+                            // in the message, in which case the model sets
+                            // `difficulty` from that and its value wins. Before
+                            // this, nothing carried the preference into chat at
+                            // all and the generator picked for itself.
+                            {
+                                GET_RECIPE_SUGGESTIONS: {
+                                    difficulty: request.difficulty,
+                                },
                             }
                         );
 

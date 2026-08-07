@@ -45,7 +45,8 @@ a manual step you have to remember, not something a build will do for you.
 ## Commands
 
 ```bash
-npm run api            # nx run api:serve — Express on http://localhost:8000
+npm run api            # nx run api:serve — Express on :8000, REMOTE Supabase
+npm run api:dev        # nx run api:serve:dev — Express on :8000, LOCAL Supabase
 npm run build:all      # nx run-many -t build --all
 npm run build:shared   # build only tag:scope:shared libs
 npm run lint:all
@@ -178,15 +179,54 @@ anon/service-role JWTs; supabase-js ≥ 2.90 accepts both, and they still go in 
 Don't hand-edit the Supabase trio — `env-local` / `env-remote` derive it:
 
 ```bash
-npx nx run @fridgeezy/database:env-local              # LAN IP (device default)
-npx nx run @fridgeezy/database:env-local -- --simulator   # 127.0.0.1
+npx nx run @fridgeezy/database:env-local              # from `supabase status`
 npx nx run @fridgeezy/database:env-remote            # from SSM
 ```
 
-Both rewrite `apps/api/.env` and `apps/database/.env` **in place, touching only
-`SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`** — your LLM
-keys, `SUPABASE_PROJECT_ID`, comments and commented-out blocks all survive, so
-it is safe to re-run and needs no AWS credentials in local mode.
+Both rewrite **in place, touching only `SUPABASE_URL` / `SUPABASE_ANON_KEY` /
+`SUPABASE_SERVICE_ROLE_KEY`** — your LLM keys, `SUPABASE_PROJECT_ID`, comments
+and commented-out blocks all survive, so it is safe to re-run and needs no AWS
+credentials in local mode. Which files each one owns:
+
+| | writes |
+| --- | --- |
+| `env-local` | `apps/api/.env.dev`, `apps/database/.env` |
+| `env-remote` | `apps/api/.env.production` |
+
+**`apps/database/.env` is only ever written local, and that is deliberate.**
+Every `operations/` script writes to whatever it says, so a remote value there
+is one stray `embed-* -- --all` away from a production incident — and now that
+`npm run api` is the *production* serve, `env-remote` is a routine command
+rather than a rare one. The `-remote` database targets don't read it; they go
+through the linked project.
+
+### Which database the API serves
+
+Split by Nx configuration rather than by editing a file:
+
+```bash
+npm run api          # nx run api:serve      → apps/api/.env.production (REMOTE)
+npm run api:dev      # nx run api:serve:dev  → apps/api/.env.dev       (LOCAL)
+```
+
+Nx loads `.env.<configuration>` from the project root ahead of `.env` and does
+not override what it already has, so the shared `.env` keeps the LLM keys for
+both while the Supabase trio comes from whichever configuration you named. That
+makes "which database am I pointed at" a property of the command you typed
+instead of a comment you have to remember to swap back — the previous single
+`.env` with the remote block commented out underneath had no way to tell you
+which half was live.
+
+**Note this inverts the convention the database targets use**, where the short
+name is the safe one (`reset` local, `reset-remote` linked). Here the bare
+`npm run api` reaches the live project and `api:dev` is the local one. Worth
+knowing before you reach for muscle memory: `nx run api:serve` writes to the
+database the app actually serves.
+
+The verification that the two are genuinely different databases, if you change
+this wiring: fetch a recipe id that exists only locally through
+`GET /rest/recipes/:id/share` on both. `:dev` answers 200 with the dish name,
+plain `serve` answers 404.
 
 Nothing is templated. Local values come from `supabase status -o json` and
 remote ones from SSM, which `infra/put-secrets.sh` already treats as the source
@@ -199,10 +239,36 @@ The client is a **separate repo**, so its four `EXPO_PUBLIC_*` lines are printed
 to stdout to paste rather than written — a hardcoded cross-repo path is exactly
 what breaks on someone else's machine.
 
-`--simulator` exists because the default is the LAN IP: on a physical device
-`localhost` means *the device*, so loopback reaches nothing and every request
-fails with a bare "could not connect". On a simulator loopback is both fine and
-more stable, since it survives the router handing out a new lease.
+**The backend `.env` files always get `127.0.0.1`, and only the printed client
+block gets the LAN IP.** The API and every `operations/` script share a machine
+with the Docker stack, so `SUPABASE_URL` is a server-to-server address that
+never leaves the host — a LAN IP there bought nothing and broke on every network
+change, which is exactly how both files ended up pinned to a `192.168.1.x` lease
+that had long since expired. `localhost` on a *phone* means that phone, which is
+why the client half still needs a routable address.
+
+There used to be a `--simulator` flag to force loopback. It is gone: loopback is
+now unconditional on the side that wanted it, and the side that cannot use it
+resolves the address itself.
+
+**For local work you can ignore the printed block entirely.** The client's
+`npm run start:dev` (`scripts/with-local-env.sh`) re-resolves `en0` at launch and
+exports the four values over the top of `.env` — shell env wins in Expo's dotenv
+loading — so a new network or a new lease costs a restart rather than an edit.
+Paste the block when you want the file itself to be right, or for `env-remote`.
+
+One backend URL genuinely does reach the phone: `getRecipeImagePublicUrl` in
+`create-recipe-image.ts`, whose output is persisted to `recipes.image` and
+streamed to the client, where `DishImage` **prefers the stored column** over the
+name-derived fallback it would otherwise compute. It therefore swaps loopback
+for the LAN address itself, at request time. That is a no-op in every deployed
+configuration by construction rather than by a flag — Lambda's `SUPABASE_URL` is
+the project's https origin and has no loopback host to match.
+
+Note the sharp edge that leaves: a row written on one network stores that
+network's address. Locally the repair is `update recipes set image = null` —
+the client falls back to `recipeImageUri(name)`, built from its own env, which
+is correct on whatever network it is on. (Done once on 2026-08-07, 27 rows.)
 
 After changing the client's `.env`, restart Expo with `npx expo start --clear` —
 `EXPO_PUBLIC_*` values are inlined at build time, so a running Metro keeps
@@ -212,10 +278,18 @@ Two things that will waste your time otherwise:
 
 - **A running API server does not pick up an `.env` change.** `nx serve` dedupes,
   so a second `npm run api` attaches to the existing process rather than starting
-  a fresh one — it prints "Waiting for @fridgeezy/api:serve:development in
+  a fresh one — it prints "Waiting for @fridgeezy/api:serve:production in
   another nx process" and you end up testing the old configuration. Restart the
   server itself, or run `PORT=8001 node apps/api/dist/main.js` for a throwaway
-  instance on another port.
+  instance on another port — note a bare `node` run loads no `.env` at all (Nx
+  is what does that), so give it the variables yourself:
+  `set -a; . apps/api/.env; . apps/api/.env.dev; set +a`.
+- **`api` and `api:dev` do not dedupe against each other** — they are different
+  tasks, so Nx starts the second rather than attaching, and it dies on `EADDRINUSE`
+  for port 8000. That is the good outcome: the failure mode it replaces is two
+  servers where you believe you have one, and no way to tell from the banner
+  which database the one you are talking to is on. Stop the first, or give the
+  second a `PORT`.
 - **Stale stacks squat on the ports.** A pre-`apps/database/` layout stack still
   exists under project id `src` and Docker Desktop restarts it on launch, which
   fails our `start` with `Bind for 0.0.0.0:54322 failed`. Clear it with

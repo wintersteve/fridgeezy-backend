@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { generateStream, type LlmProvider } from "@fridgeezy/llm";
 import {
-    ProvisionalSuggestionDto,
+    PendingSuggestionDto,
     StreamedSuggestionDto,
     RejectedSuggestionRequestDto,
     WithdrawnSuggestionDto,
@@ -137,30 +137,15 @@ export const SUGGESTIONS_SYSTEM_PROMPT = buildSuggestionsSystemPrompt(
 );
 
 /**
- * The card as the model wrote it, before any database work.
+ * Holds this dish's place in the list while it is checked.
  *
- * Ingredient and tag ids do not exist yet — the rows may not either. They are
- * synthesised with a `temp:` prefix so the shape matches the enriched frame and
- * the client needs one type, not two, and so React keys stay stable and unique
- * within the card. Nothing should treat them as real ids; they are visibly not
- * UUIDs, and the enriched frame replaces them a few seconds later.
+ * Carries no name, no description, nothing — see `PendingSuggestionSchema`. The
+ * client draws a placeholder, and because the placeholder makes no claim, the
+ * dish behind it is free to be renamed, deduped or rejected without anything on
+ * screen having to contradict itself.
  */
-function provisionalCard(
-    suggestion: GenerateSuggestionResponseDto,
-    tempId: string
-): ProvisionalSuggestionDto {
-    const provisional = (name: string) => ({ id: `temp:${name}`, name });
-
-    return {
-        tempId,
-        name: suggestion.name,
-        nameEn: suggestion.name_alt,
-        description: suggestion.description,
-        difficulty: suggestion.difficulty,
-        ingredients: suggestion.ingredients.map(provisional),
-        tags: suggestion.tags.map(provisional),
-        adaptedFor: suggestion.adaptedFor,
-    };
+function pendingSlot(tempId: string): PendingSuggestionDto {
+    return { tempId, pending: true };
 }
 
 /**
@@ -173,7 +158,7 @@ export async function* generateSuggestionsStream(
     request: GenerateSuggestionRequestDto,
     provider?: LlmProvider
 ): AsyncGenerator<
-    | ProvisionalSuggestionDto
+    | PendingSuggestionDto
     | StreamedSuggestionDto
     | WithdrawnSuggestionDto
     | RejectedSuggestionRequestDto
@@ -299,14 +284,6 @@ interface GenerationPassOptions {
     onGenerated: (lines: number) => void;
 }
 
-/** A promise plus the handles to settle it from elsewhere. */
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((r) => {
-        resolve = r;
-    });
-    return { promise, resolve };
-}
 
 /**
  * One model call: stream its JSONL lines, persist each concurrently, and yield
@@ -342,7 +319,7 @@ async function* runGenerationPass({
     onOutOfScope,
     onGenerated,
 }: GenerationPassOptions): AsyncGenerator<
-    ProvisionalSuggestionDto | StreamedSuggestionDto | WithdrawnSuggestionDto
+    PendingSuggestionDto | StreamedSuggestionDto | WithdrawnSuggestionDto
 > {
     const stream = generateStream({
         model: { openai: "gpt-4.1" },
@@ -363,31 +340,12 @@ async function* runGenerationPass({
      */
     let generatedLines = 0;
 
-    /**
-     * One in-flight suggestion. Two promises rather than one because the card is
-     * emitted at the FIRST of them: `reviewed` settles as soon as the dish has a
-     * final name and has passed the gate, `outcome` only after dedup and the
-     * insert. Emitting at `reviewed` is what stops a card being renamed or
-     * withdrawn once the user can see it; emitting at `outcome` would also cover
-     * the rarer dedup withdrawals, at several more seconds of blank screen.
-     */
-    interface Pending {
+    const pending: Promise<{
+        outcome: SuggestionOutcome;
         tempId: string;
-        /** The card to show, or `null` if the gate rejected the dish. */
-        reviewed: Promise<ProvisionalSuggestionDto | null>;
-        outcome: Promise<{
-            outcome: SuggestionOutcome;
-            tempId: string;
-            /** Per-request, so it can only come from the frame the model wrote. */
-            adaptedFor?: string[];
-        }>;
-        /** Whether the review has been read — separate from whether it produced a card. */
-        reviewHandled: boolean;
-        /** Whether a card for this slot ever reached the client. */
-        shown: boolean;
-    }
-
-    const pending: Pending[] = [];
+        /** Per-request, so it can only come from the frame the model wrote. */
+        adaptedFor?: string[];
+    }>[] = [];
     // Two line shapes, and the order matters: `processJsonlStream` reports the
     // index of the FIRST schema that matched, so the rejection line is second
     // and stays unambiguous — a dish never validates against it.
@@ -400,15 +358,12 @@ async function* runGenerationPass({
     const emit = function* (
         outcome: SuggestionOutcome,
         tempId: string,
-        shown: boolean,
         adaptedFor?: string[]
     ): Generator<StreamedSuggestionDto | WithdrawnSuggestionDto> {
-        // A withdrawal exists to take a card OFF the screen. Now that nothing is
-        // drawn until the gate has passed, most drops never had a card to begin
-        // with — sending one anyway makes the client reconcile a tempId it has
-        // never seen, which is indistinguishable from a card it missed.
+        // Every dish has a placeholder on screen from the moment it was
+        // generated, so every drop has one to take away. No conditional.
         const withdraw = function* (): Generator<WithdrawnSuggestionDto> {
-            if (shown) yield { tempId, withdrawn: true };
+            yield { tempId, withdrawn: true };
         };
 
         // A dish the user already has as a recipe is not surfaced: this endpoint
@@ -482,10 +437,10 @@ async function* runGenerationPass({
             } else if (next.value.schemaIndex === REJECTION_LINE) {
                 // The generator declined the request rather than producing a
                 // dish. Reported through the same channel the gate uses, so the
-                // caller has one thing to react to — but note this arrives
-                // BEFORE any card was drawn, where the gate's version arrives
-                // after four have been drawn and withdrawn. Both are the same
-                // answer to the user; only the cost differs.
+                // caller has one thing to react to. Neither draws a card any
+                // more — the gate's version used to arrive after four had been
+                // drawn and withdrawn — so now they differ only in cost: this
+                // one is caught for free, the gate's costs a review call each.
                 console.log(
                     "[Suggestions] Generator declined the request — asked for drinks"
                 );
@@ -494,68 +449,46 @@ async function* runGenerationPass({
                 generatedLines++;
                 const suggestion = next.value.parsed as GenerateSuggestionResponseDto;
                 const tempId = randomUUID();
-                const reviewed = deferred<ProvisionalSuggestionDto | null>();
 
-                // The card is no longer sent off the model's raw line. It waits
-                // for the authenticity/naming review — one call, and the only
-                // step below that can still change what the card SAYS. Before
-                // this, an unauthentic dish was drawn and then withdrawn, and
-                // roughly a third of cards visibly renamed when the review
-                // corrected the generator's spelling.
-                //
-                // Everything after the review — dedup, embedding, ingredient and
-                // tag matching, the insert — only resolves ids, so the card
-                // still goes out well ahead of it.
-                pending.push({
-                    tempId,
-                    reviewed: reviewed.promise,
-                    shown: false,
-                    outcome: persistOrReuseSuggestion(suggestion, request, {
-                        batch,
-                        onReviewed: (dish) =>
-                            reviewed.resolve(
-                                dish ? provisionalCard(dish, tempId) : null
-                            ),
-                    }).then((outcome) => ({
-                        outcome,
-                        tempId,
-                        adaptedFor: suggestion.adaptedFor,
-                    })),
-                });
+                pending.push(
+                    persistOrReuseSuggestion(suggestion, request, { batch }).then(
+                        (outcome) => ({
+                            outcome,
+                            tempId,
+                            adaptedFor: suggestion.adaptedFor,
+                        })
+                    )
+                );
+
+                // Reserve this dish's place the instant the model names it, and
+                // say nothing about it. The client draws a placeholder, so the
+                // list shows exactly as many pending slots as there are dishes
+                // in flight — not a guessed batch size — and the dish behind it
+                // stays free to be renamed by the review or removed by dedup
+                // without anything on screen having to change its mind.
+                yield pendingSlot(tempId);
             }
         }
 
         // Drain everything already settled before reading more from the model,
         // so a card is never held back behind a line still being generated.
         //
-        // Both frames are gated on the HEAD of the queue, which is what keeps
-        // the client's list in generation order: a fast fourth dish must not
-        // show its card before a slow first one.
-        while (pending.length > 0) {
-            const head = pending[0];
+        // Order is still generation order: `pending` is consumed from the front,
+        // so a fast fourth suggestion never overtakes a slow first one. That
+        // matters because the client renders the batch as an ordered list.
+        while (
+            pending.length > 0 &&
+            (done || (await isSettled(pending[0])))
+        ) {
+            const settled = await pending.shift();
 
-            if (!head.shown) {
-                if (!done && !(await isSettled(head.reviewed))) break;
-
-                const card = await head.reviewed;
-                head.shown = card !== null;
-
-                // `null` means the gate rejected it — no card, and none of the
-                // frames below will reference this tempId either.
-                if (card) yield card;
+            if (settled) {
+                yield* emit(
+                    settled.outcome,
+                    settled.tempId,
+                    settled.adaptedFor
+                );
             }
-
-            if (!done && !(await isSettled(head.outcome))) break;
-
-            pending.shift();
-            const settled = await head.outcome;
-
-            yield* emit(
-                settled.outcome,
-                settled.tempId,
-                head.shown,
-                settled.adaptedFor
-            );
         }
     }
 

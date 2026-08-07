@@ -69,6 +69,11 @@ export async function requireSupabaseUser(
             return;
         }
 
+        // Handed to `requireEntitlement` and anything else downstream, so the
+        // subject is resolved once per request rather than per middleware — this
+        // is a network round trip, not a local decode.
+        req.supabaseUserId = data.user.id;
+
         next();
     } catch (cause) {
         // Supabase being unreachable is a 503, not a 401: the caller may well be

@@ -1,6 +1,6 @@
 import {
     GenerateSuggestionRequestSchema,
-    ProvisionalSuggestionSchema,
+    PendingSuggestionSchema,
     RejectedSuggestionRequestSchema,
     StreamedSuggestionSchema,
     WithdrawnSuggestionSchema,
@@ -11,15 +11,20 @@ import { generateSuggestionsStream } from "../../services";
 
 export const generateSuggestion = createStreamHandler({
     requestSchema: GenerateSuggestionRequestSchema,
-    // Four frame shapes: the provisional card sent as soon as the model writes
-    // it, then the persisted one carrying the same tempId, a withdrawal for a
-    // card that will never be enriched, and a terminal rejection for a request
+    // Four frame shapes: a pending slot sent as soon as the model writes the
+    // dish, then the persisted card carrying the same tempId, a withdrawal for
+    // a slot that will never become one, and a terminal rejection for a request
     // this catalog will never answer.
     //
-    // Every emitted frame is validated against this list, so a shape missing
-    // here is dropped at the boundary rather than reaching the client.
+    // This list is DOCUMENTATION, not enforcement — it read the other way round
+    // until 2026-08-06, which is worth knowing before trusting it.
+    // `createStreamHandler` only inspects it to choose streaming vs JSON error
+    // handling; the single `.parse()` in `handler-factory` is on the REQUEST. A
+    // frame shape missing here still reaches the client, and one that
+    // contradicts it is not caught. Changing a frame means reading the client,
+    // not waiting for a type error.
     responseSchema: [
-        ProvisionalSuggestionSchema,
+        PendingSuggestionSchema,
         StreamedSuggestionSchema,
         WithdrawnSuggestionSchema,
         RejectedSuggestionRequestSchema,

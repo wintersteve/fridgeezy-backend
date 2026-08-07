@@ -5,6 +5,14 @@ export interface RouteInfo {
     methods: string[];
     /** Full path including the mount prefix, e.g. `/rest/recipes/generate`. */
     path: string;
+    /**
+     * Whether the path answers without a Supabase access token.
+     *
+     * Not derived here — a router knows nothing about the middleware it will be
+     * mounted behind — but set by `describeRestEndpoints`, which owns that
+     * decision. Absent means gated, matching the mount default.
+     */
+    isPublic?: boolean;
 }
 
 /**

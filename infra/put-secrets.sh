@@ -50,6 +50,11 @@ KEYS=(
     SUPABASE_URL
     SUPABASE_ANON_KEY
     SUPABASE_SERVICE_ROLE_KEY
+    # Not in REQUIRED_KEYS: the app boots fine without it, it just rejects every
+    # RevenueCat event. That is the right failure — a missing secret must not
+    # take the whole API down — but it means a forgotten value shows up as
+    # subscriptions silently never being recorded. The startup banner says so.
+    REVENUECAT_WEBHOOK_SECRET
 )
 
 command -v aws >/dev/null 2>&1 || { echo "aws CLI not found on PATH" >&2; exit 1; }

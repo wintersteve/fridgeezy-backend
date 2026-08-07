@@ -1,3 +1,4 @@
+import { isEntitlementRequired } from "./middleware/require-entitlement";
 import { describeRestEndpoints } from "./rest";
 import type { RouteInfo } from "./utils/collect-routes";
 
@@ -39,10 +40,36 @@ function describeProvider(): string {
  * and it is the one that lets anyone who can reach the port spend the project's
  * LLM credits. /health is outside the gate either way.
  */
-function describeAuth(): string {
-    return process.env.ALLOW_UNAUTHENTICATED === "true"
-        ? "⚠ DISABLED — /rest is open (ALLOW_UNAUTHENTICATED=true)"
-        : "supabase access token required · /health open";
+function describeAuth(routes: RouteInfo[]): string {
+    if (process.env.ALLOW_UNAUTHENTICATED === "true") {
+        return "⚠ DISABLED — /rest is open (ALLOW_UNAUTHENTICATED=true)";
+    }
+
+    // Counted rather than named: the routes themselves are listed below and
+    // marked, and a count is the thing worth noticing if it moves.
+    const open = routes.filter((route) => route.isPublic).length;
+
+    return `supabase access token required · ${open} open route${open === 1 ? "" : "s"}`;
+}
+
+/**
+ * Whether the paid gate is enforcing.
+ *
+ * Printed unconditionally, and the *off* state is the one that shouts — the
+ * opposite of `describeAuth`, matching the inverted default in
+ * `require-entitlement.ts`. The gate has to ship disabled (the client cannot
+ * sell a subscription yet) which means "off" is both the correct state today and
+ * the state that silently costs money once it stops being correct. Something has
+ * to say so on every boot.
+ */
+function describeEntitlement(): string {
+    if (!isEntitlementRequired()) {
+        return "⚠ NOT ENFORCED — every signed-in user gets full access (REQUIRE_ENTITLEMENT unset)";
+    }
+
+    return process.env.REVENUECAT_WEBHOOK_SECRET
+        ? "active subscription required"
+        : "⚠ enforced, but REVENUECAT_WEBHOOK_SECRET is unset — no event can be recorded";
 }
 
 /**
@@ -54,8 +81,18 @@ function describeAuth(): string {
 function formatRoutes(routes: RouteInfo[]): string[] {
     const method = (route: RouteInfo) => route.methods.join("|");
     const width = Math.max(...routes.map((route) => method(route).length));
+    const pathWidth = Math.max(...routes.map((route) => route.path.length));
 
-    return routes.map((route) => `  ${method(route).padEnd(width)}  ${route.path}`);
+    // Open routes are marked, gated ones are not. Marking the exception keeps the
+    // list readable and puts the attention on the line that can be wrong — an
+    // unintentionally open route is visible on every boot rather than only in
+    // the diff that opened it.
+    return routes.map((route) => {
+        const open = route.isPublic ? "  ← open" : "";
+        const path = open ? route.path.padEnd(pathWidth) : route.path;
+
+        return `  ${method(route).padEnd(width)}  ${path}${open}`;
+    });
 }
 
 export function startupBanner(port: number): string {
@@ -66,7 +103,8 @@ export function startupBanner(port: number): string {
         `  fridgeezy-api ready on http://localhost:${port}`,
         "",
         `  provider  ${describeProvider()}`,
-        `  auth      ${describeAuth()}`,
+        `  auth      ${describeAuth(routes)}`,
+        `  billing   ${describeEntitlement()}`,
         `  runtime   node ${process.version} · ${process.env.NODE_ENV ?? "development"}`,
         `  routes    ${routes.length}`,
         "",

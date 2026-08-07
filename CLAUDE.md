@@ -391,15 +391,99 @@ mount path anyway; the nesting only made every import inside it `../../../`.
 | `POST /rest/recipes/modify` | `modules/recipes` |
 | `POST /rest/recipes/:recipeId/compose` | `modules/recipes` |
 | `POST /rest/recipes/:recipeId/chat` | `modules/recipes` |
+| `GET /rest/recipes/:recipeId/share` | `modules/recipes` — **open** |
 | `POST /rest/substitutes/generate` | `modules/substitutes` |
 | `POST /rest/chat` | `modules/chat` |
-| `GET /rest/health` | direct |
+| `POST /rest/billing/revenuecat` | `modules/billing` — **open** |
+| `GET /rest/health` | direct — **open** |
 
-**Every route above except `/rest/health` requires a Supabase access token**
+**Every route above requires a Supabase access token**
 (`Authorization: Bearer <access_token>`), checked by `requireSupabaseUser` in
-`middleware/require-auth.ts`. The middleware is applied inside the `MOUNTS` loop
-rather than to the whole router, so a new feature module cannot be added
-unauthenticated by accident, and `/health` stays answerable without credentials.
+`middleware/require-auth.ts`, **except the three marked open**. The middleware is
+applied inside the `MOUNTS` loop rather than to the whole router, so a new
+feature module cannot be added unauthenticated by accident.
+
+Opening a route is a **positive declaration**, never an omission: a module puts
+it on a second, separately-exported router (`RecipesPublicRoutes`) and names it
+as `publicRouter` on its `MOUNTS` entry, which mounts it at the same prefix ahead
+of the gated one. Anything that router does not match falls through to the gate,
+so `POST /rest/recipes/:id/share` is still a 401 — only the declared method and
+path are open. The startup banner marks every open route with `← open` and counts
+them on the `auth` line, so an unintended one shows up on every boot rather than
+only in the diff that introduced it.
+
+**`/share` has to be open, and the reason generalises.** A link preview is built
+by the *receiving* app — iMessage, WhatsApp, Slack fetch the URL themselves — and
+so does the browser of whoever taps it. None can hold a Supabase session, so
+gating it returns 401 to every one of them and the preview card and page both
+vanish. That is precisely what happened: the route landed 2026-08-04, the gate
+landed 2026-08-06 and swept it up, and nothing failed — the client's own notes
+still described previews as working. **Before gating or ungating anything, ask
+who the caller is**; for `/share` it is not the app. It is safe to open because
+it serves only a recipe's name, gloss and image, keyed by an id the sharer chose
+to hand out, with no LLM call and so no spend behind it.
+
+**`/billing/revenuecat` is open for the same reason and is not the same case.**
+RevenueCat is a server-to-server caller with no Supabase session, so it needs the
+seam — but unlike `/share` it **writes**, and an unprotected entitlement webhook
+lets anyone grant themselves a subscription. It is protected by a shared secret
+(`REVENUECAT_WEBHOOK_SECRET`), compared in constant time before the body is even
+read. **RevenueCat does not HMAC-sign its webhooks the way Stripe does** — it
+echoes back whatever `Authorization` value you configure in its dashboard, so
+that secret is the entire protection and it must match in two places with
+nothing to report drift but every event failing. The rule: the seam makes a route
+*reachable*, the handler makes it *safe*.
+
+### Subscription entitlement
+
+`requireEntitlement` (`middleware/require-entitlement.ts`) runs after
+`requireSupabaseUser` on every mount except `billing`, and answers **402**, not
+401 — "you are who you say you are, and this needs a subscription", which is what
+tells the client to show the paywall rather than the login screen.
+
+**It is opt-IN via `REQUIRE_ENTITLEMENT=true`, inverting `ALLOW_UNAUTHENTICATED`
+deliberately.** Enforcement cannot be the default yet: the client's purchase call
+is still commented out, so nobody can obtain an entitlement and enabling this
+would take the product offline rather than protect the spend. It is a rollout
+switch for a feature that is not live — **flip it on in the same release that
+ships purchasing, then delete the flag.** The startup banner shouts while it is
+off, because "off" is both correct today and silently expensive the day it stops
+being.
+
+State lives in `profile_entitlements`, written **only** by the webhook (RLS has a
+select policy and deliberately no insert/update/delete, so every client role is
+denied and the service role bypasses). It is not a column on `profiles` because
+that table is client-writable.
+
+Three things in there are easy to get backwards, and all three are load-bearing:
+
+- **Activity is derived, never stored** — `revoked_at is null AND (expires_at is
+  null OR expires_at > now())`. A missed `EXPIRATION` webhook is the normal
+  failure, since it is the one event no user action triggers; deriving means that
+  costs a late revocation instead of an indefinite free ride. The rule exists
+  twice, as `entitlement_is_active()` in SQL and `isEntitlementActive` in TS —
+  **they must agree**, and a divergence lets the wrong people in silently.
+- **`CANCELLATION` does not revoke.** On both stores it turns off auto-renew and
+  the subscription runs to its paid-for expiry. Revoking there cuts off someone
+  who has paid for the rest of the month. Only `REFUND` and `SUBSCRIPTION_PAUSED`
+  revoke.
+- **The webhook is idempotent *and* order-independent.** RevenueCat retries on any
+  non-2xx and does not promise ordered delivery, so `applyEntitlementEvent`
+  ignores an event id it has already applied and any event older than the one
+  already stored — without which a late `EXPIRATION` would revoke a subscription
+  that has since renewed. Status codes are control flow: a database failure
+  returns **500 on purpose** so the event is redelivered, because a 200 that
+  stored nothing loses a purchase permanently.
+
+`TRANSFER` is received and **deliberately not applied** — the top-level
+`app_user_id` does not reliably say which side of the transfer the event is
+about, so the generic path would be a coin flip between revoking a payer and
+granting a non-payer. It is logged at error level and acknowledged.
+
+**Known gap: the purchase-to-webhook window.** A user is entitled on-device
+seconds before the webhook arrives, so a fresh purchase can see one 402. The fix
+is a fallback read of RevenueCat's REST API on a miss, bounded to users with no
+active row; not built, and recorded in `TODOS.md`.
 
 This lives in the app, not on the Function URL, and that is forced rather than
 chosen: a Function URL is `AuthType: NONE` or `AWS_IAM`, and `AWS_IAM` requires

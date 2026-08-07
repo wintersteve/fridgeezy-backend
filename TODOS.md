@@ -13,6 +13,12 @@ These are two independent migrations bundled into one effort:
 Do them as separate, independently-shippable phases — don't couple a model swap
 to a hosting swap in the same PR, or a regression becomes impossible to bisect.
 
+**This file is broader than its title.** It is the repo's TODO list, so it also
+carries the food-only scope decision, the auth gaps, and — added 2026-08-06 — an
+**MVP readiness** section. Read that one first if the question is "can this
+ship": the migration below is the most thoroughly tracked work here and the
+least load-bearing on a release, which is a trap this file set for itself.
+
 ## Status as of 2026-08-06 — read this before the phases
 
 The two halves are in very different places, and the file's structure hides it:
@@ -434,7 +440,9 @@ S3 at all:
       So the URL stays `AuthType: NONE` and the gate lives in the app:
       `requireSupabaseUser` rejects any `/rest` request without a valid Supabase
       access token, applied inside the `MOUNTS` loop so a new module cannot be
-      mounted unauthenticated by accident. `/health` stays open.
+      mounted unauthenticated by accident. `/health` stays open — and so does the
+      share page, which this item originally swept up by mistake; see the
+      regression note below.
 
       Verified on the deployed function: `/rest/health` 200 without a token,
       `/rest/suggestions/generate` and `/rest/chat` **401** without one and with
@@ -451,7 +459,51 @@ S3 at all:
       Still open, deliberately: **no per-user rate limiting.** Authentication
       bounds *who* can spend, not *how much* — anyone who can sign up can still
       loop the feed. `reserved_concurrent_executions` (dev 5 / prod 50) remains
-      the only ceiling on the bill.
+      the only ceiling on the bill. **This compounds with the monetization gap**
+      recorded under MVP readiness below — sign-up is free and unlimited
+      generation is free, so the two are one exposure rather than two items.
+
+- [x] **The gate broke recipe sharing, and it was fixed 2026-08-06** — the same
+      day it landed, but only because someone went looking. Nothing failed.
+
+      `GET /rest/recipes/:recipeId/share` serves an Open Graph page so a shared
+      link renders a card with the dish's image, name and gloss. It was added
+      **2026-08-04**; the gate landed **2026-08-06** and applied
+      `requireSupabaseUser` to every mount, this one included. **A link preview is
+      fetched by the receiving application** — iMessage, WhatsApp, Slack — and by
+      the browser of whoever taps the link, none of which can hold a Supabase
+      session. So every share returned `401` with no preview and no page.
+
+      It was invisible from both sides: `ALLOW_UNAUTHENTICATED` is unset locally,
+      so it broke in development too, and the client repo's TODOS.md still
+      described previews as working — written two days before the gate existed.
+      **A doc written before a change is not evidence about it.**
+
+      The fix keeps the property this item was built for. Opening a route is a
+      **positive declaration**, never an omission: the module exports a second
+      router (`RecipesPublicRoutes`) carrying only that route, and names it as
+      `publicRouter` on its `MOUNTS` entry, which mounts it at the same prefix
+      *ahead of* the gated one. Anything it does not match falls through to the
+      gate, so `POST` to the same path is still `401` — only the declared method
+      and path are open. A module that omits `publicRouter` — every one but
+      `recipes` — is gated in full, exactly as before.
+
+      Verified against the built artifact with local Supabase: a real recipe id
+      returns `200 text/html` with the full OG set, image, `<title>` and the
+      `fridgeezy://` deep link, **with no token**; all **10** other `/rest` routes
+      still `401`; `POST` to the share path `401`; `/health` `200`.
+
+      **The banner now names them.** Open routes print `← open` and are counted on
+      the `auth` line (`2 open routes`). This class of bug is silent by
+      construction — nothing throws, nothing logs, the endpoint simply answers the
+      wrong thing to a caller nobody tests as — so the check has to be something
+      you see on every boot rather than something you remember to run.
+
+      **Before gating or ungating anything, ask who the caller is.** For `/share`
+      it is not the app. Two more routes will want this same seam and for the same
+      reason: `/.well-known/apple-app-site-association` and
+      `/.well-known/assetlinks.json`, needed by the deferred universal-links work
+      in the client repo's TODOS.md, are fetched by Apple and Google.
 
 ---
 
@@ -732,10 +784,177 @@ revised recently and under-declaring is enforced after the fact.
 
 ---
 
+# MVP readiness — audited 2026-08-06
+
+**Why this section exists.** Everything above is the Lambda/Bedrock migration,
+and it is tracked in unusual depth — which is exactly what made it possible to
+believe the project was further along than it is. Hosting being done and
+inference being one env var away says nothing about whether the product can
+ship. This section is the gap between "the infrastructure works" and "this is an
+MVP", found by walking the route surface and both repos rather than by reading
+the plan.
+
+Most of it lives in the **client** repo, which has its own TODOS.md. It is
+recorded here anyway, because these are the items that decide whether anything
+in this repo is worth deploying, and the client's list is organised by round of
+UI work rather than by release readiness.
+
+## 1. Monetization — backend built 2026-08-06, client half outstanding
+
+**The biggest gap on this list, and the one nothing else substitutes for.**
+Status: the server can enforce a subscription and record one; the client still
+cannot sell one, so the gate ships disabled. Nothing is live until both halves
+land in the same release.
+
+The RevenueCat SDK is fully wired in the client — offerings, customer info, a
+purchase mutation, an app-user-id hook. The paywall screen renders real prices
+off the live offering and its button says **"Start free trial"**. The purchase
+call is commented out (`subscription-screen.tsx:49-52`): `handleContinue` sets
+`onboarding_completed` and navigates into the app. The enforcement half is
+commented out too — `app/(tabs)/_layout.tsx:140` and the "Redirect if not
+subscribed" block at `:152-158`.
+
+So the paywall is a slide people tap through. Two separate consequences, worth
+not collapsing into one:
+
+- **There is no revenue path.** Every LLM call the app makes is a cost with no
+  offsetting charge, on an unlimited free tier nobody chose.
+- **A paywall whose button does not purchase is an App Store review problem**,
+  independent of the revenue question. It is a purchase flow that does not
+  purchase.
+
+**The backend has no entitlement concept at all.** Grepping `apps/api` and
+`libs` for subscription/entitlement/quota returns nothing but unrelated prose.
+`requireSupabaseUser` establishes *that* a caller is signed in and never *what
+they are entitled to* — which is the right split, but it means the server cannot
+enforce a plan even once the client sells one. **Whatever is decided about the
+paywall, the check has to exist server-side**: a client-side-only gate is
+bypassed by anyone willing to call the Function URL directly, and the URL is
+`AuthType: NONE` by design (Phase 3).
+
+- [x] **Decided 2026-08-06: ship paid.** Least new work of the options — the SDK,
+      the screen and the products already exist — and entitlement then doubles as
+      the spend ceiling, which is why rate limiting stays deferred below.
+- [x] **Backend entitlement, built 2026-08-06.** Everything the server needs is
+      in place and verified end to end against local Supabase:
+
+      - `profile_entitlements` (`20260806000004_profile_entitlements.sql`) —
+        webhook-written, RLS select-only so no client role can write it, keyed on
+        `auth.users.id` because the client configures RevenueCat with
+        `appUserID: user.data.id`. **Keep those in step**; changing the client's
+        appUserID orphans every future event.
+      - `POST /rest/billing/revenuecat` — open by necessity (RevenueCat holds no
+        session) and protected by a constant-time shared-secret check, because
+        **RevenueCat does not HMAC-sign its webhooks** the way Stripe does. It
+        writes, so unlike `/share` being reachable is not the same as being safe.
+      - `requireEntitlement` — after `requireSupabaseUser` on every mount but
+        `billing`, answering **402** so the client can tell "show the paywall"
+        from "sign in again".
+
+      Verified: 402 with no entitlement → passes after `INITIAL_PURCHASE` → 402
+      after `REFUND`; a replayed event and an out-of-order older `EXPIRATION` are
+      both ignored; `CANCELLATION` keeps access to expiry. Those last three are
+      the ones that are easy to get wrong and expensive when wrong.
+
+      **Activity is derived, not stored**, and the rule exists twice —
+      `entitlement_is_active()` in SQL, `isEntitlementActive` in TS. They must
+      agree; a divergence lets the wrong people in with nothing to flag it.
+- [x] **Client purchase + gate wired 2026-08-07** (client repo, item 8 in its
+      TODOS.md). Purchase before `onboarding_completed` — the other order loops a
+      cancelled purchase between the tabs and the paywall; user-cancellation
+      treated as normal rather than an error; **Restore Purchases added**, which
+      App Store review requires and which doubles as the manual recovery path for
+      a webhook that never arrived; both mutations invalidate `["REVENUECAT"]`;
+      the gate reads `entitlements.active` so it matches what this repo stores;
+      store-localized prices replace hardcoded dollar literals in two places; and
+      a 402 now maps to a `payment_required` SSE kind that is shown to the user
+      but deliberately **not** reported to Sentry.
+      **Still needs a device:** a real sandbox purchase and restore. Nothing
+      below a running app tests this.
+- [ ] **Turn the gate on, then delete the flag.** `REQUIRE_ENTITLEMENT` defaults
+      to off and must, because nobody can buy anything yet — enabling it today
+      takes the product offline rather than protecting the spend. Flip it in the
+      same release that ships purchasing, then make the gate unconditional and
+      remove the flag, so it cannot end up off in production quietly.
+- [ ] **Configure the webhook.** Point RevenueCat at
+      `<function-url>/rest/billing/revenuecat`, set the same `Authorization`
+      value there and in `apps/api/.env`, then `put-secrets.sh` (already carries
+      `REVENUECAT_WEBHOOK_SECRET`) plus a cold start — no `terraform apply`,
+      since the Lambda is given a prefix rather than values. **The secret has to
+      match in two places and nothing reports drift** except every event failing.
+- [ ] **Close the purchase-to-webhook window**, or decide to live with it. A user
+      is entitled on-device seconds before the webhook lands, so a fresh purchase
+      can see one 402. Fix is a fallback read of RevenueCat's REST API on a miss,
+      bounded to users with no active row so it costs nothing on the common path.
+      Needs a sixth secret and is unmeasurable until real purchases exist.
+- [ ] **Handle `TRANSFER`.** Received, logged at error level, and deliberately
+      not applied: the top-level `app_user_id` does not reliably identify which
+      side of the transfer the event is about, so the generic path is a coin flip
+      between revoking a payer and granting a non-payer. Happens when someone
+      restores purchases onto a second account — rare, not hypothetical. Do it
+      from a real payload rather than from the docs.
+- [ ] **Android is not configured at all.** `REVENUECAT_API_KEY` has an empty
+      string for Android (`core/revenuecat/constants`), so none of this works
+      there. Fine if iOS ships first — but it is a silent no-op, not an error.
+
+## 2. No per-user rate limiting
+
+Already recorded under Phase 3 and repeated here because it belongs to this
+question rather than to the migration: authentication bounds *who* can spend,
+not *how much*. With item 1 unfinished, sign-up is free and generation is
+unlimited, so these two are **one exposure, not two items** — and the only
+ceiling on the bill is `reserved_concurrent_executions` (dev 5 / prod 50), which
+caps concurrency rather than volume.
+
+## 3. Auth — email confirmation and social sign-in
+
+See the section below, unchanged and still unstarted. Both are MVP items rather
+than nice-to-haves: an unverified email means password reset and account
+recovery rest on nothing, and Apple sign-in becomes mandatory the moment any
+other social provider ships on iOS.
+
+## 4. Smaller, but each one is user-visible
+
+- [ ] **Subscription prices are hardcoded display strings.**
+      `use-subscription-info.ts:47-49` returns `"$4.99/month"` / `"$29.99/year"`
+      rather than reading the product. Wrong in every non-US storefront, and it
+      will silently disagree with what the store actually charges.
+- [ ] **No crash reporting in production.** `EXPO_PUBLIC_SENTRY_DSN` is unset, so
+      `initReporting()` no-ops. Carried on the client's list since the last
+      round; it also needs a native rebuild for `@sentry/react-native`, so it is
+      not a same-day fix on release day.
+- [ ] **"Recommend" in Settings does nothing** — `settings-screen.tsx:68` has an
+      empty `onPress`. Either wire it to the share sheet or remove the row.
+- [ ] **`pantry_items` still exists in the live DB** despite
+      `20260727000007_drop_pantry_items` being recorded as applied, so the type
+      generator keeps emitting a table that should be gone. Carried on the
+      client's list; it is a schema-drift symptom worth understanding rather than
+      a cosmetic annoyance — a migration recorded as applied that did not apply
+      means the ledger and the database disagree.
+
+## What is deliberately NOT on this list
+
+So these do not get relitigated as MVP blockers:
+
+- **Bedrock inference.** Built, parked, blocked on an AWS console entitlement,
+  zero traffic. `LLM_PROVIDER` defaults to `openai` and the product ships on
+  OpenAI today.
+- **Phase 4 embeddings.** Recommended cut. Note the tension already stated
+  there: cutting it means `OPENAI_API_KEY` stays a hard boot requirement, so the
+  "one credential, one bill" benefit is unreachable. Pick one position.
+- **Universal links.** Blocked on buying a domain, fully specified in the client
+  repo. Sharing works without it — the link opens a browser and the page offers
+  a button.
+- **The drinks free-text empty state.** Unreachable by design today; the
+  database protection is the delivered value.
+
+---
+
 # Auth — unrelated to the migration above
 
 Kept in this file because it is the repo's TODO list, not because it belongs to
-the Lambda/Bedrock work. Nothing here is started.
+the Lambda/Bedrock work. Nothing here is started, and all of it is referenced by
+**MVP readiness item 3** above.
 
 **First, the thing that makes both items confusing:** `supabase/config.toml`
 `[auth]` configures the **local** stack only. The hosted project's auth is

@@ -506,6 +506,51 @@ export type Database = {
           },
         ]
       }
+      profile_entitlements: {
+        Row: {
+          created_at: string
+          entitlement_id: string | null
+          environment: string | null
+          expires_at: string | null
+          id: string
+          last_event_at: string | null
+          last_event_id: string | null
+          product_id: string | null
+          revoked_at: string | null
+          store: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entitlement_id?: string | null
+          environment?: string | null
+          expires_at?: string | null
+          id?: string
+          last_event_at?: string | null
+          last_event_id?: string | null
+          product_id?: string | null
+          revoked_at?: string | null
+          store?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          entitlement_id?: string | null
+          environment?: string | null
+          expires_at?: string | null
+          id?: string
+          last_event_at?: string | null
+          last_event_id?: string | null
+          product_id?: string | null
+          revoked_at?: string | null
+          store?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profile_recipe_interactions: {
         Row: {
           created_at: string
@@ -1284,12 +1329,14 @@ export type Database = {
         Args: { difficulty: string; pref: string }
         Returns: number
       }
+      entitlement_is_active: { Args: { p_user_id: string }; Returns: boolean }
       find_recipes: {
         Args: {
           blacklist?: string[]
           ingredients?: string[]
           limit_count?: number
           p_difficulty?: string
+          p_offset?: number
           tags?: string[]
         }
         Returns: Database["public"]["CompositeTypes"]["find_recipes_result"][]

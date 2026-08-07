@@ -29,21 +29,6 @@ export interface PersistOrReuseOptions {
      */
     batch?: SuggestionBatch;
     suggestionsRepo?: SuggestionsRepository;
-    /**
-     * Fired the instant the authenticity/naming review settles — before any
-     * dedup, embedding or persistence — with the dish under its FINAL name, or
-     * `null` when the review rejected it.
-     *
-     * This exists so a caller can put a card on screen that will never have to
-     * be renamed or withdrawn for authenticity. Both of those were visible: the
-     * provisional card was emitted straight off the model's JSONL line, so an
-     * unauthentic dish appeared and vanished, and roughly a third of cards
-     * visibly renamed when the review corrected the generator's spelling.
-     *
-     * Guaranteed to fire exactly once per call, including when the pipeline
-     * throws — a caller awaiting it would otherwise stall the whole batch.
-     */
-    onReviewed?: (dish: GenerateSuggestionResponseDto | null) => void;
 }
 
 /**
@@ -69,7 +54,7 @@ export interface PersistOrReuseOptions {
  * exact name match, for free, before a vector is ever compared.
  *
  * The cost of the reorder is that the review no longer overlaps the dedup
- * searches — roughly +0.5s, entirely behind the provisional card the client is
+ * searches — roughly +0.5s, entirely behind the placeholder the client is
  * already showing. It buys back more than it spends:
  *
  * - An unauthentic dish now costs ONE call, not a call plus an embedding plus
@@ -103,18 +88,9 @@ export async function persistOrReuseSuggestion(
     request: Pick<GenerateSuggestionRequestDto, "cuisine">,
     options: PersistOrReuseOptions = {}
 ): Promise<SuggestionOutcome> {
-    const { batch, suggestionsRepo = new SuggestionsRepository(), onReviewed } =
-        options;
+    const { batch, suggestionsRepo = new SuggestionsRepository() } = options;
     const slot = batch?.open();
     let settled = false;
-    let reviewReported = false;
-
-    /** Fires `onReviewed` at most once; the `finally` below covers the throw. */
-    const reportReview = (dish: GenerateSuggestionResponseDto | null) => {
-        if (reviewReported) return;
-        reviewReported = true;
-        onReviewed?.(dish);
-    };
 
     /** Publish the outcome for later siblings, and hand it to our caller. */
     const settle = (outcome: SuggestionOutcome): SuggestionOutcome => {
@@ -130,8 +106,6 @@ export async function persistOrReuseSuggestion(
         const review = await verifySuggestionAuthenticity(suggestion);
 
         if (!review.authentic) {
-            reportReview(null);
-
             if (review.status === "not_food") {
                 // Not a quality failure — the request asked for something this
                 // catalog does not hold. Reported separately so the caller can
@@ -155,11 +129,6 @@ export async function persistOrReuseSuggestion(
         const dish = review.name
             ? { ...suggestion, name: review.name, name_alt: review.nameAlt }
             : suggestion;
-
-        // The name is final from here on — everything below resolves ids and
-        // decides whether this row is new or reused, none of which changes what
-        // the card says. This is the earliest point a card can safely be shown.
-        reportReview(dish);
 
         // Embed the dish SIGNATURE (canonical name + tags + ingredients) once,
         // under the FINAL name: both halves of the catalog and every sibling are
@@ -336,10 +305,7 @@ export async function persistOrReuseSuggestion(
         });
     } finally {
         // A throw must still release any sibling waiting on this slot, or the
-        // batch stalls until the request times out. Same for a caller awaiting
-        // the review — an unresolved promise there holds up the whole batch,
-        // since cards are emitted in generation order.
+        // batch stalls until the request times out.
         if (!settled) slot?.abandon();
-        reportReview(null);
     }
 }

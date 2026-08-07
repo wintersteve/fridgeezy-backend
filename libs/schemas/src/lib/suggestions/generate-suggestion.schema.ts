@@ -92,30 +92,30 @@ export const EnrichedSuggestionResponseSchema = z.object({
 });
 
 /**
- * The card as the model wrote it, emitted BEFORE any database work.
+ * A dish has been generated and is being checked — hold a slot for it.
  *
- * `/suggestions/generate` sends each suggestion twice: this frame the moment the
- * model finishes writing it, then {@link StreamedSuggestionSchema} once it is
- * persisted. Everything between the two — embedding, dedup searches,
- * ingredient/tag matching, the insert — takes several seconds and changes
- * nothing visible except resolving ids, so holding the card back for it was
- * most of the wait.
+ * `/suggestions/generate` sends each suggestion twice: this frame the instant
+ * the model finishes writing its line, then {@link StreamedSuggestionSchema}
+ * once the dish has passed the notability gate and been persisted.
  *
- * It has no `id` because the row does not exist yet, and its ingredient/tag ids
- * are synthesised with a `temp:` prefix. Never treat those as real.
+ * It carries NOTHING about the dish, deliberately, and that is the whole point.
+ * Because it says nothing, nothing it says can turn out to be wrong — the
+ * client draws one placeholder per dish genuinely in flight, and a dish that is
+ * renamed, deduped away or rejected simply takes its placeholder with it.
+ *
+ * It replaced a frame that carried the full card off the model's raw output.
+ * That one was faster to something readable and wrong twice over: a third to a
+ * half of dishes are renamed by the review, so cards visibly retitled
+ * themselves; and dedup could resolve a dish to one already on screen, so cards
+ * appeared and then vanished. Showing less, sooner, beat showing more, early.
  */
-export const ProvisionalSuggestionSchema = z.object({
-    /** Matches the `tempId` on the enriched frame for the same dish. */
+export const PendingSuggestionSchema = z.object({
+    /** Matches the `tempId` on the enriched (or withdrawn) frame for this dish. */
     tempId: z.string(),
-    name: z.string(),
-    nameEn: z.string().nullable().optional(),
-    description: z.string().trim(),
-    difficulty: z.enum(["easy", "medium", "hard"]),
-    ingredients: z.array(SuggestionIngredientSchema),
-    tags: z.array(SuggestionTagSchema),
-    /** @see GenerateSuggestionResponseSchema.adaptedFor */
-    adaptedFor: z.array(z.string()).optional(),
+    pending: z.literal(true),
 });
+
+export type PendingSuggestionDto = z.infer<typeof PendingSuggestionSchema>;
 
 /**
  * The persisted card, carrying the `tempId` of the provisional frame it
@@ -138,13 +138,12 @@ export const StreamedSuggestionSchema = EnrichedSuggestionResponseSchema.extend(
 });
 
 /**
- * Withdraws a provisional card that will never be enriched.
+ * Releases a pending slot that will never become a card.
  *
- * A dish can disappear after its provisional frame has already been sent: dedup
- * may resolve it to a recipe the user already has, or the authenticity gate may
- * reject it. Before provisional frames existed those outcomes were simply not
- * emitted and nothing was ever shown. Now the card is already on screen, so
- * silence would leave a dish the user can look at but never open.
+ * A dish can disappear after {@link PendingSuggestionSchema} has reserved its
+ * place: the notability gate may reject it, or dedup may resolve it to
+ * something the user already has. The placeholder is on screen by then, so
+ * silence would leave it spinning forever.
  */
 export const WithdrawnSuggestionSchema = z.object({
     tempId: z.string(),
@@ -184,8 +183,6 @@ export const RejectedSuggestionRequestSchema = z.object({
 export type RejectedSuggestionRequestDto = z.infer<
     typeof RejectedSuggestionRequestSchema
 >;
-
-export type ProvisionalSuggestionDto = z.infer<typeof ProvisionalSuggestionSchema>;
 
 export type StreamedSuggestionDto = z.infer<typeof StreamedSuggestionSchema>;
 

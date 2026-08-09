@@ -23,6 +23,12 @@ export const RecipeSuggestionInputSchema = z.object({
         .describe(
             "The search query - can be a recipe name, dish name, ingredient, sauce type, cuisine, or any food-related concept. Examples: 'steak sauce', 'pad thai', 'Italian pasta', 'vegan desserts'"
         ),
+    dish: z
+        .string()
+        .optional()
+        .describe(
+            "The plain name of the specific dish the user asked for, set ONLY when they named an identifiable dish: 'a thai green curry recipe please' -> 'Thai Green Curry'; 'how do I make pad thai?' -> 'Pad Thai'. OMIT it when they described what they want instead of naming it — a category, cuisine, mood or ingredient question ('an apple dessert', 'something Italian', 'what can I make with chicken'). Setting it restricts existing-recipe matches to exactly that dish, so a similar-but-different dish (a red curry for a green curry request) cannot be returned in its place; on a vague request it would wrongly block every good answer."
+        ),
     matchThreshold: z
         .number()
         .min(0)

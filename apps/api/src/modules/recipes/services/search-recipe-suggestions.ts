@@ -33,6 +33,14 @@ import { searchRecipes } from "./search-recipes";
  * `persistOrReuseSuggestion` then resolves back to the existing recipe. Exact
  * names don't depend on this number at all (stage 1a), and ingredient questions
  * are answered by stage 1c rather than by similarity.
+ *
+ * No value of this number can protect a NAMED dish, though: a query naming
+ * green curry scores higher against Thai Red Curry than a question about palak
+ * paneer scores against Palak Paneer itself, so any threshold that accepts the
+ * questions above also hands back the wrong sibling for a named dish. That case
+ * is guarded by `dish` (see `RecipeSuggestionInput`), which requires a
+ * canonical name match — this threshold only arbitrates concept queries, where
+ * any relevant dish is a fair answer.
  */
 const DEFAULT_MATCH_THRESHOLD = 0.5;
 
@@ -78,6 +86,30 @@ export type ComponentTag = (typeof COMPONENT_TAGS)[number];
 
 export interface RecipeSuggestionInput {
     query: string;
+    /**
+     * The specific dish the user actually named, when they named one ("Thai
+     * Green Curry" for "can I get a thai green curry recipe?"). Absent for
+     * concept, cuisine, mood or ingredient queries ("show me an apple
+     * dessert"), where any relevant catalogue row is a fair answer.
+     *
+     * This is what keeps the catalogue stages honest about a named dish.
+     * Signature similarity cannot tell "the dish you asked for, phrased
+     * differently" from "that dish's nearest sibling": a green-curry query
+     * scores well above DEFAULT_MATCH_THRESHOLD against Thai Red Curry,
+     * because the two share a cuisine and most of a pantry — and with chat's
+     * maxResults of 1 the sibling doesn't merely outrank the answer, it IS
+     * the answer, and generation is suppressed. So when `dish` is present, a
+     * similarity or ingredient hit only counts if its name (either language)
+     * canonically matches the request; anything else falls through to stage
+     * 3, whose dedup resolves a same-dish-under-another-name back to the
+     * existing row with ingredient-level evidence (`findKnownDish` /
+     * `findRecipeForDish`). The failure directions are the asymmetry
+     * DEFAULT_MATCH_THRESHOLD's note describes: a false mismatch here costs
+     * one generation that dedup then folds back into the existing recipe,
+     * while a false match returns the WRONG recipe as if it were what the
+     * user asked for.
+     */
+    dish?: string;
     matchThreshold?: number;
     maxResults?: number;
     /**
@@ -203,6 +235,7 @@ export async function searchRecipeSuggestions(
 ): Promise<RecipeSuggestionResult> {
     const {
         query,
+        dish,
         matchThreshold = DEFAULT_MATCH_THRESHOLD,
         maxResults = 5,
         ingredients,
@@ -217,6 +250,22 @@ export async function searchRecipeSuggestions(
     const excluded = new Set((exclude ?? []).map(canonicalizeName));
     const isExcluded = (...names: Array<string | null | undefined>) =>
         names.some((name) => !!name && excluded.has(canonicalizeName(name)));
+
+    // The names that count as "the dish the user asked for": the dish they
+    // named plus the raw query (stage 1a already treats the query as a name).
+    // Empty when no dish was named — then any relevant row answers the request
+    // and the gate below stays open.
+    const requestedNames = new Set(
+        (dish ? [dish, query] : [])
+            .map(canonicalizeName)
+            .filter((name): name is string => !!name)
+    );
+    const isRequestedDish = (...names: Array<string | null | undefined>) =>
+        requestedNames.size === 0 ||
+        names.some((name) => {
+            const canonical = canonicalizeName(name);
+            return !!canonical && requestedNames.has(canonical);
+        });
 
     // No component asked for means no component filter — every row qualifies.
     const wanted = component ? canonicalizeName(component) : null;
@@ -234,15 +283,19 @@ export async function searchRecipeSuggestions(
     // (English name + tags + ingredients), which reads nothing like a short
     // foreign proper noun — "Toum" scores 0.239 against its own recipe, "Palak
     // Paneer" 0.524. Vector search cannot be the only way to find a recipe the
-    // user named outright, so ask for it by name first.
-    const namedRecipe = await new RecipesRepository().findBaseRecipe([query]);
+    // user named outright, so ask for it by name first — under the dish name as
+    // well as the raw query, since "a thai green curry recipe please" matches
+    // nothing verbatim while the dish it names is in the catalogue.
+    const namedRecipe = await new RecipesRepository().findBaseRecipe(
+        [query, dish].filter((name): name is string => !!name && !isExcluded(name))
+    );
 
     if (!namedRecipe.success) {
         console.error(
             `[SearchRecipeSuggestions] Name lookup failed for "${query}":`,
             namedRecipe.error.message
         );
-    } else if (namedRecipe.value && !isExcluded(query)) {
+    } else if (namedRecipe.value) {
         const summary = await fetchRecipeSummary(namedRecipe.value.id);
 
         if (
@@ -279,10 +332,16 @@ export async function searchRecipeSuggestions(
     vectorResults.forEach((result, i) => {
         const recipeSummary = summaries[i];
 
+        // `isRequestedDish` is what keeps a similarity hit from impersonating
+        // a dish the user named: without it, "thai green curry" clears the
+        // threshold against Thai Red Curry and the wrong sibling is returned
+        // as the answer. A rejected hit falls through to generation, whose
+        // dedup folds a genuinely-same dish back into this very row.
         if (
             recipeSummary &&
             !isExcluded(recipeSummary.name) &&
-            isWantedComponent(recipeSummary.tags)
+            isWantedComponent(recipeSummary.tags) &&
+            isRequestedDish(recipeSummary.name, recipeSummary.nameEn)
         ) {
             suggestions.push({
                 id: recipeSummary.id,
@@ -329,6 +388,9 @@ export async function searchRecipeSuggestions(
             if (suggestions.some((item) => item.id === row.id)) continue;
             if (isExcluded(row.name)) continue;
             if (!isWantedComponent(row.tags)) continue;
+            // Same guard as stage 1b: sharing the requested ingredients does
+            // not make a row the dish the user named.
+            if (!isRequestedDish(row.name)) continue;
 
             suggestions.push({
                 id: row.id,
@@ -366,9 +428,15 @@ export async function searchRecipeSuggestions(
     // outlive its promotion (nothing deletes it if the user reached the recipe
     // another way), and surfacing both would show the same dish twice — once as
     // a recipe and once as a card offering to generate it again.
-    const existingSuggestion = isExcluded(query)
+    let existingSuggestion = isExcluded(query)
         ? null
         : await findSuggestionByName(query);
+
+    // The raw query rarely IS a canonical name ("a thai green curry recipe
+    // please"); when the user named a dish, ask for that name as well.
+    if (!existingSuggestion && dish && !isExcluded(dish)) {
+        existingSuggestion = await findSuggestionByName(dish);
+    }
     const alreadyListed =
         !!existingSuggestion &&
         (isExcluded(existingSuggestion.name, existingSuggestion.nameEn) ||

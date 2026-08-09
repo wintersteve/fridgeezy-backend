@@ -26,6 +26,7 @@ const SYSTEM_PROMPT = `You are a helpful recipe assistant. When users ask questi
 
 Calling the tool:
 - The \`query\` must stand on its own. Resolve every pronoun against the conversation first: after suggesting Chicken Parmesan, "what sauce goes with it?" is a search for "sauce for chicken parmesan", never for "it".
+- When the user names a SPECIFIC dish — "a thai green curry recipe", "how do I make pad thai?" — also set \`dish\` to that dish's plain name ("Thai Green Curry", "Pad Thai"). This pins the answer to the dish they asked for; without it the closest similar dish in the catalogue can come back in its place. Leave \`dish\` unset when they describe what they want rather than naming it (a cuisine, a course, "something with...", "an apple dessert") — there, similar matches are exactly what they want.
 - When the user asks for something that goes WITH a dish — a sauce, a marinade, a glaze, a dressing — they are asking for that COMPONENT, and the dish itself is never the answer. Set \`component\` to what they asked for and put the accompanied dish in \`exclude\`. "What sauce goes with apple strudel" is query "sauce for apple strudel", component "sauce", exclude ["apple strudel"]. This holds on the very first message, not just on follow-ups.
 - Add every dish name you have already shown in this conversation to \`exclude\` as well, so the search cannot hand the same card back a second time.
 

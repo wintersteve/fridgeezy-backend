@@ -42,7 +42,25 @@ const ONLY = (process.env.DIET_ONLY ?? "")
     .map((name) => name.trim().toLowerCase())
     .filter(Boolean);
 const BATCH = 25;
-const MODEL = process.env.DIET_MODEL ?? "gpt-4o-mini";
+/**
+ * `gpt-4o`, not `gpt-4o-mini`, and the difference is a safety one.
+ *
+ * Measured 2026-08-07 over the composite-condiment set — the category where an
+ * allergen hides because the name does not list what is in the thing. On mini,
+ * **"Red Curry Paste" came back with no properties even with an explicit worked
+ * example telling it shrimp paste is standard**; on 4o it returns "shellfish".
+ * Mini was also noisier in the other direction, inventing soy and gluten in
+ * sweet chili sauce and gluten in plain miso.
+ *
+ * This mirrors the call already made on `verify-suggestion-authenticity`, which
+ * moved mini → 4o because naming was a judgement at the margin that mini was
+ * guessing at rather than deciding. Same shape of problem, higher stakes: this
+ * one is what a nut-allergy filter is derived from.
+ *
+ * The bill does not argue back — the whole 357-row catalogue is a few batches,
+ * cents either way, and it is paid once per ingredient rather than per request.
+ */
+const MODEL = process.env.DIET_MODEL ?? "gpt-4o";
 
 /**
  * The complete property vocabulary. Mirrors the `dietary_property` enum — the
@@ -88,7 +106,11 @@ ingredients have none or one. An empty list is a normal, expected answer.
 - "egg": egg-derived (egg, egg white, mayonnaise)
 - "honey": honey and other bee products
 - "slaughter_derived": animal-derived but not flesh, dairy, egg or honey —
-  gelatin, lard, tallow, suet, rennet, carmine, isinglass, bone broth
+  gelatin, lard, tallow, suet, rennet, carmine, isinglass, bone broth.
+  ANY STOCK OR BROTH MADE FROM AN ANIMAL belongs here — chicken stock, chicken
+  broth, beef stock, veal stock, fish stock. They are simmered from bones and
+  meat, so a vegetarian cannot eat them; only stock named as vegetable stock
+  carries nothing. This is the one that decides whether a dish reads as vegan.
 - "gluten": contains wheat, barley or rye (flour, bread, pasta, soy sauce,
   couscous, seitan, beer). Oats only if not specified gluten-free.
 - "nuts": tree nuts OR peanuts, including their butters, flours and oils.
@@ -103,6 +125,15 @@ ingredients have none or one. An empty list is a normal, expected answer.
   or rye, it is made from a cereal and carries "grain" too.
   A flour NOT milled from a cereal is NOT "grain": almond flour is only "nuts",
   chickpea flour only "legume", coconut flour and tapioca neither.
+  A NOODLE not made from a cereal is likewise neither "grain" nor "gluten":
+  glass/cellophane noodles are mung bean or sweet potato starch, shirataki is
+  konjac. Rice noodles and rice flour ARE "grain" but never "gluten" — rice is
+  a cereal, but it is not wheat, barley or rye.
+  This applies ONLY where the noodle is named for its non-wheat base. It does
+  NOT generalise: soba, udon and ramen are wheat products or cut with wheat, and
+  stay "gluten" and "grain". An earlier wording here said buckwheat soba was
+  "grain" only, and the model duly stripped gluten from every soba — a false
+  negative on a coeliac filter, which is the worst outcome this file can produce.
 - "legume": beans, lentils, peas, chickpeas, peanuts, soybeans
 - "refined_sugar": refined sweeteners (white sugar, brown sugar, corn syrup).
   NOT honey, maple syrup or fruit.
@@ -122,6 +153,32 @@ Rules that matter:
   does not tell you.
 - A prepared sauce or paste carries the properties of what it is MADE FROM, not
   of the dish it goes in.
+- A NAMED PREPARED PASTE, SAUCE, ROUX, CURRY BASE OR SPICE BLEND is classified
+  by its STANDARD RECIPE, not by the words in its name. These are the hardest
+  entries here, because the name almost never lists what is in them — which is
+  exactly why it is the category where an allergen hides. Recall how the thing
+  is normally made, then label that:
+    Thai red/green/massaman curry paste  "shellfish" (shrimp paste is standard)
+    laksa paste, rempah, XO sauce        "shellfish"
+    mole (any colour)                    "nuts" and "sesame"
+    romesco, satay/peanut sauce          "nuts"
+    dukkah                               "sesame" and "nuts"
+    za'atar, gomashio                    "sesame"
+    chili bean paste / doubanjiang       "soy", "legume", "gluten", "grain"
+    curry roux, of any cuisine           "gluten", "grain" (flour-and-fat roux)
+    gochujang                            "soy", "legume", "grain"
+    dashi, bonito stock, hondashi        "fish" (katsuobushi IS bonito, a
+                                         finfish — plain "dashi" is never just
+                                         kombu unless it says so)
+    harissa, sambal oelek, tomato paste,
+      tamarind paste, aji/chili pastes   nothing
+  Answer "none" for one of these ONLY when its standard recipe genuinely
+  contains nothing on the list — never because the name is uninformative.
+- THE SAME INGREDIENT UNDER TWO NAMES MUST GET THE SAME ANSWER. "Chili bean
+  paste" and "doubanjiang" are one thing; so are "curry roux" and "Japanese
+  curry roux", "glass noodle" and "cellophane noodle". If the English name and
+  the native one would score differently, you have classified the name rather
+  than the ingredient.
 - Something can have several properties, and missing one is the usual failure:
   soy sauce is "gluten" AND "soy" AND "grain" (it is brewed with wheat); peanut
   is "nuts" AND "legume"; tofu is "soy" AND "legume"; miso is "soy" and

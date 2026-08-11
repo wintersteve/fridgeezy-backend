@@ -403,7 +403,8 @@ consumed via the global scope, not by import — hence the `ignore` there.
 ```
 apps/api          Express API (@fridgeezy/api)
 apps/database     Supabase migrations, seeds, embedding + maintenance scripts
-infra             Terraform for the Lambda deployment
+apps/site         Static marketing/legal pages — exported to S3, see "The public site"
+infra             Terraform for the Lambda deployment + the site's S3/CloudFront
 libs/schemas      Zod v4 request/response schemas — packed for the client
 libs/types        Generated database.types.ts + derived entity types — packed for the client
 libs/domain       Platform-agnostic domain types, repo interfaces, Result/base-error
@@ -508,7 +509,36 @@ that secret is the entire protection and it must match in two places with
 nothing to report drift but every event failing. The rule: the seam makes a route
 *reachable*, the handler makes it *safe*.
 
-### Subscription entitlement
+### The public site (apps/site)
+
+The marketing/legal pages — landing, `/support`, `/privacy`, `/terms`, plus a
+`404.html` — are a **static export**, not API routes. `apps/site` holds pure
+render functions (no Express, no deps); its `build` target
+(`npx jiti src/build.ts`) writes finished HTML plus `assets/` (app screenshots,
+self-hosted fonts, the OG image) into `apps/site/dist`, with subpages as
+`<name>/index.html` so links stay extensionless. They were briefly served by
+the Express app itself; deliberately moved out — marketing pages have no
+business waking a Lambda, and S3+CloudFront serves them for cents.
+
+Hosting is `infra/site.tf`: a **private** S3 bucket read by CloudFront through
+an OAC (the S3 *website* endpoint was rejected — it is http-only), a CloudFront
+function rewriting extensionless paths to their index object, and 403/404
+mapped to `/404.html` (S3 behind an OAC answers 403 for a missing key).
+Deploy is `./infra/deploy-site.sh`: builds with `SITE_ORIGIN` from
+`terraform output site_url` (crawlers need absolute `og:image` URLs — same
+source-of-truth pattern as `env-remote`), syncs assets at a day of
+Cache-Control and pages at five minutes, fixes woff2 content types the aws CLI
+guesses wrong, and invalidates. The share page is unaffected: it is dynamic
+and stays on the Lambda; when the custom domain lands, the plan in `site.tf`'s
+header is one distribution with `/rest/*` as a second behavior.
+
+Every value in `src/chrome.ts` is lifted from the client's theme constants
+(`fridgeezy/src/shared/theme/constants/`) — when those change, this is the
+copy to update. The screenshots are real captures of the dev app on the iPhone
+simulator (light + dark, status bar overridden to 9:41), converted to 780px
+WebP; the per-screen deep links and the AsyncStorage trick for forcing the
+app's dark theme are in the auto-memory's simulator notes. Fonts are
+self-hosted rather than Google-CDN'd on purpose (GDPR — LG München).
 
 `requireEntitlement` (`middleware/require-entitlement.ts`) runs after
 `requireSupabaseUser` on every mount except `billing`, and answers **402**, not

@@ -17,6 +17,15 @@ export interface RecipeSummary {
      */
     image?: string | null;
     difficulty: "easy" | "medium" | "hard";
+    /**
+     * Total minutes, for the time pill beside the difficulty one. Derived by
+     * `persist_recipe` from this recipe's own prep and cook times, so it cannot
+     * disagree with the detail screen.
+     *
+     * Nullable: a row written before `20260812000004` has none, and the client
+     * draws no pill rather than guessing a band.
+     */
+    totalTimeMinutes?: number | null;
     ingredients: Array<{ id: string; name: string }>;
     tags: Array<{ id: string; name: string }>;
 }
@@ -42,6 +51,7 @@ export async function fetchRecipeSummary(
             short_description,
             image,
             difficulty,
+            total_time_minutes,
             recipe_ingredients (
                 ingredient:ingredients (
                     id,
@@ -71,6 +81,7 @@ export async function fetchRecipeSummary(
         shortDescription: recipe.short_description ?? null,
         image: recipe.image ?? null,
         difficulty: recipe.difficulty as "easy" | "medium" | "hard",
+        totalTimeMinutes: recipe.total_time_minutes ?? null,
         ingredients: recipe.recipe_ingredients.map((ri) => ({
             id: ri.ingredient.id,
             name: ri.ingredient.name,

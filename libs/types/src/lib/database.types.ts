@@ -892,6 +892,7 @@ export type Database = {
           identity_cuisine: string | null
           name: string
           name_en: string | null
+          total_time_minutes: number | null
         }
         Insert: {
           canonical_id: string
@@ -903,6 +904,7 @@ export type Database = {
           identity_cuisine?: string | null
           name: string
           name_en?: string | null
+          total_time_minutes?: number | null
         }
         Update: {
           canonical_id?: string
@@ -914,6 +916,7 @@ export type Database = {
           identity_cuisine?: string | null
           name?: string
           name_en?: string | null
+          total_time_minutes?: number | null
         }
         Relationships: []
       }
@@ -1048,6 +1051,7 @@ export type Database = {
           short_description: string | null
           source_suggestion_id: string | null
           tips: string[] | null
+          total_time_minutes: number | null
           updated_at: string
         }
         Insert: {
@@ -1074,6 +1078,7 @@ export type Database = {
           short_description?: string | null
           source_suggestion_id?: string | null
           tips?: string[] | null
+          total_time_minutes?: number | null
           updated_at?: string
         }
         Update: {
@@ -1100,6 +1105,7 @@ export type Database = {
           short_description?: string | null
           source_suggestion_id?: string | null
           tips?: string[] | null
+          total_time_minutes?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -1363,6 +1369,7 @@ export type Database = {
         Args: { p_from: string; p_into: string }
         Returns: undefined
       }
+      minutes_from_time_text: { Args: { p_value: string }; Returns: number }
       normalize_to_canonical_id: {
         Args: { input_text: string }
         Returns: string
@@ -1422,6 +1429,7 @@ export type Database = {
           p_name: string
           p_name_en?: string
           p_tag_ids: string[]
+          p_total_time_minutes?: number
         }
         Returns: string
       }
@@ -1542,6 +1550,7 @@ export type Database = {
         ingredients: Json | null
         tags: Json | null
         source: string | null
+        total_time_minutes: number | null
       }
     }
   }

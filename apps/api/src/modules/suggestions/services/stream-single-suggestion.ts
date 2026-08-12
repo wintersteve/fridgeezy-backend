@@ -24,11 +24,17 @@ import {
     persistOrReuseSuggestion,
     SuggestionOutcome,
 } from "./persist-or-reuse-suggestion";
+import { DISH_TOTAL_TIME_RULE } from "./timing-rules";
 
 /**
  * The visible-first key order the model must emit so the card reveals fields in
  * a natural order: title, then description, then difficulty, then the chips.
  * `name_alt` trails since it's only needed for persistence, not the card.
+ *
+ * `total_time_minutes` sits immediately after `difficulty` because that is where
+ * it is DRAWN — the time pill and the difficulty pill are the same row of the
+ * card, so revealing them together avoids the row visibly growing a second chip
+ * a beat later.
  */
 const SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly ONE authentic, real-world recipe suggestion based on the user's request.
 
@@ -67,6 +73,7 @@ Emit the keys in EXACTLY this order:
 - ${DISH_NAME_RULE}
 - ${DISH_GLOSS_RULE}
 - difficulty (easy, medium, or hard)
+- ${DISH_TOTAL_TIME_RULE}
 - ingredients (array of strings)
 - tags (array of strings with component, cuisine, and dietary tags)
 - ${DISH_NAME_ALT_RULE}
@@ -82,6 +89,7 @@ export interface PartialSuggestionFields {
     nameEn?: string;
     description?: string;
     difficulty?: "easy" | "medium" | "hard";
+    totalTimeMinutes?: number;
     ingredients?: string[];
     tags?: string[];
 }
@@ -157,6 +165,14 @@ function mapFields(stable: Record<string, unknown>): PartialSuggestionFields {
         stable.difficulty === "hard"
     ) {
         fields.difficulty = stable.difficulty;
+    }
+    // Guarded rather than coerced: this is the PARTIAL reveal path, and a value
+    // still mid-token ("4" of "45") must not paint a pill that then changes
+    // band. `extractStableJsonFields` only surfaces finished values, so a number
+    // here is complete — anything that is not one is left for the final parse,
+    // where the schema's coercion and bounds apply.
+    if (typeof stable.total_time_minutes === "number") {
+        fields.totalTimeMinutes = stable.total_time_minutes;
     }
     if (Array.isArray(stable.ingredients)) {
         fields.ingredients = stable.ingredients.filter(

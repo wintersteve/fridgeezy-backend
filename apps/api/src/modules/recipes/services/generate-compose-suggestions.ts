@@ -4,6 +4,7 @@ import {
     ComposeRecipeResultDto,
     ComposeRecipeProgressDto,
     GenerateRecipeResponseDto,
+    GenerateSuggestionResponseSchema,
 } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { z } from "zod/v4";
@@ -15,6 +16,7 @@ import {
     DISH_NAME_RULE,
 } from "../../suggestions/services/naming-rules";
 import { persistOrReuseSuggestion } from "../../suggestions/services/persist-or-reuse-suggestion";
+import { DISH_TOTAL_TIME_RULE } from "../../suggestions/services/timing-rules";
 
 import { fetchRecipeMetadata } from "./fetch-recipe-metadata";
 
@@ -26,6 +28,12 @@ const ComposeRecipeSuggestionSchema = z.object({
     name_alt: z.string().nullable().optional(),
     description: z.string().trim(),
     difficulty: z.enum(["easy", "medium", "hard"]),
+    // Borrowed from the shared schema rather than restated. The parsed object is
+    // handed straight to `persistOrReuseSuggestion`, which types it as
+    // `GenerateSuggestionResponseDto` — so a hand-written copy here would have to
+    // keep the coercion, bounds and the load-bearing optional/catch order in
+    // step with that file forever, and nothing would report it drifting.
+    total_time_minutes: GenerateSuggestionResponseSchema.shape.total_time_minutes,
     course: z.string(),
     ingredients: z.array(z.string().min(1)),
     tags: z.array(z.string()),
@@ -68,6 +76,7 @@ Each recipe object must include:
 - ${DISH_NAME_ALT_RULE}
 - ${DISH_GLOSS_RULE}
 - difficulty (easy, medium, or hard)
+- ${DISH_TOTAL_TIME_RULE}
 - course (the course type)
 - ingredients (array of key ingredient strings)
 - tags (array of strings with component, cuisine, course, and dietary tags)`;
@@ -275,6 +284,7 @@ export async function* generateComposeRecipes(
                 nameEn: recipe.nameEn,
                 description: recipe.description,
                 difficulty: recipe.difficulty,
+                totalTimeMinutes: recipe.totalTimeMinutes,
                 ingredients: recipe.ingredients,
                 tags: recipe.tags,
                 image: recipe.image,
@@ -291,6 +301,7 @@ export async function* generateComposeRecipes(
             nameEn: reused.nameEn,
             description: reused.description,
             difficulty: reused.difficulty,
+            totalTimeMinutes: reused.totalTimeMinutes,
             ingredients: reused.ingredients,
             tags: reused.tags,
         };

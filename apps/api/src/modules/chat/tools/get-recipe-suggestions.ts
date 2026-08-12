@@ -92,6 +92,13 @@ export const RecipeSuggestionOutputSchema = z.object({
             name: z.string(),
             description: z.string(),
             difficulty: z.enum(["easy", "medium", "hard"]),
+            /**
+             * Total minutes. Declared so the assistant can answer "how long
+             * does this take" from the row rather than guessing a number that
+             * would then disagree with the pill on the card beside its own
+             * reply.
+             */
+            totalTimeMinutes: z.number().int().positive().nullable().optional(),
             source: z.enum(["existing_recipe", "suggestion", "new_suggestion"]),
             matchScore: z.number().optional(),
             ingredients: z.array(

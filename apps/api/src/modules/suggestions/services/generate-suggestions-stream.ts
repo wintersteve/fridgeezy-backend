@@ -32,6 +32,7 @@ import {
 import { persistOrReuseSuggestion } from "./persist-or-reuse-suggestion";
 import { createSuggestionBatch, type SuggestionBatch } from "./suggestion-batch";
 import type { SuggestionOutcome } from "./suggestion-outcome";
+import { DISH_TOTAL_TIME_RULE } from "./timing-rules";
 
 /** How many cards one `/suggestions/generate` call aims to deliver. */
 const SUGGESTIONS_PER_BATCH = 4;
@@ -124,6 +125,7 @@ Each recipe object must include:
 - ${DISH_NAME_ALT_RULE}
 - ${DISH_GLOSS_RULE}
 - difficulty (easy, medium, or hard)
+- ${DISH_TOTAL_TIME_RULE}
 - ingredients (array of strings)
 - tags (array of strings with component, cuisine, and dietary tags)
 - ${ADAPTED_FOR_RULE}`;

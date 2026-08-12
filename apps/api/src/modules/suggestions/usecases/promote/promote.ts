@@ -144,6 +144,20 @@ interface UserPromptInput {
      * which is the same field one step later.
      */
     gloss?: string | null;
+    /**
+     * The estimate the suggestion card was banded from, if it had one.
+     *
+     * Passed so `prepTime + cookTime` lands in the band the user already saw.
+     * Without it the model re-decides the timing from scratch and a card that
+     * said "Quick" can open onto a two-hour recipe — the same class of
+     * contradiction the fabricated cook time used to produce, just one step
+     * later in the flow.
+     *
+     * Deliberately an ANCHOR, not a constraint. The recipe is the thing that
+     * actually knows how long it takes, so a genuine disagreement should be
+     * resolved in the recipe's favour and the derived band allowed to differ.
+     */
+    totalTimeMinutes?: number | null;
 }
 
 /**
@@ -155,11 +169,19 @@ const buildUserPrompt = ({
     ingredientNames,
     servings,
     gloss,
+    totalTimeMinutes,
 }: UserPromptInput) =>
     [
         `Generate a detailed ${difficulty} level recipe for: ${name}`,
         gloss
             ? `The dish was offered to the user as: "${gloss}" — write the recipe for THAT dish, and keep "shortDescription" consistent with it.`
+            : "",
+        // In the USER prompt, never the system one: this is per-request, and the
+        // system prompt is the cached prefix every promotion shares. A volatile
+        // number above that boundary invalidates the cache on every call — the
+        // defect the ingredient and blacklist blocks were moved down to fix.
+        totalTimeMinutes
+            ? `The card told the user this takes about ${totalTimeMinutes} minutes in total. Aim for prepTime + cookTime near that, EXCLUDING any overnight marinating, chilling or proving. If the authentic recipe genuinely cannot be made in that time, write the honest times — do not compress real cooking to hit the number.`
             : "",
         `Use ONLY these ingredients: ${ingredientNames.join(", ")}`,
         `Servings: ${servings}`,
@@ -309,6 +331,7 @@ export const promoteSuggestion = createStreamHandler({
                 ingredientNames,
                 servings: body.servings,
                 gloss: suggestion.description,
+                totalTimeMinutes: suggestion.totalTimeMinutes,
             }),
         });
 

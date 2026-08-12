@@ -60,6 +60,8 @@ export const ComposeRecipeExistingResultSchema = z.object({
     nameEn: z.string().nullable().optional(),
     description: z.string(),
     difficulty: z.enum(["easy", "medium", "hard"]),
+    /** Total minutes, for the time pill beside the difficulty one. */
+    totalTimeMinutes: z.number().int().positive().nullable().optional(),
     ingredients: z.array(ComposeItemSchema),
     tags: z.array(ComposeItemSchema),
     image: z.string().nullable().optional().describe("Hero image URL"),
@@ -77,6 +79,8 @@ export const ComposeRecipeSuggestionResultSchema = z.object({
     nameEn: z.string().nullable().optional(),
     description: z.string(),
     difficulty: z.enum(["easy", "medium", "hard"]),
+    /** Total minutes, for the time pill beside the difficulty one. */
+    totalTimeMinutes: z.number().int().positive().nullable().optional(),
     ingredients: z.array(ComposeItemSchema),
     tags: z.array(ComposeItemSchema),
 });

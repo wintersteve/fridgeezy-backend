@@ -294,7 +294,14 @@ export class SuggestionsRepository implements ISuggestionsRepository {
          * `recipe_suggestions_dish_identity_unique`, the "unknown cuisine" copy
          * of this dish, so a failed follow-up would leave a permanent duplicate.
          */
-        identityCuisine?: string | null
+        identityCuisine?: string | null,
+        /**
+         * The generator's time estimate, in whole minutes. Unlike a recipe —
+         * where `persist_recipe` DERIVES the total from the prep and cook times
+         * in the same INSERT — a suggestion has no recipe to derive from, so
+         * this is the one place the number can come from.
+         */
+        totalTimeMinutes?: number | null
     ): Promise<Result<string, PersistenceError>> {
         try {
             const { data, error } = await supabaseAdmin.rpc("persist_suggestion", {
@@ -307,6 +314,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
                 // Omit when absent so the SQL default (null) applies
                 p_name_en: nameEn ?? undefined,
                 p_identity_cuisine: identityCuisine ?? undefined,
+                p_total_time_minutes: totalTimeMinutes ?? undefined,
             });
 
             if (error) {

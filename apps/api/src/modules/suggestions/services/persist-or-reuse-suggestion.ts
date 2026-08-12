@@ -347,6 +347,11 @@ export async function persistOrReuseSuggestion(
                 nameEn: dish.name_alt,
                 description: dish.description,
                 difficulty: dish.difficulty,
+                // The value just written. Read from the model's frame rather
+                // than re-fetched, exactly as every other field here is — and
+                // `?? null` because the schema drops a garbled estimate to
+                // undefined while the DTO's field is nullable.
+                totalTimeMinutes: dish.total_time_minutes ?? null,
                 ingredients: persistResult.value.ingredients,
                 tags: persistResult.value.tags,
             },

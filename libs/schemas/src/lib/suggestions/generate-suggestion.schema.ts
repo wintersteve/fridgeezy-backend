@@ -44,6 +44,41 @@ export const GenerateSuggestionResponseSchema = z.object({
     name_alt: z.string().nullable().optional(),
     description: z.string().trim(),
     difficulty: z.enum(["easy", "medium", "hard"]),
+    /**
+     * The generator's estimate of how long the dish takes, start to plate.
+     *
+     * A suggestion is a card that exists BEFORE its recipe, so there is nothing
+     * to derive this from — unlike a recipe, whose total is computed from the
+     * prep and cook times it already stores. The client bands it rather than
+     * printing it (`timeBandFor`), which is the whole reason an estimate is
+     * acceptable here: it only has to land in the right third.
+     *
+     * Optional, with the same shape and for the same reason as
+     * `InstructionSchema.durationSeconds` — the model occasionally writes it as
+     * a string or omits it, and a required key would fail the WHOLE line, which
+     * for JSONL means the dish is silently dropped rather than raised. A missing
+     * estimate costs a card with no time pill; a required one costs the card.
+     *
+     * Note the operator order, which is load-bearing: `.optional()` OUTSIDE the
+     * transform (a transform wrapping an optional yields `number | undefined` on
+     * a still-REQUIRED key), and `.catch()` outside that.
+     *
+     * Non-positive and absurd values become undefined rather than being stored.
+     * The upper bound is a week, which only rejects garbage — the overnight
+     * exclusion in `DISH_TOTAL_TIME_RULE` is what keeps genuine long ferments
+     * from arriving here as 12-hour totals in the first place.
+     */
+    total_time_minutes: z
+        .preprocess(
+            (value) => (value === null || value === "" ? undefined : value),
+            z.coerce.number()
+        )
+        .transform((value) =>
+            value > 0 && value <= 10080 ? Math.round(value) : undefined
+        )
+        .optional()
+        .catch(undefined)
+        .describe("Whole minutes from starting to cook until ready to eat"),
     ingredients: z.array(z.string()),
     tags: z.array(z.string()),
     /**
@@ -87,6 +122,15 @@ export const EnrichedSuggestionResponseSchema = z.object({
     nameEn: z.string().nullable().optional(),
     description: z.string().trim(),
     difficulty: z.enum(["easy", "medium", "hard"]),
+    /**
+     * The stored estimate, read back from `recipe_suggestions.total_time_minutes`.
+     *
+     * Nullable rather than merely optional, because the column genuinely is:
+     * rows written before the column existed carry no estimate and are not
+     * backfilled. The client renders no time pill for a null — inventing a band
+     * for it is exactly the fabricated cook time this replaced.
+     */
+    totalTimeMinutes: z.number().int().positive().nullable().optional(),
     ingredients: z.array(SuggestionIngredientSchema),
     tags: z.array(SuggestionTagSchema),
 });

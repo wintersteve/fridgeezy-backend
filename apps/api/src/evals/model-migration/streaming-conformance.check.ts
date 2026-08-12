@@ -57,20 +57,37 @@ import { accumulateSuggestionReveals } from "../../modules/suggestions/services/
  * Single-suggestion object. Key order matters: it mirrors the visible-first
  * order `stream-single-suggestion.ts` pins in its prompt, because that order is
  * what makes progressive reveal useful (title first, persistence-only last).
+ *
+ * `total_time_minutes` sits after `difficulty` for the same reason it does in
+ * the prompt — the two are drawn as one row of pills — and it is the only
+ * NUMBER in this object, deliberately. A number is the one value type with no
+ * closing delimiter, so `extractStableJsonFields` cannot call it finished until
+ * something follows it; every other field here ends on a quote or a bracket.
+ * Without a number in this fixture the reveal path is never exercised on the
+ * case where a partially-streamed value ("4" of "45") is a syntactically valid
+ * one, which is exactly what `mapFields` guards against re-painting.
  */
 const SINGLE_SUGGESTION =
-    '{"name":"Carbonara","description":"Roman pasta with egg, pecorino and guanciale","difficulty":"medium","ingredients":["spaghetti","egg","pecorino","guanciale","black pepper"],"tags":["dish","italian","main"],"name_alt":"Spaghetti alla Carbonara"}';
+    '{"name":"Carbonara","description":"Roman pasta with egg, pecorino and guanciale","difficulty":"medium","total_time_minutes":25,"ingredients":["spaghetti","egg","pecorino","guanciale","black pepper"],"tags":["dish","italian","main"],"name_alt":"Spaghetti alla Carbonara"}';
 
 /**
  * Four-line JSONL, as the batch suggestions prompt demands. Three of the four
  * carry a null `name_alt` — the common case, where a dish
  * known by only one name must NOT echo it — so the parser is exercised on the
  * null branch as well as the populated one.
+ *
+ * The four `total_time_minutes` values cover every branch the schema has, so a
+ * change to its coercion or bounds shows up here rather than in production: an
+ * integer, the STRING the model routinely writes instead (which `z.coerce` must
+ * absorb), an out-of-range value that must become undefined rather than being
+ * stored, and the key omitted entirely — which must leave the line VALID, since
+ * a rejected JSONL line is dropped rather than raised and would take the whole
+ * dish with it.
  */
 const SUGGESTIONS_JSONL = [
-    '{"name":"Carbonara","name_alt":"Spaghetti alla Carbonara","description":"Roman pasta with egg and guanciale","difficulty":"medium","ingredients":["spaghetti","egg","pecorino","guanciale"],"tags":["dish","italian","main"]}',
-    '{"name":"Cacio e Pepe","name_alt":null,"description":"Pecorino and black pepper pasta","difficulty":"easy","ingredients":["spaghetti","pecorino","black pepper"],"tags":["dish","italian","main"]}',
-    '{"name":"Amatriciana","name_alt":null,"description":"Tomato, guanciale and pecorino pasta","difficulty":"easy","ingredients":["bucatini","tomato","guanciale","pecorino"],"tags":["dish","italian","main"]}',
+    '{"name":"Carbonara","name_alt":"Spaghetti alla Carbonara","description":"Roman pasta with egg and guanciale","difficulty":"medium","total_time_minutes":25,"ingredients":["spaghetti","egg","pecorino","guanciale"],"tags":["dish","italian","main"]}',
+    '{"name":"Cacio e Pepe","name_alt":null,"description":"Pecorino and black pepper pasta","difficulty":"easy","total_time_minutes":"20","ingredients":["spaghetti","pecorino","black pepper"],"tags":["dish","italian","main"]}',
+    '{"name":"Amatriciana","name_alt":null,"description":"Tomato, guanciale and pecorino pasta","difficulty":"easy","total_time_minutes":0,"ingredients":["bucatini","tomato","guanciale","pecorino"],"tags":["dish","italian","main"]}',
     '{"name":"Gricia","name_alt":null,"description":"Guanciale and pecorino pasta, no tomato","difficulty":"medium","ingredients":["rigatoni","guanciale","pecorino","black pepper"],"tags":["dish","italian","main"]}',
 ].join("\n");
 

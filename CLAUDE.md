@@ -997,3 +997,44 @@ Thresholds (`SIGNATURE_HIGH/LOW_THRESHOLD`, the authenticity confidence floor)
 are fitted by the `calibrate*` eval targets. **Re-run the matching target rather
 than hand-nudging a constant** — a nudge unfits it from the distribution it was
 measured against, and nothing will fail to tell you.
+
+**`TIME_BAND_MAX_MINUTES` is the exception, and the only one.** It is a product
+statement about what a weeknight allows, not a fitted value — there is no
+distribution to fit it to — so it is safe to move by hand and no `calibrate*`
+target has any say. Do not add one.
+
+### How long a dish takes
+
+`total_time_minutes` on both `recipe_suggestions` and `recipes`, banded into
+quick / moderate / long by `timeBandFor` (`libs/schemas`) and drawn as a chip
+beside the difficulty one. Added 2026-08-12, replacing a cook time the CLIENT
+fabricated by hashing the card's id (`utils/recipe-meta`, now deleted) — the
+real `prep_time`/`cook_time` were being selected by the client and rendered by
+nothing, while the invented number was drawn next to them.
+
+The asymmetry between the two tables is the whole design, and it is easy to
+undo by accident:
+
+- **A recipe DERIVES it**, inside `persist_recipe` / `persist_recipe_with_
+  ingredient_ids`, from the same `p_prep_time` / `p_cook_time` that the INSERT
+  writes. It is deliberately **not** a parameter — a caller that can pass its
+  own total is a caller that can pass one disagreeing with the times on the
+  detail screen, which is the class of bug this closed.
+- **A suggestion ESTIMATES it**, because a card exists before its recipe does
+  and there is nothing to derive from. `DISH_TOTAL_TIME_RULE` (shared by all
+  three generators) asks for it, and `promote` feeds it back into the recipe
+  **user** prompt as an anchor — never the system prompt, which is the cached
+  prefix.
+
+Two things that look like details and are not. The rule's **overnight
+exclusion** is load-bearing: count a marinade or a prove and every biryani,
+sourdough and kimchi reports 12+ hours and lands in `long` together, at which
+point the band stops separating anything. And the axis is the **clock, not the
+effort** — a three-hour braise is twenty minutes of work — so the top band is
+worded "All afternoon" rather than as difficulty, which the chip beside it
+already carries.
+
+NULL means unknown and is never backfilled on suggestions; the client draws no
+chip. `minutes_from_time_text` parses the `'15 min'` column format and returns
+NULL on anything else rather than stripping non-digits, which would read
+`'1 h 30 min'` as 130.

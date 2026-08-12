@@ -163,7 +163,11 @@ export async function persistSuggestion(
             nameEmbedding,
             // Omitted rather than null, so the RPC's own default applies.
             context?.nameEn ?? undefined,
-            context?.identityCuisine
+            context?.identityCuisine,
+            // Straight off the model's own frame rather than the context: it is
+            // a property of the DISH, so unlike `adaptedFor` (per-request) it
+            // belongs on the row that dedup will share.
+            suggestion.total_time_minutes
         );
 
         if (!persistResult.success) {

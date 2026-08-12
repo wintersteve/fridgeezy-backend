@@ -21,6 +21,7 @@ export async function fetchEnrichedSuggestion(
                 name_en,
                 description,
                 difficulty,
+                total_time_minutes,
                 recipe_suggestion_ingredients(
                     ingredients(
                         id,
@@ -56,6 +57,7 @@ export async function fetchEnrichedSuggestion(
             nameEn: data.name_en ?? null,
             description: data.description || "",
             difficulty: data.difficulty as "easy" | "medium" | "hard",
+            totalTimeMinutes: data.total_time_minutes ?? null,
             ingredients: data.recipe_suggestion_ingredients
                 .map((rel: any) => ({
                     id: rel.ingredients.id,

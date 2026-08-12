@@ -172,6 +172,12 @@ export interface RecipeSuggestionItem {
      * card was wrong even though its id, and so the tap-through, was right.
      */
     image?: string | null;
+    /**
+     * Total minutes, for the time pill beside the difficulty one. Chat renders
+     * the same `RecipeCard` as the feed, so a card that arrives without this
+     * shows a difficulty pill on its own and reads as a different card.
+     */
+    totalTimeMinutes?: number | null;
     matchScore?: number;
     ingredients: Array<{ id: string; name: string }>;
     tags: Array<{ id: string; name: string }>;
@@ -196,6 +202,7 @@ export interface PartialRecipeSuggestion {
     name: string;
     description?: string;
     difficulty?: "easy" | "medium" | "hard";
+    totalTimeMinutes?: number;
     ingredients?: string[];
     tags?: string[];
 }
@@ -314,6 +321,7 @@ export async function searchRecipeSuggestions(
                 description: summary.shortDescription || summary.description,
                 image: summary.image,
                 difficulty: summary.difficulty,
+                totalTimeMinutes: summary.totalTimeMinutes,
                 source: "existing_recipe",
                 matchScore: 1,
                 ingredients: summary.ingredients,
@@ -355,6 +363,7 @@ export async function searchRecipeSuggestions(
                     recipeSummary.shortDescription || recipeSummary.description,
                 image: recipeSummary.image,
                 difficulty: recipeSummary.difficulty,
+                totalTimeMinutes: recipeSummary.totalTimeMinutes,
                 source: "existing_recipe",
                 matchScore: result.score,
                 ingredients: recipeSummary.ingredients.map((ing) => ({
@@ -403,6 +412,7 @@ export async function searchRecipeSuggestions(
                 description: row.description,
                 image: row.image,
                 difficulty: row.difficulty,
+                totalTimeMinutes: row.totalTimeMinutes,
                 // A `recipe` row is already generated, so the card opens it; a
                 // `suggestion` row still routes to the generate screen.
                 source:
@@ -464,6 +474,7 @@ export async function searchRecipeSuggestions(
             name: existingSuggestion.name,
             description: existingSuggestion.description,
             difficulty: existingSuggestion.difficulty,
+            totalTimeMinutes: existingSuggestion.totalTimeMinutes,
             source: "suggestion",
             ingredients: existingSuggestion.ingredients.map((ing) => ({
                 id: ing.id,
@@ -517,6 +528,7 @@ export async function searchRecipeSuggestions(
                                 name: fields.name,
                                 description: fields.description,
                                 difficulty: fields.difficulty,
+                                totalTimeMinutes: fields.totalTimeMinutes,
                                 ingredients: fields.ingredients,
                                 tags: fields.tags,
                             });
@@ -531,6 +543,7 @@ export async function searchRecipeSuggestions(
                         name: enriched.name,
                         description: enriched.description,
                         difficulty: enriched.difficulty,
+                        totalTimeMinutes: enriched.totalTimeMinutes,
                         source: "new_suggestion",
                         tempId,
                         ingredients: enriched.ingredients.map((ing) => ({
@@ -557,6 +570,7 @@ export async function searchRecipeSuggestions(
                             recipe.shortDescription || recipe.description,
                         image: recipe.image,
                         difficulty: recipe.difficulty,
+                        totalTimeMinutes: recipe.totalTimeMinutes,
                         source: "existing_recipe",
                         tempId,
                         ingredients: recipe.ingredients,
@@ -592,6 +606,7 @@ export async function searchRecipeSuggestions(
                         name: suggestion.name,
                         description: suggestion.description,
                         difficulty: suggestion.difficulty,
+                        totalTimeMinutes: suggestion.totalTimeMinutes,
                         source: "new_suggestion",
                         ingredients: suggestion.ingredients.map((ing) => ({
                             id: ing.id,

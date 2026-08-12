@@ -11,6 +11,12 @@ export interface CatalogueRecipe {
     image: string | null;
     /** `recipe` rows are already generated; `suggestion` rows still need it. */
     source: "recipe" | "suggestion";
+    /**
+     * Total minutes, for the time pill. Derived from prep + cook on a recipe
+     * row, the generator's estimate on a suggestion row — `find_recipes` returns
+     * whichever applies. Null on rows predating `20260812000004`.
+     */
+    totalTimeMinutes: number | null;
     ingredients: Array<{ id: string; name: string }>;
     tags: Array<{ id: string; name: string }>;
 }
@@ -128,6 +134,7 @@ export async function findCatalogueRecipes(options: {
             image: (row.image as string | null) ?? null,
             difficulty: row.difficulty as "easy" | "medium" | "hard",
             source: row.source === "recipe" ? "recipe" : "suggestion",
+            totalTimeMinutes: (row.total_time_minutes as number | null) ?? null,
             ingredients: toNamedRows(row.ingredients),
             tags: toNamedRows(row.tags),
         }));

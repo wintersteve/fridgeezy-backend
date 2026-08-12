@@ -59,6 +59,42 @@ bottom of this file — the checkboxes here are the summary.
       The modal is **dismissible** (the onboarding wall it replaces was not), so
       the failure costs a tap rather than trapping anyone. Still fix the
       purchase-to-webhook window above.
+- [ ] **A trial quota for signed-in users — the "let them try it" tier.**
+
+      The open question is whether every auth-gated feature is also a paid one.
+      **It should not be, and the split is already in `FEATURE_TIER`:** `save` and
+      `personalize` are gated because the data needs an *owner*, not because it
+      costs anything, and they must never become paid — saving is the retention
+      mechanism, and charging for it charges for the reason people come back.
+      Only the AI features carry marginal cost, so only they can sensibly be
+      metered.
+
+      That gives a three-and-a-half tier ladder: guest browses, a free **account**
+      gets all the saving plus **N trial units** of chat / generate / compose, and
+      a subscription lifts the cap.
+
+      **Meter the account, not the guest.** A signed-in user has a row to count
+      against, so the quota is a `profile_usage` table and a middleware — no
+      anonymous-auth question, and nothing to farm by reinstalling. A *guest*
+      quota is the hard one and is the reason the chat-quota idea is parked
+      below: there is no per-guest identity to store a counter on, a client-side
+      count resets on reinstall and is per-device, and each unit is a real LLM
+      call from an unauthenticated caller. Doing it properly needs Supabase
+      anonymous sign-in plus rate limiting plus App Attest / Play Integrity,
+      because otherwise minting anonymous users mints free quota.
+
+      It slots in cleanly: `requireEntitlement` is already attached **per route**,
+      so a `requireQuota("generate")` sits in the same position, and the client
+      already routes 402 to the unlock sheet — a quota exhaustion is just another
+      402 with different copy. What it needs designing is the reset window
+      (rolling vs calendar month), whether compose costs more units than chat
+      given it generates several dishes, and what the sheet says when the cap is
+      hit rather than when the tier is wrong.
+
+- [ ] **A guest chat quota — parked, needs the above decided first.** "One free
+      chat message" was proposed and deliberately not built: see why in the
+      preceding item. `/rest/chat` opened to guests on a client-side counter is an
+      open spend endpoint on an honour system.
 - [ ] **The unlock modal's email path loses the user's place.** Apple, Google and
       Facebook sign in *inside* the modal, so `useFeatureAccess` re-evaluates and
       it advances to the subscription step or dismisses. "Continue with Email"

@@ -1,13 +1,27 @@
 /**
- * The schema's identity rule for a name, in JS: lowercase, with every run of
- * non-alphanumerics collapsed to a single underscore. Mirrors the
- * `normalize_to_canonical_id` SQL function and the `canonical_id` triggers, so
- * "Apfelstrudel" / "apfelstrudel" / " Apfelstrudel! " are one dish.
+ * Name identity for comparing two JS-normalized names TO EACH OTHER: lowercase,
+ * every run of non-alphanumerics collapsed to one underscore, and leading or
+ * trailing underscores stripped. So "Apfelstrudel", "apfelstrudel" and
+ * " Apfelstrudel! " are one dish.
  *
- * Shared because `recipes` — unlike `ingredients` and `recipe_suggestions` — has
- * no canonical_id column to compare against, so anything matching recipes by
- * name has to apply the same rule itself or two tables will disagree about what
- * counts as the same dish.
+ * ⚠️ **This does NOT mirror any `canonical_id` in the database**, despite what
+ * this comment used to claim. The edge-underscore strip on the last line is the
+ * difference, and " Apfelstrudel! " — the example above — is exactly a case
+ * where the three rules disagree:
+ *
+ * | | " Apfelstrudel! " |
+ * | --- | --- |
+ * | this | `apfelstrudel` |
+ * | `suggestionCanonicalId` (the triggers) | `apfelstrudel_` |
+ * | `sqlCanonicalId` (`normalize_to_canonical_id`) | `_apfelstrudel_` |
+ *
+ * Use this ONLY when both sides are normalized here — an exclusion list against
+ * generated names, tag identity, dedup keys within one response. The moment one
+ * side is a stored column, reach for the rule that produced it:
+ * `suggestionCanonicalId` from this package for anything trigger-stamped
+ * (`recipe_suggestions`, `ingredients`, `categories`, `tag_aliases`), or
+ * `sqlCanonicalId` in `recipes.repository.ts` for the generated
+ * `recipes.canonical_id`.
  *
  * Returns null for a name that normalizes to nothing, so an empty or
  * punctuation-only value can never match another.

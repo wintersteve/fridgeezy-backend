@@ -286,7 +286,7 @@ export async function searchRecipeSuggestions(
     // user named outright, so ask for it by name first — under the dish name as
     // well as the raw query, since "a thai green curry recipe please" matches
     // nothing verbatim while the dish it names is in the catalogue.
-    const namedRecipe = await new RecipesRepository().findBaseRecipe(
+    const namedRecipe = await new RecipesRepository().findBaseRecipes(
         [query, dish].filter((name): name is string => !!name && !isExcluded(name))
     );
 
@@ -295,8 +295,13 @@ export async function searchRecipeSuggestions(
             `[SearchRecipeSuggestions] Name lookup failed for "${query}":`,
             namedRecipe.error.message
         );
-    } else if (namedRecipe.value) {
-        const summary = await fetchRecipeSummary(namedRecipe.value.id);
+    } else if (namedRecipe.value.length > 0) {
+        // Oldest match, deliberately not `pickIdentityMatch`. This is a free-text
+        // search — the user typed a name and there is no dish whose identity we
+        // are establishing, so there is no cuisine to disambiguate on. If a name
+        // does carry two dishes, the older is the better default and the vector
+        // stages below still surface the other.
+        const summary = await fetchRecipeSummary(namedRecipe.value[0].id);
 
         if (
             summary &&

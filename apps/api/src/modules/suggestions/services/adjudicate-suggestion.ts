@@ -7,16 +7,45 @@ const SYSTEM_PROMPT = `You decide whether two dish descriptions refer to the SAM
 
 Weigh the defining ingredients and cuisine, not just the name. Respond with a single JSON object and nothing else: {"same": true|false}.`;
 
+export interface AdjudicateOptions {
+    /**
+     * What to answer when the call fails. Defaults to `false` — fail CLOSED, so
+     * an LLM hiccup never merges two distinct dishes.
+     *
+     * Pass `true` only when the two dishes share a canonical NAME. Until
+     * `20260812000003` that case could not produce a duplicate at all:
+     * `recipe_suggestions.canonical_id` was unique outright, so a same-name pair
+     * merged unconditionally and the database was the backstop for any
+     * adjudicator error. Making identity `(canonical_id, identity_cuisine)`
+     * removed that backstop — a "not same" answer now INSERTS, and the result is
+     * a permanent duplicate that nothing collapses and that `listCatalogDishes`
+     * feeds back to the generator forever.
+     *
+     * So the failure directions are not symmetric, and neither is a free choice:
+     *
+     * - fail closed on a same-name pair -> a duplicate row, no recovery path.
+     * - fail open on a same-name pair -> one dish merged into another, which is
+     *   exactly what shipped before this column existed, and is recoverable by
+     *   splitting the row later.
+     *
+     * An error in new machinery must not produce an outcome the old system could
+     * never produce. That is the whole rule.
+     */
+    onError?: boolean;
+}
+
 /**
  * LLM adjudication for the dedup gray zone: are dish A and dish B the same dish?
  * Each argument is a short descriptor (canonical name, any alias, cuisine/tags,
  * ingredients).
- * Fails CLOSED (false) on any error so an LLM hiccup never merges distinct dishes.
  */
 export async function adjudicateSameDish(
     dishA: string,
-    dishB: string
+    dishB: string,
+    options: AdjudicateOptions = {}
 ): Promise<boolean> {
+    const { onError = false } = options;
+
     try {
         const { text: content } = await generateCompletion({
             model: { openai: "gpt-4o-mini" },
@@ -38,10 +67,13 @@ export async function adjudicateSameDish(
             effort: "low",
         });
 
-        if (!content) return false;
+        if (!content) return onError;
         return (JSON.parse(content) as { same?: boolean }).same === true;
     } catch (error) {
-        console.error("[Suggestions] Dish adjudication failed:", error);
-        return false;
+        console.error(
+            `[Suggestions] Dish adjudication failed, answering "${onError ? "same" : "not same"}":`,
+            error
+        );
+        return onError;
     }
 }

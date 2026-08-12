@@ -6,11 +6,13 @@ import {
 import { SuggestionsRepository } from "@fridgeezy/supabase";
 
 import { adjudicateSameDish } from "./adjudicate-suggestion";
+import { resolveIdentityCuisine } from "./cuisine-identity";
 import { fetchEnrichedSuggestion } from "./fetch-enriched-suggestion";
 import { findKnownDish } from "./find-known-dish";
 import { findRecipeForDish } from "./find-recipe-for-dish";
 import { findSuggestionByName } from "./find-suggestion-by-name";
 import { persistSuggestion } from "./persist-suggestion";
+import { sharesCanonicalName } from "./pick-identity-match";
 import { identityKey, type SuggestionBatch } from "./suggestion-batch";
 import type { SuggestionOutcome } from "./suggestion-outcome";
 import {
@@ -101,13 +103,28 @@ export async function persistOrReuseSuggestion(
     };
 
     try {
+        // The cuisine half of dish identity, derived from the tags the generator
+        // already produced. In-memory against a 60s-cached tree — no query, no
+        // embedding, no LLM — which is what lets step 0 below use it.
+        //
+        // Deliberately NOT asked of the authenticity gate: that runs at step 1,
+        // and step 0 is exactly where the tiebreak matters most.
+        const identityCuisine = await resolveIdentityCuisine(
+            suggestion.tags,
+            request.cuisine
+        );
+
         // Step 0: have we already got this exact dish? Two indexed lookups, no
         // LLM and no embedding. A hit means the dish was reviewed when it was
         // first stored and its stored name IS the canonical one, so re-asking
         // the model about it buys nothing — and the review is 77% of the token
         // cost of a batch. A miss falls through to the unchanged pipeline.
         // See `findKnownDish` for why this does not undo the review-first order.
-        const known = await findKnownDish(suggestion.name, suggestion.name_alt);
+        const known = await findKnownDish(
+            suggestion.name,
+            suggestion.name_alt,
+            identityCuisine
+        );
 
         if (known) {
             return settle(known);
@@ -169,6 +186,7 @@ export async function persistOrReuseSuggestion(
         if (slot) {
             const identity = {
                 key: identityKey(dish.name),
+                cuisine: identityCuisine,
                 name: dish.name,
                 describe,
                 embedding: signatureEmbedding,
@@ -200,6 +218,7 @@ export async function persistOrReuseSuggestion(
                 nameEn: dish.name_alt,
                 tags: dish.tags,
                 ingredients: dish.ingredients,
+                cuisine: identityCuisine,
             },
             signatureEmbedding
         );
@@ -208,10 +227,13 @@ export async function persistOrReuseSuggestion(
             return settle({ kind: "existing_recipe", recipe: existingRecipe });
         }
 
-        // Layer 2: exact canonical-name match among suggestions (deterministic —
-        // mirrors the DB's canonical_id unique constraint, so an already-persisted
-        // dish is always reused instead of triggering a duplicate-key error).
-        const exactMatch = await findSuggestionByName(dish.name);
+        // Layer 2: exact canonical-name match among suggestions, under a
+        // compatible cuisine — deterministic, and mirrors the DB's
+        // `(canonical_id, identity_cuisine)` unique constraint so an
+        // already-persisted dish is reused instead of triggering a duplicate
+        // key. A name hit under a DISJOINT cuisine deliberately does not match
+        // here and falls through to layer 3, where the signature decides.
+        const exactMatch = await findSuggestionByName(dish.name, identityCuisine);
         if (exactMatch) {
             return settle({
                 kind: "suggestion",
@@ -260,7 +282,17 @@ export async function persistOrReuseSuggestion(
                             existing.nameEn,
                             existing.tags.map((t) => t.name),
                             existing.ingredients.map((i) => i.name)
-                        )
+                        ),
+                        // The homograph path lands here: layer 2 declined this
+                        // pair on cuisine, so an adjudicator error would INSERT
+                        // a second row under the same name — which the old
+                        // unique constraint made impossible. Merge on error.
+                        {
+                            onError: sharesCanonicalName(
+                                dish.name,
+                                existing.name
+                            ),
+                        }
                     ));
 
                 if (isSameDish) {
@@ -282,13 +314,16 @@ export async function persistOrReuseSuggestion(
             cuisineTag: request.cuisine,
             nameEn: dish.name_alt,
             signatureEmbedding,
+            identityCuisine,
         });
 
         if (!persistResult.success) {
-            // A concurrent request may have inserted the same canonical_id
-            // between our layer-2 check and this insert (duplicate-key). Reuse
-            // the row that won the race rather than failing the turn.
-            const raced = await findSuggestionByName(dish.name);
+            // A concurrent request may have inserted the same identity between
+            // our layer-2 check and this insert (duplicate-key). Reuse the row
+            // that won the race rather than failing the turn — and look it up by
+            // the same (name, cuisine) pair the constraint uses, or we would
+            // hand back a homograph.
+            const raced = await findSuggestionByName(dish.name, identityCuisine);
             if (raced) {
                 return settle({
                     kind: "suggestion",

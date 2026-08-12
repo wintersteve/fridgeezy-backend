@@ -7,6 +7,7 @@ import {
 import { searchRecipesByEmbedding } from "../../recipes/services/search-recipes";
 
 import { adjudicateSameDish } from "./adjudicate-suggestion";
+import { pickIdentityMatch, sharesCanonicalName } from "./pick-identity-match";
 import {
     describeSuggestion,
     SIGNATURE_HIGH_THRESHOLD,
@@ -18,6 +19,8 @@ export interface DishIdentity {
     nameEn?: string | null;
     tags: string[];
     ingredients: string[];
+    /** Identity cuisine; null means unknown, which merges. */
+    cuisine?: string | null;
 }
 
 /**
@@ -48,8 +51,9 @@ export async function findRecipeForDish(
     signatureEmbedding: number[],
     recipesRepo: RecipesRepository = new RecipesRepository()
 ): Promise<RecipeSummary | null> {
-    // Layer 1: exact canonical name match (either language).
-    const exactResult = await recipesRepo.findBaseRecipe([
+    // Layer 1: exact canonical name match (either language) under a compatible
+    // cuisine. A name hit alone is no longer identity — see `pickIdentityMatch`.
+    const exactResult = await recipesRepo.findBaseRecipes([
         dish.name,
         dish.nameEn,
     ]);
@@ -59,10 +63,21 @@ export async function findRecipeForDish(
             `[Suggestions] Recipe name lookup failed for "${dish.name}":`,
             exactResult.error
         );
-    } else if (exactResult.value) {
-        const summary = await fetchRecipeSummary(exactResult.value.id);
-        if (summary) {
-            return summary;
+    } else if (exactResult.value.length > 0) {
+        const match = await pickIdentityMatch(
+            { name: dish.name, cuisine: dish.cuisine ?? null },
+            exactResult.value.map((row) => ({
+                row,
+                identityCuisine: row.identityCuisine,
+                label: row.name,
+            }))
+        );
+
+        if (match) {
+            const summary = await fetchRecipeSummary(match.id);
+            if (summary) {
+                return summary;
+            }
         }
     }
 
@@ -92,7 +107,13 @@ export async function findRecipeForDish(
                     summary.nameEn,
                     summary.tags.map((tag) => tag.name),
                     summary.ingredients.map((ingredient) => ingredient.name)
-                )
+                ),
+                // Same canonical name => an error must MERGE. Layer 1 already
+                // declined this pair on cuisine, so an adjudicator failure here
+                // would otherwise store a suggestion that duplicates an existing
+                // recipe — the "regenerated forever" bug this whole function
+                // exists to prevent.
+                { onError: sharesCanonicalName(dish.name, summary.name) }
             ));
 
         if (isSameDish) {

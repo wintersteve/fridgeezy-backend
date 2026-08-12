@@ -27,6 +27,22 @@ export interface ITagsRepository {
     ): Promise<Result<Map<string, Tag>, DomainError>>;
 
     /**
+     * Resolve canonical IDs through the curated alternate spellings in
+     * `tag_aliases`.
+     *
+     * Sits between {@link findByCanonicalIds} and {@link vectorSearch}: an alias
+     * is an exact, hand-checked answer, so it should be preferred over a
+     * similarity guess — and it is far cheaper, needing no embedding.
+     * @param canonicalIds Array of canonical IDs to resolve
+     * @param preferredType Which type to pick when one spelling aliases several
+     * @returns Map of requested canonical_id → the aliased Tag
+     */
+    findByAliasCanonicalIds(
+        canonicalIds: string[],
+        preferredType?: TagType
+    ): Promise<Result<Map<string, Tag>, DomainError>>;
+
+    /**
      * Search for a tag using vector similarity across all tag types
      * @param embedding Precomputed query embedding (text-embedding-3-small, 1536-dim)
      * @param threshold Similarity threshold (0.0-1.0), default 0.75

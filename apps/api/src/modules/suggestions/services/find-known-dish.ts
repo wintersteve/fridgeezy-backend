@@ -3,6 +3,7 @@ import { RecipesRepository } from "@fridgeezy/supabase";
 import { fetchRecipeSummary } from "../../recipes/services/fetch-recipe-summary";
 
 import { findSuggestionByName } from "./find-suggestion-by-name";
+import { pickIdentityMatch } from "./pick-identity-match";
 import type { SuggestionOutcome } from "./suggestion-outcome";
 
 /**
@@ -46,27 +47,52 @@ import type { SuggestionOutcome } from "./suggestion-outcome";
  * where the review renames it and dedup collapses it as before. That is the
  * design: this only skips work when the answer is already certain, and a
  * near-miss is not certainty.
+ *
+ * **A name hit under a DISJOINT cuisine is now the second such case.** One
+ * canonical name can carry two dishes (Turkish Mantı, Kazakh Manti), so a name
+ * match alone is no longer certainty — it used to be treated as such, which is
+ * how the second dish came to be silently replaced by the first with no LLM, no
+ * embedding and nothing logged. When the cuisines do not relate, this returns
+ * null and defers.
+ *
+ * That deferral costs the review this function exists to skip, and that is the
+ * right trade: it is paid only on a genuinely ambiguous name hit, and it is what
+ * buys the canonical name the layers below key on. **Step 0 must never become a
+ * write path** — it answers or it defers.
  */
 export async function findKnownDish(
     name: string,
-    nameAlt?: string | null,
+    nameAlt: string | null | undefined,
+    /** The dish's identity cuisine. Null means unknown, which merges. */
+    cuisine: string | null,
     recipesRepo: RecipesRepository = new RecipesRepository()
 ): Promise<SuggestionOutcome | null> {
     // Layer 1: recipes win. Same precedence as the full pipeline.
-    const recipe = await recipesRepo.findBaseRecipe([name, nameAlt]);
+    const recipes = await recipesRepo.findBaseRecipes([name, nameAlt]);
 
-    if (recipe.success && recipe.value) {
-        const summary = await fetchRecipeSummary(recipe.value.id);
+    if (recipes.success && recipes.value.length > 0) {
+        const match = await pickIdentityMatch(
+            { name, cuisine },
+            recipes.value.map((row) => ({
+                row,
+                identityCuisine: row.identityCuisine,
+                label: row.name,
+            }))
+        );
 
-        // A row that will not load is not a usable answer — fall through and let
-        // the full path decide, rather than dropping the card.
-        if (summary) {
-            return { kind: "existing_recipe", recipe: summary };
+        if (match) {
+            const summary = await fetchRecipeSummary(match.id);
+
+            // A row that will not load is not a usable answer — fall through and
+            // let the full path decide, rather than dropping the card.
+            if (summary) {
+                return { kind: "existing_recipe", recipe: summary };
+            }
         }
     }
 
     // Layer 2: an existing suggestion under this exact canonical name.
-    const suggestion = await findSuggestionByName(name);
+    const suggestion = await findSuggestionByName(name, cuisine);
 
     if (suggestion) {
         return { kind: "suggestion", suggestion, reused: true };

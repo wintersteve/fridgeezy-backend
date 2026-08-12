@@ -55,6 +55,13 @@ export interface PersistSuggestionContext {
      * identical signature for storage.
      */
     signatureEmbedding?: number[];
+    /**
+     * The cuisine half of dish identity, already resolved by
+     * `persistOrReuseSuggestion` for its dedup lookups and passed down rather
+     * than recomputed — the two MUST agree, or a row is stored under an identity
+     * different from the one dedup just searched.
+     */
+    identityCuisine?: string | null;
 }
 
 export interface PersistedIngredient {
@@ -155,7 +162,8 @@ export async function persistSuggestion(
             tagMatches.map((m) => m.tagId),
             nameEmbedding,
             // Omitted rather than null, so the RPC's own default applies.
-            context?.nameEn ?? undefined
+            context?.nameEn ?? undefined,
+            context?.identityCuisine
         );
 
         if (!persistResult.success) {

@@ -1,11 +1,31 @@
-import { canonicalizeName } from "@fridgeezy/toolkit";
+import { suggestionCanonicalId } from "@fridgeezy/toolkit";
 
 import { adjudicateSameDish } from "./adjudicate-suggestion";
+import type { CuisineRelator } from "./cuisine-identity";
 import type { SuggestionOutcome } from "./suggestion-outcome";
 import {
     SIGNATURE_HIGH_THRESHOLD,
     SIGNATURE_LOW_THRESHOLD,
 } from "./suggestion-signature";
+
+/**
+ * The real relator, reached through a DEFERRED import.
+ *
+ * `cuisine-identity` imports `@fridgeezy/supabase`, which constructs its client
+ * at module scope and throws on a missing `SUPABASE_URL`. A static import here
+ * would put that in the graph of anything importing this file — and
+ * `evals/batch-dedup.check.ts` deliberately runs with no database, no LLM and no
+ * API keys, because what it verifies is a concurrency property. It started
+ * failing at import with `Missing SUPABASE_URL` the moment this was static.
+ *
+ * Same fix, and the same reason, as `lambda.ts` importing `./create-app`
+ * dynamically. The module is memoised after the first call, so this costs one
+ * resolved promise per comparison and no repeated work.
+ */
+const defaultRelator: CuisineRelator = async (a, b) => {
+    const { relateCuisines } = await import("./cuisine-identity");
+    return relateCuisines(a, b);
+};
 
 /**
  * How a dish identifies itself to its siblings, once its name has been
@@ -14,6 +34,11 @@ import {
 export interface SuggestionIdentity {
     /** Canonical name key — the same rule the DB's `canonical_id` uses. */
     key: string | null;
+    /**
+     * The cuisine half of identity. Null means unknown, which merges — so a dish
+     * whose tags name no cuisine behaves exactly as it did before this existed.
+     */
+    cuisine: string | null;
     /** Descriptor for the LLM adjudicator, when the cosine lands in the gray band. */
     describe: string;
     name: string;
@@ -52,7 +77,8 @@ export interface SuggestionBatch {
  */
 export type SameDishAdjudicator = (
     dishA: string,
-    dishB: string
+    dishB: string,
+    options?: { onError?: boolean }
 ) => Promise<boolean>;
 
 interface Entry {
@@ -87,7 +113,13 @@ interface Entry {
  * embedding takes.
  */
 export function createSuggestionBatch(
-    adjudicate: SameDishAdjudicator = adjudicateSameDish
+    adjudicate: SameDishAdjudicator = adjudicateSameDish,
+    /**
+     * Injected for the same reason `adjudicate` is: the offline check has to
+     * drive this deterministically, and the real relator reads the cuisine tree
+     * from the database.
+     */
+    relate: CuisineRelator = defaultRelator
 ): SuggestionBatch {
     const entries: Entry[] = [];
 
@@ -127,7 +159,8 @@ export function createSuggestionBatch(
                     findEarlierDuplicate(
                         entries.slice(0, index),
                         identity,
-                        adjudicate
+                        adjudicate,
+                        relate
                     ),
             };
         },
@@ -140,10 +173,16 @@ export function createSuggestionBatch(
  *
  * Three tests, cheapest first:
  *
- * 1. **Canonical name equality** — free, and the case that matters most now that
- *    naming is canonicalised BEFORE dedup: "Cucumber Sunomono" and "Sunomono"
- *    both arrive here as the same key, so the pair collapses with no vector
- *    maths and no LLM call.
+ * 1. **Canonical name AND a compatible cuisine** — free, and the case that
+ *    matters most now that naming is canonicalised BEFORE dedup: "Cucumber
+ *    Sunomono" and "Sunomono" both arrive here as the same key, so the pair
+ *    collapses with no vector maths and no LLM call.
+ *
+ *    The cuisine half was added 2026-08-12. A shared name alone is no longer
+ *    proof: one canonical name can carry two dishes (Turkish Mantı, Kazakh
+ *    Manti), and collapsing those unconditionally is what silently replaced the
+ *    second with the first. Null on either side is UNKNOWN and still merges, so
+ *    a dish whose tags name no cuisine behaves exactly as it did before.
  * 2. **Signature cosine at/above the auto-merge threshold** — free, ~1536
  *    multiply-adds.
  * 3. **LLM adjudication through the calibrated gray band** — the only test that
@@ -154,14 +193,23 @@ export function createSuggestionBatch(
 async function findEarlierDuplicate(
     earlier: Entry[],
     identity: SuggestionIdentity,
-    adjudicate: SameDishAdjudicator
+    adjudicate: SameDishAdjudicator,
+    relate: CuisineRelator
 ): Promise<SuggestionOutcome | null> {
     for (const entry of earlier) {
         const other = await entry.identity;
         if (!other) continue;
 
-        const sameKey =
+        const sameName =
             identity.key !== null && other.key !== null && identity.key === other.key;
+
+        // A shared name is no longer proof on its own — one canonical name can
+        // carry two dishes, and the cuisine is what tells them apart. Mirrors
+        // the database layer's `pickIdentityMatch` so the two cannot disagree
+        // about what one dish is.
+        const sameKey =
+            sameName &&
+            (await relate(identity.cuisine, other.cuisine)) !== "disjoint";
 
         let isSameDish = sameKey;
 
@@ -172,7 +220,12 @@ async function findEarlierDuplicate(
 
             isSameDish =
                 score >= SIGNATURE_HIGH_THRESHOLD ||
-                (await adjudicate(identity.describe, other.describe));
+                // Same name, disjoint cuisine — the homograph path. An error
+                // here would let both siblings persist, and the composite unique
+                // constraint now PERMITS that, so it must merge instead.
+                (await adjudicate(identity.describe, other.describe, {
+                    onError: sameName,
+                }));
 
             if (isSameDish) {
                 console.log(
@@ -204,9 +257,18 @@ async function findEarlierDuplicate(
     return null;
 }
 
-/** The canonical-name key two siblings are compared on, by the DB's own rule. */
+/**
+ * The canonical-name key two siblings are compared on, by the DB's own rule.
+ *
+ * `suggestionCanonicalId`, not `canonicalizeName`: this key exists to agree with
+ * `recipe_suggestions.canonical_id`, so that a pair the batch collapses in
+ * memory is the same pair the unique constraint would have collapsed on insert.
+ * The two rules differ on names with edge punctuation ("Sunomono!" -> `sunomono_`
+ * in the database, `sunomono` under the old rule), which would have let the two
+ * layers disagree about what one dish is.
+ */
 export function identityKey(name: string): string | null {
-    return canonicalizeName(name);
+    return suggestionCanonicalId(name);
 }
 
 /**

@@ -889,6 +889,7 @@ export type Database = {
           difficulty: Database["public"]["Enums"]["difficulty_type"] | null
           embedding: string | null
           id: string
+          identity_cuisine: string | null
           name: string
           name_en: string | null
         }
@@ -899,6 +900,7 @@ export type Database = {
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           embedding?: string | null
           id?: string
+          identity_cuisine?: string | null
           name: string
           name_en?: string | null
         }
@@ -909,6 +911,7 @@ export type Database = {
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           embedding?: string | null
           id?: string
+          identity_cuisine?: string | null
           name?: string
           name_en?: string | null
         }
@@ -1033,6 +1036,7 @@ export type Database = {
           favourite_count: number
           fts: string | null
           id: string
+          identity_cuisine: string | null
           image: string | null
           is_generated: boolean
           kcal: number | null
@@ -1058,6 +1062,7 @@ export type Database = {
           favourite_count?: number
           fts?: string | null
           id?: string
+          identity_cuisine?: string | null
           image?: string | null
           is_generated?: boolean
           kcal?: number | null
@@ -1083,6 +1088,7 @@ export type Database = {
           favourite_count?: number
           fts?: string | null
           id?: string
+          identity_cuisine?: string | null
           image?: string | null
           is_generated?: boolean
           kcal?: number | null
@@ -1369,6 +1375,7 @@ export type Database = {
           p_description: string
           p_difficulty: Database["public"]["Enums"]["difficulty_type"]
           p_fat: number
+          p_identity_cuisine?: string
           p_image: string
           p_ingredients: Json
           p_instructions: Json
@@ -1390,6 +1397,7 @@ export type Database = {
           p_description: string
           p_difficulty: Database["public"]["Enums"]["difficulty_type"]
           p_fat: number
+          p_identity_cuisine?: string
           p_image: string
           p_ingredients: Json
           p_instructions: Json
@@ -1409,6 +1417,7 @@ export type Database = {
           p_description: string
           p_difficulty: Database["public"]["Enums"]["difficulty_type"]
           p_embedding: string
+          p_identity_cuisine?: string
           p_ingredient_ids: string[]
           p_name: string
           p_name_en?: string

@@ -4,6 +4,9 @@ import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
 import { RecipesRepository, UnitsRepository } from "@fridgeezy/supabase";
 import { buildSuggestionSignature } from "@fridgeezy/toolkit";
 
+import { resolveIdentityCuisine } from "../../suggestions/services/cuisine-identity";
+import { pickIdentityMatch } from "../../suggestions/services/pick-identity-match";
+
 import {
     generateAndUploadRecipeImage,
     getRecipeImagePublicUrl,
@@ -199,7 +202,18 @@ export async function persistRecipe(
         // Persist to database via repository
         const repository = new RecipesRepository();
 
-        const result = await repository.persist(recipe, imageUrl, baseRecipeId);
+        // A variant inherits its base's identity rather than re-deriving it, so
+        // an escalate/modify pass that reworded a tag cannot re-home the dish.
+        const identityCuisine = baseRecipeId
+            ? await repository.identityCuisineOf(baseRecipeId)
+            : await resolveIdentityCuisine(recipe.tags ?? []);
+
+        const result = await repository.persist(
+            recipe,
+            imageUrl,
+            baseRecipeId,
+            identityCuisine
+        );
 
         if (result.success) {
             await storeRecipeSignature(repository, result.value, recipe);
@@ -237,7 +251,13 @@ export async function persistRecipeWithIngredientIds(
         // Keyed on difficulty as well: easy/medium/hard are genuinely different
         // recipes for the same dish, and only BASE rows are considered, so AI
         // variants (which deliberately keep the base's name) are never returned.
-        const existing = await repository.findBaseRecipe(
+        // Keyed on the CUISINE as well since 20260812000003. Without it,
+        // promoting a Kazakh Manti suggestion returned the existing Turkish
+        // Manti recipe id — and promotion then deletes the suggestion, so the
+        // Kazakh dish was destroyed rather than merely hidden.
+        const identityCuisine = await resolveIdentityCuisine(recipe.tags ?? []);
+
+        const existing = await repository.findBaseRecipes(
             [recipe.name, recipe.nameEn],
             recipe.difficulty
         );
@@ -247,11 +267,22 @@ export async function persistRecipeWithIngredientIds(
                 `Existing-recipe lookup failed for "${recipe.name}":`,
                 existing.error.message
             );
-        } else if (existing.value) {
-            console.log(
-                `Recipe "${recipe.name}" (${recipe.difficulty}) already exists — reusing ${existing.value.id}`
+        } else if (existing.value.length > 0) {
+            const match = await pickIdentityMatch(
+                { name: recipe.name, cuisine: identityCuisine },
+                existing.value.map((row) => ({
+                    row,
+                    identityCuisine: row.identityCuisine,
+                    label: row.name,
+                }))
             );
-            return success(existing.value.id);
+
+            if (match) {
+                console.log(
+                    `Recipe "${recipe.name}" (${recipe.difficulty}) already exists — reusing ${match.id}`
+                );
+                return success(match.id);
+            }
         }
 
         // Collapse ingredients that map to the same DB ingredient so the insert
@@ -271,7 +302,11 @@ export async function persistRecipeWithIngredientIds(
         }
 
         // Persist using ingredient IDs
-        const result = await repository.persistWithIngredientIds(recipe, imageUrl);
+        const result = await repository.persistWithIngredientIds(
+            recipe,
+            imageUrl,
+            identityCuisine
+        );
 
         if (result.success) {
             await storeRecipeSignature(repository, result.value, recipe);

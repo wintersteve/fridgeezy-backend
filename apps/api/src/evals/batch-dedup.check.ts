@@ -11,8 +11,13 @@
  *
  *     npx nx run @fridgeezy/api:check-batch-dedup
  */
+import type {
+    CuisineRelation,
+    CuisineRelator,
+} from "../modules/suggestions/services/cuisine-identity";
 import {
     createSuggestionBatch,
+    type SameDishAdjudicator,
     type SuggestionIdentity,
 } from "../modules/suggestions/services/suggestion-batch";
 import type { SuggestionOutcome } from "../modules/suggestions/services/suggestion-outcome";
@@ -48,10 +53,56 @@ const DISTINCT = 60; // cos 60° = 0.500
 function identity(
     name: string,
     key: string | null,
-    embedding: number[]
+    embedding: number[],
+    /**
+     * Defaults to null — "unknown", which merges. Every test predating cuisine
+     * identity therefore keeps testing exactly what it tested before.
+     */
+    cuisine: string | null = null
 ): SuggestionIdentity {
-    return { key, name, describe: `name: ${name}`, embedding };
+    return { key, cuisine, name, describe: `name: ${name}`, embedding };
 }
+
+/**
+ * A fixture slice of the real cuisine tree, so the relator stays a pure function
+ * and this check keeps needing no database.
+ */
+const PARENT: Record<string, string | null> = {
+    asian: null,
+    african: null,
+    european: null,
+    middle_eastern: "asian",
+    central_asian: "asian",
+    east_asian: "asian",
+    mediterranean: "european",
+    north_african: "african",
+    levantine: "middle_eastern",
+    turkish: "mediterranean",
+    kazakh: "central_asian",
+    chinese: "east_asian",
+    sichuan: "east_asian",
+};
+
+const isAncestor = (ancestor: string, descendant: string): boolean => {
+    let current = PARENT[descendant] ?? null;
+    for (let i = 0; current && i < 10; i++) {
+        if (current === ancestor) return true;
+        current = PARENT[current] ?? null;
+    }
+    return false;
+};
+
+/** The same four-way rule as `relateCuisines`, over the fixture tree above. */
+const relate: CuisineRelator = (a, b): CuisineRelation => {
+    if (!a || !b) return "unknown";
+    if (a === b) return "same";
+    if (!(a in PARENT) || !(b in PARENT)) return "disjoint";
+    return isAncestor(a, b) || isAncestor(b, a) ? "ancestor" : "disjoint";
+};
+
+/** Every batch in this file gets the deterministic relator. */
+const makeBatch = (adjudicate: SameDishAdjudicator) =>
+    createSuggestionBatch(adjudicate, relate);
 
 function persisted(id: string, name: string): SuggestionOutcome {
     return {
@@ -124,7 +175,7 @@ async function main() {
     // 1. The exact case from the report: the same dish named twice in one batch.
     //    Must cost nothing — no vector comparison, no LLM.
     {
-        const batch = createSuggestionBatch(never);
+        const batch = makeBatch(never);
         const [first, second] = await withTimeout(
             Promise.all([
                 runDish(
@@ -152,7 +203,7 @@ async function main() {
     // 2. Different names, near-identical signatures — the Shakshuka / Shakshuka
     //    with Merguez shape. Auto-merges above HIGH with no LLM call.
     {
-        const batch = createSuggestionBatch(never);
+        const batch = makeBatch(never);
         const [, second] = await withTimeout(
             Promise.all([
                 runDish(batch, identity("Shakshuka", "shakshuka", unit(0)), {
@@ -177,7 +228,7 @@ async function main() {
 
     // 3. Genuinely different dishes stay apart, and never reach the adjudicator.
     {
-        const batch = createSuggestionBatch(never);
+        const batch = makeBatch(never);
         const [, second] = await withTimeout(
             Promise.all([
                 runDish(batch, identity("Carbonara", "carbonara", unit(0))),
@@ -197,7 +248,7 @@ async function main() {
     // 4. The gray band is the adjudicator's, and only the gray band.
     {
         let calls = 0;
-        const batch = createSuggestionBatch(async () => {
+        const batch = makeBatch(async () => {
             calls++;
             return true;
         });
@@ -222,7 +273,7 @@ async function main() {
     // 5. A sibling that failed to persist tells us nothing — do our own work
     //    rather than inheriting its failure.
     {
-        const batch = createSuggestionBatch(never);
+        const batch = makeBatch(never);
         const [, second] = await withTimeout(
             Promise.all([
                 runDish(batch, identity("Ramen", "ramen", unit(0)), {
@@ -246,7 +297,7 @@ async function main() {
     // 6. An abandoned sibling (authenticity gate, unparseable line) must release
     //    anyone waiting on it instead of stalling the batch.
     {
-        const batch = createSuggestionBatch(never);
+        const batch = makeBatch(never);
         const abandoned = batch.open();
         const later = runDish(batch, identity("Pho", "pho", unit(0)), {
             identifyAfterMs: 10,
@@ -263,7 +314,7 @@ async function main() {
     //    its own work first) — the interleaving most likely to expose a cycle.
     //    Exactly one must survive, and it must be the first to arrive.
     {
-        const batch = createSuggestionBatch(never);
+        const batch = makeBatch(never);
         const results = await withTimeout(
             Promise.all(
                 [0, 1, 2, 3].map((index) =>
@@ -295,6 +346,133 @@ async function main() {
                     r.outcome.kind === "suggestion" &&
                     r.outcome.suggestion.id === "id:Dish 0"
             )
+        );
+    }
+
+    // 8. HOMOGRAPHS. One canonical name, two dishes, told apart only by cuisine.
+    //    Before 20260812000003 the shared key collapsed these unconditionally,
+    //    which is how Kazakh Manti was silently replaced by the Turkish dish.
+    {
+        const batch = makeBatch(never);
+        const [, second] = await withTimeout(
+            Promise.all([
+                runDish(
+                    batch,
+                    identity("Manti", "manti", unit(0), "turkish"),
+                    { settleAfterMs: 20 }
+                ),
+                runDish(
+                    batch,
+                    identity("Manti", "manti", unit(DISTINCT), "kazakh"),
+                    { identifyAfterMs: 5 }
+                ),
+            ]),
+            2000,
+            "homograph"
+        );
+
+        check(
+            "same name in a disjoint cuisine stays distinct",
+            second.duplicateOf === null
+        );
+    }
+
+    // 9. A null cuisine is a WILDCARD that merges, not a distinct identity.
+    //    This is what keeps every row the backfill could not fill — and every
+    //    dish whose tags name no cuisine — behaving as it always has.
+    {
+        const batch = makeBatch(never);
+        const [, second] = await withTimeout(
+            Promise.all([
+                runDish(batch, identity("Pierogi", "pierogi", unit(0), "polish"), {
+                    settleAfterMs: 20,
+                }),
+                runDish(
+                    batch,
+                    identity("Pierogi", "pierogi", unit(DISTINCT), null),
+                    { identifyAfterMs: 5 }
+                ),
+            ]),
+            2000,
+            "unknown cuisine"
+        );
+
+        check(
+            "an unknown cuisine merges rather than splitting",
+            second.duplicateOf !== null
+        );
+    }
+
+    // 10. Ancestor drift — `levantine` under `middle eastern`. This is the drift
+    //     that ACTUALLY occurs (Shawarma is split across both in the live
+    //     catalogue), and the tree resolves it for free, with no LLM.
+    {
+        const batch = makeBatch(never);
+        const [, second] = await withTimeout(
+            Promise.all([
+                runDish(
+                    batch,
+                    identity("Shawarma", "shawarma", unit(0), "middle_eastern"),
+                    { settleAfterMs: 20 }
+                ),
+                runDish(
+                    batch,
+                    identity("Shawarma", "shawarma", unit(DISTINCT), "levantine"),
+                    { identifyAfterMs: 5 }
+                ),
+            ]),
+            2000,
+            "ancestor drift"
+        );
+
+        check(
+            "an ancestor-related cuisine merges with no adjudication",
+            second.duplicateOf !== null
+        );
+    }
+
+    // 11. The failure DIRECTION on a same-name pair, which the composite unique
+    //     constraint inverted. Fail closed and the two siblings both persist —
+    //     and the constraint now permits that, so the duplicate is permanent and
+    //     nothing collapses it. Fail open and one dish merges into the other,
+    //     which is exactly what shipped before the column existed.
+    //
+    //     Pins that `suggestion-batch` PASSES `onError: true` here. Deleting that
+    //     option as redundant is the regression this exists to catch.
+    {
+        let sawOnError: boolean | undefined;
+        const failing: SameDishAdjudicator = async (_a, _b, options) => {
+            sawOnError = options?.onError;
+            // What the real adjudicator returns from its own catch block.
+            return options?.onError ?? false;
+        };
+
+        const batch = makeBatch(failing);
+        const [, second] = await withTimeout(
+            Promise.all([
+                runDish(
+                    batch,
+                    identity("Moussaka", "moussaka", unit(0), "turkish"),
+                    { settleAfterMs: 20 }
+                ),
+                runDish(
+                    batch,
+                    identity("Moussaka", "moussaka", unit(GRAY_BAND), "kazakh"),
+                    { identifyAfterMs: 5 }
+                ),
+            ]),
+            2000,
+            "adjudicator failure on a same-name pair"
+        );
+
+        check(
+            "a same-name pair asks the adjudicator to fail OPEN",
+            sawOnError === true,
+            `onError was ${sawOnError}`
+        );
+        check(
+            "an adjudicator failure on a same-name pair merges",
+            second.duplicateOf !== null
         );
     }
 

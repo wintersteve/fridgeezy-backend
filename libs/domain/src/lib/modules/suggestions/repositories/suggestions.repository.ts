@@ -27,14 +27,17 @@ export interface ISuggestionsRepository {
     findById(id: string): Promise<Result<RecipeSuggestion | null, DomainError>>;
 
     /**
-     * Find a suggestion by its name
+     * Every suggestion stored under this canonical name.
+     *
+     * 0..N, not 0-or-1: dish identity is `(canonical_id, identity_cuisine)`, so
+     * one name can legitimately carry two dishes (Turkish Mantı, Kazakh Manti).
      *
      * @param name The suggestion name
-     * @returns Result containing the suggestion or null if not found
+     * @returns Result containing the matching suggestions, oldest first
      */
-    findByName(
+    findByCanonicalName(
         name: string
-    ): Promise<Result<RecipeSuggestion | null, DomainError>>;
+    ): Promise<Result<RecipeSuggestion[], DomainError>>;
 
     /**
      * Find all suggestions
@@ -84,6 +87,7 @@ export interface ISuggestionsRepository {
      * @param tagIds Array of tag UUIDs to associate
      * @param embedding Precomputed name embedding (text-embedding-3-small, 1536-dim)
      * @param nameEn Optional English name of the dish
+     * @param identityCuisine The cuisine half of the dish's identity
      * @returns Result containing the created suggestion UUID
      */
     persistWithRelations(
@@ -91,6 +95,7 @@ export interface ISuggestionsRepository {
         ingredientIds: string[],
         tagIds: string[],
         embedding: number[],
-        nameEn?: string
+        nameEn?: string,
+        identityCuisine?: string | null
     ): Promise<Result<string, DomainError>>;
 }

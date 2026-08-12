@@ -60,7 +60,17 @@ export class RecipesRepository implements IRecipesRepository {
          * re-parented. Resolve it with
          * {@link RecipesRepository.resolveVariantBase}.
          */
-        baseRecipeId?: string | null
+        baseRecipeId?: string | null,
+        /**
+         * The cuisine half of dish identity. In the INSERT, never a follow-up
+         * UPDATE: a base row committed with a null here is, to
+         * `recipes_dish_identity_difficulty_unique`, the "unknown cuisine" copy
+         * of this dish, and a failed patch would leave a permanent duplicate.
+         *
+         * Appended rather than slotted in beside the other identity fields, so
+         * every existing positional call site keeps meaning what it meant.
+         */
+        identityCuisine?: string | null
     ): Promise<Result<string, PersistenceError>> {
         try {
             const { data, error } = await supabaseAdmin.rpc("persist_recipe", {
@@ -94,6 +104,7 @@ export class RecipesRepository implements IRecipesRepository {
                 // defaults apply — the RPC types them as optional, not nullable.
                 p_name_en: recipe.nameEn ?? undefined,
                 p_base_recipe_id: baseRecipeId ?? undefined,
+                p_identity_cuisine: identityCuisine ?? undefined,
             });
 
             if (error) {
@@ -122,6 +133,31 @@ export class RecipesRepository implements IRecipesRepository {
                 )
             );
         }
+    }
+
+    /**
+     * A recipe's identity cuisine, for a variant to inherit from its base.
+     *
+     * A variant must not re-derive this from its own tags: modify and escalate
+     * both rewrite the tag list, and a reworded cuisine would silently re-home
+     * the dish away from the family it belongs to. Null on any error — unknown
+     * merges, which is the safe direction.
+     */
+    async identityCuisineOf(recipeId: string): Promise<string | null> {
+        const { data, error } = await supabaseAdmin
+            .from("recipes")
+            .select("identity_cuisine")
+            .eq("id", recipeId)
+            .maybeSingle();
+
+        if (error) {
+            console.warn(
+                `[RecipesRepository] Could not read identity_cuisine for ${recipeId}: ${error.message}`
+            );
+            return null;
+        }
+
+        return data?.identity_cuisine ?? null;
     }
 
     /**
@@ -186,25 +222,52 @@ export class RecipesRepository implements IRecipesRepository {
      * Find a BASE recipe (never a variant) already in the catalog under any of
      * `names`, optionally pinned to one difficulty.
      *
-     * `recipes` has no canonical_id column and no unique key on the name, so
-     * identity is decided the same way the rest of the schema decides it — via
-     * `normalize_to_canonical_id`'s rule (lowercase, non-alphanumerics collapsed
-     * to `_`), applied here in JS. The ilike filter only narrows the rows the DB
-     * returns; the normalized comparison below is what actually decides a match,
-     * so a stray LIKE wildcard in a dish name can over-fetch but never
-     * mis-identify. Both `name` and `name_en` are checked so a native name and
-     * its English translation resolve to the same dish.
+     * The ilike filter only narrows the rows the DB returns; the normalized
+     * comparison below is what actually decides a match, so a stray LIKE
+     * wildcard in a dish name can over-fetch but never mis-identify. Both `name`
+     * and `name_en` are checked so a native name and its English translation
+     * resolve to the same dish.
+     *
+     * ## Why this normalizes in JS rather than querying `canonical_id`
+     *
+     * It is NOT because the column is missing — an earlier version of this
+     * comment said `recipes` has no canonical_id, and that has been false since
+     * `20260801000007` added it as a generated column with an index. The reasons
+     * it stays this way:
+     *
+     * - **`name_en` has no generated canonical**, so half the lookup has to
+     *   normalize in JS regardless. Moving only the `name` half to the column
+     *   would put TWO rules in one function — `sqlCanonicalId` against the
+     *   column and `canonicalizeName` against `name_en` — which is worse than
+     *   one rule applied consistently to both sides.
+     * - **The two rules disagree on trimming.** `normalize_to_canonical_id` does
+     *   not trim, so a row named `"Tarte Tatin "` stores `tarte_tatin_` while a
+     *   query for `"Tarte Tatin"` computes `tarte_tatin`. Applying one rule to
+     *   both sides here sidesteps that; querying the column would have to carry
+     *   both spellings.
+     *
+     * This is self-consistent and correct, but note it is a DIFFERENT scheme
+     * from {@link findByCanonicalName}, which compares `sqlCanonicalId` against
+     * the column. Both find the same rows — each applies its rule to both sides
+     * — so this is not a live defect, but do not assume one can be swapped for
+     * the other. Revisit the query shape when this function is widened to return
+     * every candidate rather than the first match.
      */
-    async findBaseRecipe(
+    async findBaseRecipes(
         names: Array<string | null | undefined>,
         difficulty?: GenerateRecipeResponseDto["difficulty"]
-    ): Promise<Result<{ id: string; name: string } | null, PersistenceError>> {
+    ): Promise<
+        Result<
+            Array<{ id: string; name: string; identityCuisine: string | null }>,
+            PersistenceError
+        >
+    > {
         const wanted = names
             .map((name) => canonicalizeName(name))
             .filter((name): name is string => !!name);
 
         if (wanted.length === 0) {
-            return success(null);
+            return success([]);
         }
 
         try {
@@ -219,7 +282,7 @@ export class RecipesRepository implements IRecipesRepository {
 
             let query = supabaseAdmin
                 .from("recipes")
-                .select("id, name, name_en")
+                .select("id, name, name_en, identity_cuisine")
                 .is("base_recipe_id", null)
                 .or(filter);
 
@@ -233,13 +296,23 @@ export class RecipesRepository implements IRecipesRepository {
                 return failure(new PersistenceError(error.message));
             }
 
-            const match = (data ?? []).find(
-                (row) =>
-                    wanted.includes(canonicalizeName(row.name) ?? "") ||
-                    wanted.includes(canonicalizeName(row.name_en) ?? "")
-            );
+            // `filter`, not `find`: one canonical name can carry two dishes that
+            // differ only by cuisine, and choosing between them is the caller's
+            // job (`pickIdentityMatch`). `identity_cuisine` rides along in the
+            // select that was already happening.
+            const matches = (data ?? [])
+                .filter(
+                    (row) =>
+                        wanted.includes(canonicalizeName(row.name) ?? "") ||
+                        wanted.includes(canonicalizeName(row.name_en) ?? "")
+                )
+                .map((row) => ({
+                    id: row.id,
+                    name: row.name,
+                    identityCuisine: row.identity_cuisine,
+                }));
 
-            return success(match ? { id: match.id, name: match.name } : null);
+            return success(matches);
         } catch (error) {
             return failure(
                 new PersistenceError(
@@ -260,7 +333,9 @@ export class RecipesRepository implements IRecipesRepository {
      */
     async persistWithIngredientIds(
         recipe: GenerateRecipeResponseDto,
-        imageUrl: string
+        imageUrl: string,
+        /** See {@link RecipesRepository.persist}. */
+        identityCuisine?: string | null
     ): Promise<Result<string, PersistenceError>> {
         try {
             // Type assertion needed until database types are regenerated after migration
@@ -297,6 +372,7 @@ export class RecipesRepository implements IRecipesRepository {
                     })),
                     p_tags: recipe.tags || [],
                     p_name_en: recipe.nameEn ?? null,
+                    p_identity_cuisine: identityCuisine ?? undefined,
                 }
             );
 

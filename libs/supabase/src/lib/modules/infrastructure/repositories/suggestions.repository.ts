@@ -7,6 +7,7 @@ import {
     Result,
     success,
 } from "@fridgeezy/domain";
+import { suggestionCanonicalId } from "@fridgeezy/toolkit";
 import {
     RecipeSuggestion,
     RecipeSuggestionInsertPayload,
@@ -51,33 +52,46 @@ export class SuggestionsRepository implements ISuggestionsRepository {
     }
 
     /**
-     * Find a suggestion by its name using canonical_id for consistent matching
+     * Every suggestion stored under this canonical name — 0..N rows.
+     *
+     * Returned as a list rather than `maybeSingle()` because identity is
+     * `(canonical_id, identity_cuisine)` since `20260812000003`: one name can
+     * legitimately carry two dishes (Turkish Mantı and Kazakh Manti). Picking
+     * among them is `pickIdentityMatch`'s job, not this one's — `identity_cuisine`
+     * rides along in the `select("*")` that was already happening, so the
+     * tiebreak costs no extra round trip.
+     *
+     * `suggestionCanonicalId` is byte-identical to the
+     * `set_recipe_suggestion_canonical_id` trigger that fills the column, which
+     * is the only reason this lookup hits. It is NOT `canonicalizeName` — that
+     * strips edge underscores and the trigger does not, so it would miss a row
+     * stored as `sunomono_`. See the helper's docblock for the three rules and
+     * which column each one belongs to.
      */
-    async findByName(
+    async findByCanonicalName(
         name: string
-    ): Promise<Result<RecipeSuggestion | null, PersistenceError>> {
+    ): Promise<Result<RecipeSuggestion[], PersistenceError>> {
         try {
-            // Normalize the name to canonical_id format for matching
-            const canonicalId = name
-                .trim()
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, "_");
+            const canonicalId = suggestionCanonicalId(name);
+
+            if (!canonicalId) {
+                return success([]);
+            }
 
             const { data, error } = await supabaseAdmin
                 .from("recipe_suggestions")
                 .select("*")
                 .eq("canonical_id", canonicalId)
-                .maybeSingle(); // Use maybeSingle to handle 0 or 1 results
+                // Oldest first, so a tie is broken by the row that has been in
+                // the catalogue longest rather than by whatever order the
+                // planner produced.
+                .order("created_at", { ascending: true });
 
             if (error) {
                 return failure(new PersistenceError(error.message));
             }
 
-            if (!data) {
-                return success(null);
-            }
-
-            return success(data);
+            return success(data ?? []);
         } catch (error) {
             return failure(
                 new PersistenceError(
@@ -273,7 +287,14 @@ export class SuggestionsRepository implements ISuggestionsRepository {
         ingredientIds: string[],
         tagIds: string[],
         embedding: number[],
-        nameEn?: string
+        nameEn?: string,
+        /**
+         * Half of the dish's identity. Goes into the INSERT rather than a
+         * follow-up UPDATE: a row committed with a null here is, to
+         * `recipe_suggestions_dish_identity_unique`, the "unknown cuisine" copy
+         * of this dish, so a failed follow-up would leave a permanent duplicate.
+         */
+        identityCuisine?: string | null
     ): Promise<Result<string, PersistenceError>> {
         try {
             const { data, error } = await supabaseAdmin.rpc("persist_suggestion", {
@@ -285,6 +306,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
                 p_embedding: JSON.stringify(embedding),
                 // Omit when absent so the SQL default (null) applies
                 p_name_en: nameEn ?? undefined,
+                p_identity_cuisine: identityCuisine ?? undefined,
             });
 
             if (error) {

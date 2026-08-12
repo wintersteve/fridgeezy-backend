@@ -73,6 +73,63 @@ export class TagsRepository implements ITagsRepository {
     }
 
     /**
+     * Resolve canonical ids through `tag_aliases` — the alternate spellings
+     * curated for a tag, keyed by the same canonical rule as the tag itself.
+     *
+     * Returns a map from the REQUESTED canonical id to the tag it aliases, so
+     * callers can treat a hit here exactly like a hit from
+     * {@link findByCanonicalIds}. Ids that are not aliases are simply absent.
+     *
+     * `preferredType` breaks the one ambiguity in the table: the unique key is
+     * `(alias, type)`, so the same spelling may legitimately alias one tag as a
+     * cuisine and another as a dish_form. Without it this would return whichever
+     * row the planner happened to emit first.
+     */
+    async findByAliasCanonicalIds(
+        canonicalIds: string[],
+        preferredType?: TagType
+    ): Promise<Result<Map<string, Tag>, DomainError>> {
+        if (canonicalIds.length === 0) {
+            return success(new Map());
+        }
+
+        try {
+            const { data, error } = await supabaseAdmin
+                .from("tag_aliases")
+                .select("canonical_id, type, tag:tags!tag_aliases_tag_id_fkey(*)")
+                .in("canonical_id", canonicalIds);
+
+            if (error) {
+                return failure(new PersistenceError(error.message));
+            }
+
+            const resultMap = new Map<string, Tag>();
+
+            for (const row of data ?? []) {
+                const tag = row.tag as Tag | null;
+                if (!tag) continue;
+
+                // First writer wins, except that a row of the preferred type
+                // always displaces one that is not.
+                const existing = resultMap.get(row.canonical_id);
+                if (existing && (!preferredType || row.type !== preferredType)) {
+                    continue;
+                }
+
+                resultMap.set(row.canonical_id, tag);
+            }
+
+            return success(resultMap);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to find tags by alias canonical IDs: ${error instanceof Error ? error.message : String(error)}`
+                )
+            );
+        }
+    }
+
+    /**
      * Nearest tag of ONE type, rather than the best across all four.
      *
      * `vectorSearch` deliberately searches every type and returns the single

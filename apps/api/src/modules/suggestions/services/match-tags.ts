@@ -19,7 +19,7 @@ export interface TagMatch {
     originalName: string;
     tagId: string;
     tagType: string;
-    matchType: "canonical_id" | "vector" | "created";
+    matchType: "canonical_id" | "alias" | "vector" | "created";
     confidence?: number;
 }
 
@@ -77,10 +77,15 @@ async function resolveCuisineParent(
 }
 
 /**
- * Matches tag names using a 2-step fallback strategy:
+ * Matches tag names, cheapest and most certain first:
  * 1. Canonical ID lookup (direct match)
+ * 1b. `tag_aliases` — curated alternate spellings, still exact, still one query
  * 2. Vector search using embeddings (similarity threshold: 0.75)
  * 3. For cuisine tags only: auto-create if not matched
+ *
+ * The ordering is the design. Steps 1 and 1b are exact and free; step 2 guesses
+ * and costs an embedding; step 3 permanently widens the vocabulary. Anything
+ * that can be answered earlier must be, because step 3 has no undo.
  *
  * @param inputs Array of tag names (strings) or TagInput objects with optional type
  * @returns Result containing array of tag matches
@@ -133,6 +138,53 @@ export async function matchTags(
         unmatchedCanonicalIds = unmatchedCanonicalIds.filter(
             (id) => !canonicalMatches.has(id)
         );
+
+        // Step 1b: curated alternate spellings. Exact, hand-checked, and one
+        // indexed query — so it belongs ahead of the vector search rather than
+        // after it, on the same reasoning that puts the canonical lookup first.
+        //
+        // `matchTags` did not consult `tag_aliases` at all until 2026-08-12,
+        // which mattered most for cuisine: it is the one type auto-CREATED on a
+        // miss (step 3), so "szechuan" did not fall back to `sichuan`, it minted
+        // a second tag for the same cuisine and split that cuisine's dishes
+        // across both. The SQL side has always had this fallback —
+        // `persist_recipe` checks `tag_aliases` when a canonical lookup misses —
+        // so this closes a divergence between the two tag pipelines rather than
+        // inventing a new rule.
+        if (unmatchedCanonicalIds.length > 0) {
+            const aliasMatchesResult = await tagsRepo.findByAliasCanonicalIds(
+                unmatchedCanonicalIds
+            );
+
+            if (aliasMatchesResult.success === false) {
+                // An alias miss is a degraded match, not a failed one — the
+                // vector search below can still resolve these.
+                console.error(
+                    "[Tags] Alias lookup failed, falling through to vector search:",
+                    aliasMatchesResult.error
+                );
+            } else {
+                aliasMatchesResult.value.forEach((tag, canonicalId) => {
+                    const input = canonicalToInput.get(canonicalId);
+                    if (!input) return;
+
+                    console.log(
+                        `[Tags] Alias "${input.name}" -> ${tag.name} (${tag.type})`
+                    );
+
+                    matches.push({
+                        originalName: input.name,
+                        tagId: tag.id,
+                        tagType: tag.type,
+                        matchType: "alias",
+                    });
+                });
+
+                unmatchedCanonicalIds = unmatchedCanonicalIds.filter(
+                    (id) => !aliasMatchesResult.value.has(id)
+                );
+            }
+        }
 
         // Get TagInputs for still unmatched canonical IDs
         let unmatchedInputs = unmatchedCanonicalIds

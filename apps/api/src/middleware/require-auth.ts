@@ -6,8 +6,12 @@ import type { NextFunction, Request, Response } from "express";
  * to read in a diff. There is no positive `AUTH_REQUIRED` flag on purpose:
  * enforcement is the default, so forgetting to set anything is the safe outcome
  * rather than the unsafe one.
+ *
+ * Exported so `requireEntitlement` can stand down on the same signal rather than
+ * testing the variable itself. It has to know: with no auth there is no user id,
+ * and an entitlement cannot be looked up for nobody.
  */
-function isAuthDisabled(): boolean {
+export function isAuthDisabled(): boolean {
     return process.env.ALLOW_UNAUTHENTICATED === "true";
 }
 

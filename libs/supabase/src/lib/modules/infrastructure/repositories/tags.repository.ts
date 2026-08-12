@@ -9,14 +9,14 @@ import {
 } from "@fridgeezy/domain";
 import { Tag, TagInsertPayload, TagType } from "@fridgeezy/types";
 
-import { supabase } from "../../client";
+import { supabaseAdmin } from "../../client";
 
 export class TagsRepository implements ITagsRepository {
     async findByNames(
         names: string[]
     ): Promise<Result<Map<string, Tag>, DomainError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("tags")
                 .select("*")
                 .in("name", names);
@@ -46,7 +46,7 @@ export class TagsRepository implements ITagsRepository {
         canonicalIds: string[]
     ): Promise<Result<Map<string, Tag>, DomainError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("tags")
                 .select("*")
                 .in("canonical_id", canonicalIds);
@@ -87,7 +87,7 @@ export class TagsRepository implements ITagsRepository {
         threshold: number
     ): Promise<Result<TagVectorMatch | null, DomainError>> {
         try {
-            const { data, error } = await supabase.rpc("search_tags", {
+            const { data, error } = await supabaseAdmin.rpc("search_tags", {
                 query_embedding: JSON.stringify(embedding),
                 match_type: type,
                 match_threshold: threshold,
@@ -102,7 +102,7 @@ export class TagsRepository implements ITagsRepository {
                 return success(null);
             }
 
-            const { data: tagData, error: tagError } = await supabase
+            const { data: tagData, error: tagError } = await supabaseAdmin
                 .from("tags")
                 .select("*")
                 .eq("id", data[0].id)
@@ -142,7 +142,7 @@ export class TagsRepository implements ITagsRepository {
 
             // Search all tag types in parallel
             const searchPromises = tagTypes.map((type) =>
-                supabase.rpc("search_tags", {
+                supabaseAdmin.rpc("search_tags", {
                     query_embedding: queryEmbedding,
                     match_type: type,
                     match_threshold: threshold,
@@ -176,7 +176,7 @@ export class TagsRepository implements ITagsRepository {
             );
 
             // Fetch the full tag data
-            const { data: tagData, error: tagError } = await supabase
+            const { data: tagData, error: tagError } = await supabaseAdmin
                 .from("tags")
                 .select("*")
                 .eq("id", bestMatch.id)
@@ -201,7 +201,7 @@ export class TagsRepository implements ITagsRepository {
 
     async create(tag: TagInsertPayload): Promise<Result<Tag, DomainError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("tags")
                 .insert(tag)
                 .select()
@@ -211,7 +211,7 @@ export class TagsRepository implements ITagsRepository {
                 // Concurrent create race (duplicate canonical_id): reuse the row
                 // that won rather than failing the whole suggestion.
                 if (error.code === "23505" && tag.canonical_id) {
-                    const existing = await supabase
+                    const existing = await supabaseAdmin
                         .from("tags")
                         .select()
                         .eq("canonical_id", tag.canonical_id)

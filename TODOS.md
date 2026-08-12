@@ -48,11 +48,43 @@ bottom of this file — the checkboxes here are the summary.
 - [ ] **Android is not configured at all.** `REVENUECAT_API_KEY` has an empty
       string for Android (`core/revenuecat/constants`), so none of this works
       there — silently, as a no-op rather than an error. Fine if iOS ships first.
-- [ ] **Decide what a 402 should *do* in the client.** Today it shows copy.
-      Auto-redirecting to the paywall was deliberately not built: right after a
-      real purchase the device says subscribed while the server has not yet seen
-      the webhook, so a redirect sends a paying user to a paywall they cannot
-      satisfy. Fix the window above first.
+- [x] **Decide what a 402 should *do* in the client.** Done 2026-08-12: it opens
+      `/unlock`, the dismissible full-screen modal, via `useSSEStream` — one
+      choke point covering every SSE feature. 401 got the same treatment and its
+      own `SSEError` kind, because the app now opens without a session so a 401
+      is usually a guest rather than a stale token.
+
+      The old objection — that a redirect right after a real purchase sends a
+      paying user to a paywall they cannot satisfy — is narrowed but not gone.
+      The modal is **dismissible** (the onboarding wall it replaces was not), so
+      the failure costs a tap rather than trapping anyone. Still fix the
+      purchase-to-webhook window above.
+- [ ] **The unlock modal's email path loses the user's place.** Apple, Google and
+      Facebook sign in *inside* the modal, so `useFeatureAccess` re-evaluates and
+      it advances to the subscription step or dismisses. "Continue with Email"
+      pushes onto the auth stack and the modal unmounts, so the user lands back
+      in the app and has to tap the feature again. Fixing it needs an intent
+      recorded across the auth flow **and** a decision about what to do when a
+      sign-*up* detours through the whole onboarding flow — re-presenting a
+      paywall at the end of that is not obviously right. Deliberately not
+      half-built.
+- [ ] **`public.has_user(email)` is an unauthenticated user-enumeration oracle.**
+      `security definer` over `auth.users`, reachable by `anon` through
+      PostgREST, so anyone holding the shipped anon key can ask whether a given
+      email has an account. It survived the 2026-08-12 RLS tightening because it
+      is **load-bearing**: `EmailScreen.handleContinue` calls it to route between
+      `/(auth)/login/password` and `/(auth)/sign-up/password`. Revoking execute
+      does not harden the flow, it removes email sign-in. Closing it properly
+      means changing the flow — one password screen that lets the sign-in attempt
+      decide, or an OTP/magic-link flow, both enumeration-safe by construction.
+      That is a product decision about login, not a migration.
+- [ ] **Drop the anon Supabase client from `libs/supabase`.** Every repository
+      moved to `supabaseAdmin` on 2026-08-12 (they had to, or the RLS tightening
+      would have broken suggestion persistence), so the `supabase` export is now
+      unused and carries a deprecation notice. Removing it makes
+      `SUPABASE_ANON_KEY` an unused boot requirement, which reaches into
+      `env-local`/`env-remote`, `put-secrets.sh` and the deployed function's
+      parameters. Worth doing; not worth doing in that change.
 
 ---
 

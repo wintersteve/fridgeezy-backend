@@ -13,6 +13,16 @@ export interface RouteInfo {
      * decision. Absent means gated, matching the mount default.
      */
     isPublic?: boolean;
+    /**
+     * Whether the path additionally requires an active subscription.
+     *
+     * Unlike {@link isPublic} this **is** derived here, and the asymmetry is real
+     * rather than an inconsistency: authentication is applied by the mount, which
+     * a router cannot see, while `requireEntitlement` is attached to the route
+     * itself and so sits in this router's own stack. Deriving it is the whole
+     * point — it means the banner cannot disagree with the routing.
+     */
+    requiresEntitlement?: boolean;
 }
 
 /**
@@ -29,6 +39,8 @@ interface RouterLayer {
     route?: {
         path: string | string[];
         methods?: Record<string, boolean>;
+        /** The route's own handler chain — its per-route middleware, then the handler. */
+        stack?: { handle?: { isEntitlementGate?: boolean } }[];
     };
     handle?: { stack?: RouterLayer[] };
 }
@@ -67,8 +79,18 @@ export function collectRoutes(router: Router, prefix = ""): RouteInfo[] {
 
         if (methods.length === 0) continue;
 
+        // Reads the marker `require-entitlement.ts` sets on itself rather than
+        // the handler's function name, which a production bundle may rename.
+        const requiresEntitlement = (layer.route.stack ?? []).some(
+            (handler) => handler.handle?.isEntitlementGate === true
+        );
+
         for (const path of [layer.route.path].flat()) {
-            routes.push({ methods, path: joinPath(prefix, path) });
+            routes.push({
+                methods,
+                path: joinPath(prefix, path),
+                ...(requiresEntitlement ? { requiresEntitlement } : {}),
+            });
         }
     }
 

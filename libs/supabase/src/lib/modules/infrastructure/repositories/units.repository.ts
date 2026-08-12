@@ -10,7 +10,7 @@ import {
 } from "@fridgeezy/domain";
 import { Unit } from "@fridgeezy/types";
 
-import { supabase } from "../../client";
+import { supabaseAdmin } from "../../client";
 
 /**
  * Normalizes a string to canonical_id format.
@@ -50,7 +50,7 @@ export class UnitsRepository implements IUnitsRepository {
         canonicalId: string
     ): Promise<Result<Unit | null, DomainError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("units")
                 .select("*")
                 .eq("canonical_id", canonicalId)
@@ -74,7 +74,7 @@ export class UnitsRepository implements IUnitsRepository {
         abbreviation: string
     ): Promise<Result<Unit | null, DomainError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("units")
                 .select("*")
                 .eq("abbreviation", abbreviation)
@@ -98,7 +98,7 @@ export class UnitsRepository implements IUnitsRepository {
         embedding: number[]
     ): Promise<Result<UnitVectorMatch, DomainError>> {
         try {
-            const { data, error } = await supabase.rpc("search_units", {
+            const { data, error } = await supabaseAdmin.rpc("search_units", {
                 query_embedding: JSON.stringify(embedding),
                 match_count: 1,
             });
@@ -117,7 +117,7 @@ export class UnitsRepository implements IUnitsRepository {
                 );
             }
 
-            const { data: unitData, error: unitError } = await supabase
+            const { data: unitData, error: unitError } = await supabaseAdmin
                 .from("units")
                 .select("*")
                 .eq("id", results[0].id)

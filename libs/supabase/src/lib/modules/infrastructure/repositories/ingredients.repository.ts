@@ -9,14 +9,14 @@ import {
 } from "@fridgeezy/domain";
 import { Ingredient, IngredientInsertPayload } from "@fridgeezy/types";
 
-import { supabase } from "../../client";
+import { supabaseAdmin } from "../../client";
 
 export class IngredientsRepository implements IIngredientsRepository {
     async findByCanonicalIds(
         ids: string[]
     ): Promise<Result<Map<string, Ingredient>, DomainError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("ingredients")
                 .select("*")
                 .in("canonical_id", ids);
@@ -46,7 +46,7 @@ export class IngredientsRepository implements IIngredientsRepository {
         names: string[]
     ): Promise<Result<Map<string, Ingredient>, DomainError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("ingredients")
                 .select("*")
                 .in("name", names);
@@ -76,7 +76,7 @@ export class IngredientsRepository implements IIngredientsRepository {
         aliases: string[]
     ): Promise<Result<Map<string, string>, DomainError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("ingredient_aliases")
                 .select("alias, ingredient_id")
                 .in("alias", aliases);
@@ -109,7 +109,7 @@ export class IngredientsRepository implements IIngredientsRepository {
         try {
             // Idempotent: the alias column is unique — do nothing if it already
             // exists (first writer wins; we don't repoint an existing alias).
-            const { error } = await supabase
+            const { error } = await supabaseAdmin
                 .from("ingredient_aliases")
                 .upsert(
                     { ingredient_id: ingredientId, alias },
@@ -136,7 +136,7 @@ export class IngredientsRepository implements IIngredientsRepository {
     ): Promise<Result<VectorMatch | null, DomainError>> {
         try {
             // Convert embedding array to the format Supabase expects (JSON string)
-            const { data, error } = await supabase.rpc("search_ingredients", {
+            const { data, error } = await supabaseAdmin.rpc("search_ingredients", {
                 query_embedding: JSON.stringify(embedding),
                 match_threshold: threshold,
                 match_count: 1,
@@ -152,7 +152,7 @@ export class IngredientsRepository implements IIngredientsRepository {
 
             // Fetch the full ingredient data
             const { data: ingredientData, error: ingredientError } =
-                await supabase
+                await supabaseAdmin
                     .from("ingredients")
                     .select("*")
                     .eq("id", data[0].id)
@@ -179,7 +179,7 @@ export class IngredientsRepository implements IIngredientsRepository {
         ingredient: IngredientInsertPayload
     ): Promise<Result<Ingredient, DomainError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("ingredients")
                 .insert(ingredient)
                 .select()
@@ -189,7 +189,7 @@ export class IngredientsRepository implements IIngredientsRepository {
                 // Concurrent create race (duplicate canonical_id): reuse the row
                 // that won rather than failing the whole suggestion.
                 if (error.code === "23505" && ingredient.canonical_id) {
-                    const existing = await supabase
+                    const existing = await supabaseAdmin
                         .from("ingredients")
                         .select()
                         .eq("canonical_id", ingredient.canonical_id)

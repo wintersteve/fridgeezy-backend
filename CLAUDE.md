@@ -540,19 +540,51 @@ WebP; the per-screen deep links and the AsyncStorage trick for forcing the
 app's dark theme are in the auto-memory's simulator notes. Fonts are
 self-hosted rather than Google-CDN'd on purpose (GDPR — LG München).
 
-`requireEntitlement` (`middleware/require-entitlement.ts`) runs after
-`requireSupabaseUser` on every mount except `billing`, and answers **402**, not
+`requireEntitlement` (`middleware/require-entitlement.ts`) answers **402**, not
 401 — "you are who you say you are, and this needs a subscription", which is what
 tells the client to show the paywall rather than the login screen.
 
-**It is opt-IN via `REQUIRE_ENTITLEMENT=true`, inverting `ALLOW_UNAUTHENTICATED`
-deliberately.** Enforcement cannot be the default yet: the client's purchase call
-is still commented out, so nobody can obtain an entitlement and enabling this
-would take the product offline rather than protect the spend. It is a rollout
-switch for a feature that is not live — **flip it on in the same release that
-ships purchasing, then delete the flag.** The startup banner shouts while it is
-off, because "off" is both correct today and silently expensive the day it stops
-being.
+**It is attached per ROUTE, not per mount** (2026-08-12). It used to run on every
+mount except `billing`, which made "signed in" and "subscribed" the same thing.
+The product now has three tiers and the split runs *through* the recipes module
+rather than between modules:
+
+| Tier | Gets |
+| --- | --- |
+| **guest** | the catalog, read straight from Supabase — never reaches this API |
+| **account** | every prompt: generate, promote, chat, extract, substitutes, modify, escalate |
+| **subscriber** | premium routes — currently only `POST /recipes/:id/compose` |
+
+So the MOUNTS loop applies `requireSupabaseUser` alone, and a premium route names
+the gate itself:
+
+```ts
+router.post("/:recipeId/compose", requireEntitlement, RecipesController.compose);
+```
+
+Note this is the opposite of how authentication works, and deliberately so. Auth
+is applied by the loop precisely so a new module *cannot* be added
+unauthenticated; premium is now an addition someone has to remember. The failure
+directions differ — forgetting auth is a security hole, forgetting this gives a
+premium route away — and the safety net is that the startup banner **derives**
+`← premium` from a marker the middleware sets on itself
+(`requireEntitlement.isEntitlementGate`) and counts it on the `billing` line. A
+route that lost its gate shows up on every boot. **After adding a premium route,
+read the banner.** The marker is a property rather than the function's name
+because esbuild may rename a local binding in the Lambda bundle, which would
+leave the banner reporting zero while the gate was in fact enforcing.
+
+`entitlementExempt` is gone — with the gate opt-in per route, nothing needs
+exempting.
+
+**`REQUIRE_ENTITLEMENT=true` is still opt-IN, inverting `ALLOW_UNAUTHENTICATED`
+deliberately.** Failing closed here would put the paywall in front of routes the
+product now gives away. It is a rollout switch — **flip it on in the same release
+that ships purchasing, then delete the flag.** The startup banner shouts while it
+is off, because "off" is both correct today and silently expensive the day it
+stops being. It also stands down when `ALLOW_UNAUTHENTICATED=true`: with no auth
+there is no user id to look an entitlement up for, and that combination used to
+answer 500 "misconfigured" on every premium route.
 
 State lives in `profile_entitlements`, written **only** by the webhook (RLS has a
 select policy and deliberately no insert/update/delete, so every client role is

@@ -9,13 +9,13 @@ import {
 } from "@fridgeezy/domain";
 import { Category } from "@fridgeezy/types";
 
-import { supabase } from "../../client";
+import { supabaseAdmin } from "../../client";
 
 export class CategoriesRepository implements ICategoriesRepository {
     async findBestMatch(
         embedding: number[]
     ): Promise<Result<CategoryVectorMatch, DomainError>> {
-        const { data, error } = await supabase.rpc("search_categories", {
+        const { data, error } = await supabaseAdmin.rpc("search_categories", {
             query_embedding: JSON.stringify(embedding),
             match_count: 1,
         });
@@ -32,7 +32,7 @@ export class CategoriesRepository implements ICategoriesRepository {
             );
         }
 
-        const { data: categoryData, error: categoryError } = await supabase
+        const { data: categoryData, error: categoryError } = await supabaseAdmin
             .from("categories")
             .select("*")
             .eq("id", data[0].id)
@@ -51,7 +51,7 @@ export class CategoriesRepository implements ICategoriesRepository {
     async findByCanonicalId(
         canonicalId: string
     ): Promise<Result<Category | null, DomainError>> {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("categories")
             .select("*")
             .eq("canonical_id", canonicalId)

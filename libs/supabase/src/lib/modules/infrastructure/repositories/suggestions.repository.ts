@@ -12,7 +12,7 @@ import {
     RecipeSuggestionInsertPayload,
 } from "@fridgeezy/types";
 
-import { supabase } from "../../client";
+import { supabaseAdmin } from "../../client";
 
 export class SuggestionsRepository implements ISuggestionsRepository {
     /**
@@ -22,7 +22,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
         id: string
     ): Promise<Result<RecipeSuggestion | null, PersistenceError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("recipe_suggestions")
                 .select("*")
                 .eq("id", id)
@@ -63,7 +63,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
                 .toLowerCase()
                 .replace(/[^a-z0-9]+/g, "_");
 
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("recipe_suggestions")
                 .select("*")
                 .eq("canonical_id", canonicalId)
@@ -92,7 +92,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
      */
     async findAll(): Promise<Result<RecipeSuggestion[], PersistenceError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("recipe_suggestions")
                 .select("*")
                 .order("created_at", { ascending: false });
@@ -119,7 +119,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
         suggestion: RecipeSuggestion
     ): Promise<Result<RecipeSuggestion, PersistenceError | ConflictError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("recipe_suggestions")
                 .insert(suggestion)
                 .select("*")
@@ -159,7 +159,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
         suggestion: RecipeSuggestion
     ): Promise<Result<RecipeSuggestion, PersistenceError | NotFoundError>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("recipe_suggestions")
                 .update(suggestion)
                 .eq("id", suggestion.id)
@@ -194,7 +194,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
      */
     async delete(id: string): Promise<Result<void, PersistenceError>> {
         try {
-            const { error } = await supabase
+            const { error } = await supabaseAdmin
                 .from("recipe_suggestions")
                 .delete()
                 .eq("id", id);
@@ -233,7 +233,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
         >
     > {
         try {
-            const { data, error } = await supabase.rpc(
+            const { data, error } = await supabaseAdmin.rpc(
                 "search_recipe_suggestions",
                 {
                     query_embedding: JSON.stringify(embedding),
@@ -276,7 +276,7 @@ export class SuggestionsRepository implements ISuggestionsRepository {
         nameEn?: string
     ): Promise<Result<string, PersistenceError>> {
         try {
-            const { data, error } = await supabase.rpc("persist_suggestion", {
+            const { data, error } = await supabaseAdmin.rpc("persist_suggestion", {
                 p_name: suggestion.name,
                 p_description: suggestion.description ?? "",
                 p_difficulty: suggestion.difficulty as "easy" | "medium" | "hard",

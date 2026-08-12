@@ -1,7 +1,6 @@
 import { Router } from "express";
 
 import { requireSupabaseUser } from "../middleware/require-auth";
-import { requireEntitlement } from "../middleware/require-entitlement";
 import { BillingPublicRoutes, BillingRoutes } from "../modules/billing";
 import { ChatRoutes } from "../modules/chat";
 import { IngredientsRoutes } from "../modules/ingredients";
@@ -25,15 +24,6 @@ interface Mount {
      * therefore carries its own shared-secret check).
      */
     publicRouter?: Router;
-    /**
-     * Set to skip {@link requireEntitlement} on this module's gated routes.
-     *
-     * Defaults to enforcing, so a new feature module costs LLM spend only for
-     * subscribers unless someone deliberately says otherwise. `billing` is the
-     * only exemption and has to be: it is how a user obtains an entitlement, so
-     * requiring one to reach it is a loop with no entry.
-     */
-    entitlementExempt?: boolean;
 }
 
 /**
@@ -51,12 +41,7 @@ const MOUNTS: Mount[] = [
     { prefix: "/recipes", router: RecipesRoutes, publicRouter: RecipesPublicRoutes },
     { prefix: "/substitutes", router: SubstitutesRoutes },
     { prefix: "/chat", router: ChatRoutes },
-    {
-        prefix: "/billing",
-        router: BillingRoutes,
-        publicRouter: BillingPublicRoutes,
-        entitlementExempt: true,
-    },
+    { prefix: "/billing", router: BillingRoutes, publicRouter: BillingPublicRoutes },
 ];
 
 /** Routes registered directly on the REST router rather than in a feature module. */
@@ -74,12 +59,7 @@ export function createRestRouter() {
     // credentials cannot answer the question it exists to answer. Every mount is
     // covered because the loop is the only way a feature router gets mounted;
     // adding one to MOUNTS cannot accidentally leave it open.
-    for (const {
-        prefix,
-        router: mounted,
-        publicRouter,
-        entitlementExempt,
-    } of MOUNTS) {
+    for (const { prefix, router: mounted, publicRouter } of MOUNTS) {
         // The open routes go first, because order is what decides this: Express
         // walks layers in registration order, so a request matching a route on
         // `publicRouter` is answered before the gated mount is ever reached.
@@ -89,14 +69,13 @@ export function createRestRouter() {
             router.use(prefix, publicRouter);
         }
 
-        // Entitlement runs after authentication and never instead of it: it
-        // reads the user id that `requireSupabaseUser` resolved, so the order is
-        // a data dependency rather than a preference.
-        const gate = entitlementExempt
-            ? [requireSupabaseUser]
-            : [requireSupabaseUser, requireEntitlement];
-
-        router.use(prefix, ...gate, mounted);
+        // Authentication only. The paid gate is NOT applied here — it is
+        // attached per route (`requireEntitlement` in the feature router), because
+        // the free/paid split runs through the recipes module rather than between
+        // modules: `generate` is free to any signed-in user, `compose` is not.
+        // See `require-entitlement.ts` for what that trades away and how the
+        // startup banner covers it.
+        router.use(prefix, requireSupabaseUser, mounted);
     }
 
     addDirectRoutes(router);

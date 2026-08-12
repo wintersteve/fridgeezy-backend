@@ -62,14 +62,26 @@ function describeAuth(routes: RouteInfo[]): string {
  * the state that silently costs money once it stops being correct. Something has
  * to say so on every boot.
  */
-function describeEntitlement(): string {
+function describeEntitlement(routes: RouteInfo[]): string {
+    // Counted from the routing itself, so a premium route that lost its
+    // middleware reads as one fewer here on the next boot. This is the safety net
+    // for entitlement being an opt-in the author has to remember — see the note
+    // on `requireEntitlement`. Zero is worth shouting about while any route is
+    // meant to be paid.
+    const premium = routes.filter((route) => route.requiresEntitlement).length;
+    const scope = `${premium} premium route${premium === 1 ? "" : "s"}`;
+
     if (!isEntitlementRequired()) {
-        return "⚠ NOT ENFORCED — every signed-in user gets full access (REQUIRE_ENTITLEMENT unset)";
+        return `⚠ NOT ENFORCED — ${scope} open to every signed-in user (REQUIRE_ENTITLEMENT unset)`;
+    }
+
+    if (premium === 0) {
+        return "⚠ enforced, but NO route carries requireEntitlement — nothing is actually paid";
     }
 
     return process.env.REVENUECAT_WEBHOOK_SECRET
-        ? "active subscription required"
-        : "⚠ enforced, but REVENUECAT_WEBHOOK_SECRET is unset — no event can be recorded";
+        ? `${scope} · active subscription required`
+        : `⚠ ${scope} enforced, but REVENUECAT_WEBHOOK_SECRET is unset — no event can be recorded`;
 }
 
 /**
@@ -83,15 +95,24 @@ function formatRoutes(routes: RouteInfo[]): string[] {
     const width = Math.max(...routes.map((route) => method(route).length));
     const pathWidth = Math.max(...routes.map((route) => route.path.length));
 
-    // Open routes are marked, gated ones are not. Marking the exception keeps the
-    // list readable and puts the attention on the line that can be wrong — an
-    // unintentionally open route is visible on every boot rather than only in
-    // the diff that opened it.
+    // Only the exceptions are marked — a plain line is the default tier, a
+    // signed-in account. That keeps the list readable and puts the attention on
+    // the two lines that can be wrong: an unintentionally open route, and a
+    // premium route that lost its gate. Both are visible on every boot rather
+    // than only in the diff that caused them.
+    //
+    // The two are mutually exclusive by construction: an open route is on a
+    // `publicRouter`, which is mounted ahead of the auth gate, so it can have no
+    // entitlement to check.
     return routes.map((route) => {
-        const open = route.isPublic ? "  ← open" : "";
-        const path = open ? route.path.padEnd(pathWidth) : route.path;
+        const mark = route.isPublic
+            ? "  ← open"
+            : route.requiresEntitlement
+              ? "  ← premium"
+              : "";
+        const path = mark ? route.path.padEnd(pathWidth) : route.path;
 
-        return `  ${method(route).padEnd(width)}  ${path}${open}`;
+        return `  ${method(route).padEnd(width)}  ${path}${mark}`;
     });
 }
 
@@ -104,7 +125,7 @@ export function startupBanner(port: number): string {
         "",
         `  provider  ${describeProvider()}`,
         `  auth      ${describeAuth(routes)}`,
-        `  billing   ${describeEntitlement()}`,
+        `  billing   ${describeEntitlement(routes)}`,
         `  runtime   node ${process.version} · ${process.env.NODE_ENV ?? "development"}`,
         `  routes    ${routes.length}`,
         "",

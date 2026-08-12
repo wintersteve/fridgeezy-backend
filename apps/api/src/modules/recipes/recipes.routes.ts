@@ -1,5 +1,7 @@
 import { Router } from "express";
 
+import { requireEntitlement } from "../../middleware/require-entitlement";
+
 import { RecipesController } from "./recipes.controller";
 
 const router = Router();
@@ -7,7 +9,21 @@ const router = Router();
 router.post("/generate", RecipesController.generate);
 router.post("/difficulty/escalate", RecipesController.escalate);
 router.post("/modify", RecipesController.modify);
-router.post("/:recipeId/compose", RecipesController.compose);
+
+/**
+ * The one premium route, and the reason `requireEntitlement` is attached per
+ * route rather than per mount: the free/paid line runs through this module, not
+ * between modules. Generating, modifying and escalating a recipe are what a
+ * signed-in account gets; composing a whole menu around one is what a
+ * subscription gets.
+ *
+ * `requireSupabaseUser` still runs first — it is applied to the whole mount by
+ * `createRestRouter`, and this gate reads the user id it resolves. Adding a
+ * premium route means adding this middleware *and* checking it shows up as
+ * `← premium` in the startup banner.
+ */
+router.post("/:recipeId/compose", requireEntitlement, RecipesController.compose);
+
 router.post("/:recipeId/chat", RecipesController.chat);
 
 export const RecipesRoutes = router;

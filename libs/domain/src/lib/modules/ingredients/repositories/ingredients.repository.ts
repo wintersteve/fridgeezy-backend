@@ -18,6 +18,13 @@ export interface IIngredientsRepository {
     ): Promise<Result<Map<string, Ingredient>, DomainError>>;
 
     /**
+     * Find ingredients by their primary keys (batch operation)
+     * @param ids Array of ingredient ids to fetch
+     * @returns Map of id → Ingredient for found matches
+     */
+    findByIds(ids: string[]): Promise<Result<Map<string, Ingredient>, DomainError>>;
+
+    /**
      * Find ingredients by matching aliases (batch operation)
      * @param aliases Array of alias names to search for
      * @returns Map of alias → ingredient_id for found matches

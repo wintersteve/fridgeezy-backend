@@ -72,6 +72,38 @@ export class IngredientsRepository implements IIngredientsRepository {
         }
     }
 
+    async findByIds(
+        ids: string[]
+    ): Promise<Result<Map<string, Ingredient>, DomainError>> {
+        try {
+            if (ids.length === 0) return success(new Map());
+
+            const { data, error } = await supabaseAdmin
+                .from("ingredients")
+                .select("*")
+                .in("id", ids);
+
+            if (error) {
+                return failure(new PersistenceError(error.message));
+            }
+
+            const resultMap = new Map<string, Ingredient>();
+            if (data) {
+                data.forEach((ingredient) => {
+                    resultMap.set(ingredient.id, ingredient as Ingredient);
+                });
+            }
+
+            return success(resultMap);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to find ingredients by ids: ${error instanceof Error ? error.message : String(error)}`
+                )
+            );
+        }
+    }
+
     async findByAliases(
         aliases: string[]
     ): Promise<Result<Map<string, string>, DomainError>> {

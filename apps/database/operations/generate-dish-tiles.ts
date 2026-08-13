@@ -15,7 +15,7 @@ const BUCKET = "dish_tiles";
  * on a recipe screen it is the dish you are already reading, which the client
  * drops into the middle slot itself.
  *
- * Curated the same way `CUISINES` in `generate-category-images` names one
+ * Curated the same way `CUISINES` in `generate-cuisine-cards` names one
  * representative dish per cuisine: the model needs a concrete dish to plate, and
  * "an appetizer" is not something anyone can illustrate.
  */
@@ -235,7 +235,7 @@ async function main() {
 
     for (const [path, prompt] of entries) {
         results.push(await generateAndUpload(path, prompt));
-        // Same spacing as `generate-category-images` — enough to stay clear of
+        // Same spacing as `generate-cuisine-cards` — enough to stay clear of
         // the image API's rate limit on a back-to-back run.
         await new Promise((resolve) => setTimeout(resolve, 1000));
     }

@@ -148,14 +148,6 @@
                     "cwd": "apps/database"
                 }
             },
-            "generate-category-images": {
-                "executor": "nx:run-commands",
-                "options": {
-                    "command": "npx jiti operations/generate-category-images.ts",
-                    "cwd": "apps/database",
-                    "forwardAllArgs": true
-                }
-            },
             "generate-cuisine-banners": {
                 "executor": "nx:run-commands",
                 "options": {

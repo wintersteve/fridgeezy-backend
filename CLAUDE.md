@@ -71,7 +71,18 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
   the one to reach for after any bulk import: `seed-ingredients` embeds only the
   rows it creates, so anything the LLM added arrives without a vector and stays
   invisible to similarity matching until this runs.
-- `seed-ingredients`, `generate-ingredient-seed`, `generate-category-images`
+- `seed-ingredients`, `generate-ingredient-seed`
+- `generate-cuisine-cards` / `generate-cuisine-banners` — the two cuisine
+  surfaces on the home feed, into the `cuisine_cards` (portrait card) and
+  `cuisine_banners` (wide banner) buckets. Both key on the client's curated
+  `TOP_CUISINES` spelling, which is also what `CUISINE_BLURBS` keys on — those
+  three lists have to agree exactly or a tile 404s.
+
+  They replaced `generate-category-images` and its square `cuisine_images`
+  bucket, both removed on 2026-08-13 along with the bucket's objects. Note the
+  name that script carried: it wrote to `cuisine_images`, never to the
+  `category_images` bucket, which is a separate ingredient-category set nothing
+  in this repo currently writes.
 - `generate-dish-tiles` — the plated tiles behind the compose card, plus the
   abstract `bowl-placeholder` the suggestion cards use as their "no photo yet"
   state, into the `dish_tiles` bucket. Generated at the aspect they are
@@ -699,8 +710,9 @@ those frames incrementally, which is why frame shapes are part of the contract.
   `check-streaming-conformance` asserts both.
 - **`@fridgeezy/genai`** (`@google/genai`) generates recipe images. It also owns
   `buildFoodIllustrationStyle` — the art direction shared by recipe heroes
-  (`create-recipe-image.ts`) and the home feed's cuisine tiles
-  (`operations/generate-category-images.ts`). Those two render on the same
+  (`create-recipe-image.ts`) and the home feed's cuisine surfaces
+  (`operations/generate-cuisine-cards.ts`,
+  `operations/generate-cuisine-banners.ts`). Those render on the same
   screen and previously kept separate copies of the same paragraph, which
   drifted: the recipe prompt lost the palette hex codes the cuisine one kept and
   started producing a green plate on marble for one dish and a rustic speckled

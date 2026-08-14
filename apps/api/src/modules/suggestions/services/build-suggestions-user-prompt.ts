@@ -32,6 +32,7 @@ export const buildSuggestionsUserPrompt = (
         formatFilter("Cuisine", request.cuisine),
         formatFilter("Difficulty", request.difficulty),
         formatFilter("Dietary Restrictions", request.dietaryRestrictions),
+        formatFilter("Dish Form", request.dishForm),
         formatFilter("Ingredients", request.ingredients),
     ]
         .filter(Boolean)

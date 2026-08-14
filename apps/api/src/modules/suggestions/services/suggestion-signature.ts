@@ -21,6 +21,31 @@ export { buildSuggestionSignature } from "@fridgeezy/toolkit";
 // distinct pairs scoring 0.749/0.750 (Carbonara/Cacio e Pepe, Pad Thai/Pad See
 // Ew) — LLM calls that could only ever answer "no".
 //
+// Re-run 2026-08-14 after the `dish` component marker was dropped, since the
+// signature embeds the tag list and every ordinary dish lost a token. BOTH
+// CONSTANTS HELD, and the separation improved rather than degrading:
+//
+//              2026-07-31      2026-08-14
+//   same-dish  0.77 – 0.84     0.796 – 0.843
+//   diff-dish  0.63 – 0.80     0.630 – 0.778
+//
+// The two distributions no longer overlap at all (maxDiff 0.778 < minSame
+// 0.796), where they previously did. That is the expected direction and worth
+// keeping in mind before adding any near-universal tag: `dish` sat on 87% of
+// rows, so it was shared vocabulary between dishes that have nothing to do with
+// each other, and it inflated their similarity. A tag carried by everything
+// cannot discriminate between anything — it can only add noise to a metric built
+// on overlap.
+//
+// The run suggests HIGH ≈ 0.90. DELIBERATELY NOT TAKEN. That figure comes from
+// the generic "just above maxDiff" guidance the harness prints, and this is the
+// case its own header warns off: the fixtures are all CROSS-NAME and measure the
+// floor, while real same-dish traffic agrees on the canonical name and scores
+// ~1.00. Dropping HIGH to 0.90 would auto-merge the calibrator's own LABEL-ONLY
+// probe for Manti [turkish] ↔ [kazakh] (0.910) — two dishes separated by nothing
+// but their cuisine tag — which is precisely a case for the adjudicator rather
+// than for a different number.
+//
 // Shared by suggestion↔suggestion and suggestion↔recipe dedup so both sides of
 // the catalog judge "same dish" by the same rule.
 /** Signature cosine similarity at/above which two dishes auto-merge (no LLM). */

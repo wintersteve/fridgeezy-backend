@@ -45,8 +45,12 @@ values
     ('glaze', 'glaze', 'component'),
     ('icing', 'icing', 'component'),
 
-    -- General (2)
-    ('dish', 'dish', 'component'),
+    -- General (1)
+    --
+    -- No `dish` row, deliberately — see 20260814000001. A component tag now marks
+    -- a BUILDING BLOCK, and absence is what says "finished dish", so a catch-all
+    -- value would be the one option the generators are told never to pick. It was
+    -- seeded here until 2026-08-14 and carried by 87% of the catalogue.
     ('puree', 'puree', 'component')
 on conflict (name, type) do nothing;
 

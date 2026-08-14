@@ -39,8 +39,15 @@ export function hasLeakedScaffolding(rawText: string): boolean {
 }
 
 /**
- * Structure adherence for the suggestion path: exactly one component tag, one
- * cuisine tag, one course tag, per the prompt's "Tagging Rules (CRITICAL)".
+ * Structure adherence for the suggestion path: one cuisine tag, one course tag,
+ * and AT MOST one component tag, per the prompt's "Tagging Rules (CRITICAL)".
+ *
+ * The component count is `<= 1`, not `=== 1`. It used to be exact, back when
+ * every recipe was required to carry one and `dish` was the catch-all for the
+ * ~87% that are not components at all. Now a component tag is written only for a
+ * genuine building block, so zero is the correct and overwhelmingly common
+ * answer — leaving this at `=== 1` would fail every ordinary dish and report a
+ * prompt improvement as a model regression.
  *
  * `tagTypes` maps tag name -> type and comes from the live `tags` table, so this
  * scores against the taxonomy the app actually persists rather than a hardcoded
@@ -59,7 +66,7 @@ export function scoreTagCardinality(
         else if (type === "course") counts.course += 1;
     }
 
-    return counts.component === 1 && counts.cuisine === 1 && counts.course === 1;
+    return counts.component <= 1 && counts.cuisine === 1 && counts.course === 1;
 }
 
 /**

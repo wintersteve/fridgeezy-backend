@@ -29,6 +29,7 @@ import {
 } from "../../../recipes/services/create-recipe-image";
 import { persistRecipeWithIngredientIds } from "../../../recipes/services/persist-recipe";
 import { fetchEnrichedSuggestion } from "../../services";
+import { COMPONENT_RULE, DISH_FORM_RULE } from "../../services/tagging-rules";
 
 /**
  * Build system prompt with explicit ingredient constraints.
@@ -68,10 +69,10 @@ Set each ingredient's "category" to EXACTLY one of these ids (the id, not the de
 ${INGREDIENT_CATEGORY_GUIDE}
 
 ## Tagging Rules
-- EXACTLY 1 component tag per recipe (use "dish" for regular finished dishes/meals)
+- ${COMPONENT_RULE}
 - 1 OR 2 cuisine tags per recipe. One for almost every dish — its actual origin, as specific as the approved list allows. Add a SECOND only when the dish genuinely belongs to two traditions at once (Tex-Mex is american + mexican, Nikkei is japanese + peruvian). Never add a second merely to be broader — the region and continent a cuisine belongs to are already known, so "italian" must NOT also carry "mediterranean" or "european".
 - EXACTLY 1 course tag per recipe. The ONLY valid course tags are: appetizer, dessert, main, side. Pick exactly one of those four — a main dish is "main", a starter is "appetizer", an accompaniment is "side". Never omit it, and never invent another (not "dinner", "lunch", "breakfast", "entree" or "main course").
-- AT MOST 1 dish form tag per recipe, and only when the dish clearly IS one: soup, stew, salad, sandwich, wrap, pizza, pasta, noodles, curry, stir fry, roast, bake, casserole, grill, pie, dumpling, rice dish, porridge, pancake, skewer. This is the SHAPE of the dish, not when it is served — a soup served first is still course "appetizer" and form "soup". Omit it entirely for a dish that is simply a plate of food; most dishes have no form.
+- ${DISH_FORM_RULE}
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free if the recipe qualifies)
 
 ## Difficulty Levels

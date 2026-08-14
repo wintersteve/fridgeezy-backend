@@ -46,10 +46,19 @@ const DEFAULT_MATCH_THRESHOLD = 0.5;
 
 /**
  * The canonical `component` tag vocabulary, mirroring `seeds/002_tags.sql`.
- * Every recipe and suggestion carries exactly one of these, which makes it the
- * one reliable way to tell "a sauce" from "a dish that has a sauce in it" —
- * similarity search cannot: "sauce for apple strudel" scores highest against
- * Apple Strudel itself, so a component question always answered with the dish.
+ *
+ * A row carries one of these ONLY when it is a building block rather than a
+ * finished dish, which makes it the one reliable way to tell "a sauce" from "a
+ * dish that has a sauce in it" — similarity search cannot: "sauce for apple
+ * strudel" scores highest against Apple Strudel itself, so a component question
+ * always answered with the dish.
+ *
+ * `dish` is deliberately NOT in this list. It used to be, back when every recipe
+ * was required to carry a component and `dish` was the catch-all for the 87% that
+ * were not components at all. Now absence carries that meaning, so a `dish` entry
+ * would be a filter value matching nothing — and worse, an option the chat model
+ * could pick, silently emptying the results for an ordinary request. Omitting the
+ * parameter is how "an ordinary dish" is expressed.
  */
 export const COMPONENT_TAGS = [
     "sauce",
@@ -78,7 +87,6 @@ export const COMPONENT_TAGS = [
     "syrup",
     "glaze",
     "icing",
-    "dish",
     "puree",
 ] as const;
 

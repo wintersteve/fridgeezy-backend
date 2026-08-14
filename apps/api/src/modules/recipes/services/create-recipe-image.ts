@@ -1,11 +1,11 @@
-import { execFileSync } from "node:child_process";
-
 import {
     buildFoodIllustrationStyle,
     generateImage,
     padPngToSquare,
 } from "@fridgeezy/genai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
+
+import { toDeviceReachable } from "../../../utils/device-reachable-url";
 
 /**
  * Normalizes a recipe name to create a safe filename for storage.
@@ -25,54 +25,6 @@ const normalizeFileName = (name: string): string => {
 // storage lookup, and no need to await generation before knowing the URL.
 const imageStoragePath = (name: string): string =>
     `${normalizeFileName(name)}.png`;
-
-/**
- * This Mac's LAN address, or null when there isn't one (offline, or not macOS).
- *
- * Memoized because it shells out and the URL below is built per recipe. A
- * process that outlives a DHCP change is a restart away from being right, which
- * is the same deal `nx serve` already offers for every other .env value.
- */
-let lanAddress: string | null | undefined;
-
-const hostAddress = (): string | null => {
-    if (lanAddress !== undefined) return lanAddress;
-
-    try {
-        lanAddress =
-            execFileSync("ipconfig", ["getifaddr", "en0"], {
-                stdio: ["ignore", "pipe", "ignore"],
-            })
-                .toString()
-                .trim() || null;
-    } catch {
-        lanAddress = null;
-    }
-
-    return lanAddress;
-};
-
-/**
- * Swaps loopback for the LAN address on a URL that is about to be handed to the
- * phone.
- *
- * `SUPABASE_URL` is deliberately loopback in local development: the API and the
- * Docker stack share a machine, so pinning it to a LAN IP only bought a value
- * that goes stale every time the router \u2014 or a different network \u2014 hands out a
- * new lease. This one URL is the exception, because it does not stay here: it is
- * persisted to `recipes.image` and streamed to the client, and on a physical
- * device `127.0.0.1` means THAT DEVICE and reaches nothing.
- *
- * A no-op in every deployed configuration, by construction rather than by a
- * flag \u2014 Lambda's `SUPABASE_URL` is the project's https origin, which has no
- * loopback host to match.
- */
-const toDeviceReachable = (url: string): string => {
-    if (!/^https?:\/\/(127\.0\.0\.1|localhost)([:/]|$)/.test(url)) return url;
-
-    const host = hostAddress();
-    return host ? url.replace(/127\.0\.0\.1|localhost/, host) : url;
-};
 
 /**
  * The deterministic public URL a recipe's image will live at, derived purely

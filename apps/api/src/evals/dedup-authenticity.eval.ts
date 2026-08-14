@@ -44,29 +44,29 @@ const toDto = (d: DishFixture): GenerateSuggestionResponseDto => ({
 // Same dish under different names / languages — should MERGE (adjudicate same).
 const SAME_PAIRS: Array<[DishFixture, DishFixture]> = [
     [
-        { name: "Som Tam", nameAlt: "Green Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut", "tomato"] },
-        { name: "Papaya Salad", nameAlt: "Green Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut"] },
+        { name: "Som Tam", nameAlt: "Green Papaya Salad", tags: ["thai", "salad"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut", "tomato"] },
+        { name: "Papaya Salad", nameAlt: "Green Papaya Salad", tags: ["thai", "salad"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut"] },
     ],
     [
-        { name: "Murgh Makhani", nameAlt: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "garam masala"] },
-        { name: "Butter Chicken", nameAlt: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream"] },
+        { name: "Murgh Makhani", nameAlt: "Butter Chicken", tags: ["indian", "main"], ingredients: ["chicken", "tomato", "butter", "cream", "garam masala"] },
+        { name: "Butter Chicken", nameAlt: "Butter Chicken", tags: ["indian", "main"], ingredients: ["chicken", "tomato", "butter", "cream"] },
     ],
     // Low-signal same-dish pairs (calibrated ~0.74–0.85) — now in the LLM gray band.
     [
-        { name: "Gyōza", nameAlt: "Japanese Pan-Fried Dumplings", tags: ["japanese", "appetizer", "dish"], ingredients: ["pork", "cabbage", "garlic", "ginger", "dumpling wrapper"] },
-        { name: "Japanese Dumplings", nameAlt: "Gyoza", tags: ["japanese", "appetizer", "dish"], ingredients: ["ground pork", "napa cabbage", "garlic", "ginger", "wrapper"] },
+        { name: "Gyōza", nameAlt: "Japanese Pan-Fried Dumplings", tags: ["japanese", "appetizer"], ingredients: ["pork", "cabbage", "garlic", "ginger", "dumpling wrapper"] },
+        { name: "Japanese Dumplings", nameAlt: "Gyoza", tags: ["japanese", "appetizer"], ingredients: ["ground pork", "napa cabbage", "garlic", "ginger", "wrapper"] },
     ],
     [
-        { name: "Phở Bò", nameAlt: "Vietnamese Beef Noodle Soup", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "scallion", "cilantro"] },
-        { name: "Pho", nameAlt: "Beef Pho", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "herbs"] },
+        { name: "Phở Bò", nameAlt: "Vietnamese Beef Noodle Soup", tags: ["vietnamese", "soup"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "scallion", "cilantro"] },
+        { name: "Pho", nameAlt: "Beef Pho", tags: ["vietnamese", "soup"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "herbs"] },
     ],
 ];
 
 // Genuine variations / distinct dishes — should STAY DISTINCT (adjudicate not-same).
 const DISTINCT_PAIRS: Array<[DishFixture, DishFixture]> = [
     [
-        { name: "Som Tam Thai", nameAlt: "Thai Green Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "peanut", "dried shrimp", "tomato", "fish sauce", "lime"] },
-        { name: "Som Tam Lao", nameAlt: "Lao Green Papaya Salad", tags: ["lao", "salad", "dish"], ingredients: ["green papaya", "padaek", "field crab", "fish sauce", "lime", "eggplant"] },
+        { name: "Som Tam Thai", nameAlt: "Thai Green Papaya Salad", tags: ["thai", "salad"], ingredients: ["green papaya", "peanut", "dried shrimp", "tomato", "fish sauce", "lime"] },
+        { name: "Som Tam Lao", nameAlt: "Lao Green Papaya Salad", tags: ["lao", "salad"], ingredients: ["green papaya", "padaek", "field crab", "fish sauce", "lime", "eggplant"] },
     ],
     [
         { name: "Roux", nameAlt: "Roux", tags: ["french", "roux", "component"], ingredients: ["flour", "butter"] },
@@ -75,16 +75,16 @@ const DISTINCT_PAIRS: Array<[DishFixture, DishFixture]> = [
     // Near-miss distinct pairs (calibrated ~0.72–0.80) — in the LLM gray band; the
     // adjudicator must keep them apart.
     [
-        { name: "Butter Chicken", nameAlt: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "fenugreek"] },
-        { name: "Chicken Tikka Masala", nameAlt: "Chicken Tikka Masala", tags: ["indian", "main", "dish"], ingredients: ["chicken", "yogurt", "tomato", "cream", "garam masala", "onion"] },
+        { name: "Butter Chicken", nameAlt: "Butter Chicken", tags: ["indian", "main"], ingredients: ["chicken", "tomato", "butter", "cream", "fenugreek"] },
+        { name: "Chicken Tikka Masala", nameAlt: "Chicken Tikka Masala", tags: ["indian", "main"], ingredients: ["chicken", "yogurt", "tomato", "cream", "garam masala", "onion"] },
     ],
     [
-        { name: "Carbonara", nameAlt: "Spaghetti alla Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
-        { name: "Cacio e Pepe", nameAlt: "Cacio e Pepe", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "pecorino", "black pepper"] },
+        { name: "Carbonara", nameAlt: "Spaghetti alla Carbonara", tags: ["italian", "main"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
+        { name: "Cacio e Pepe", nameAlt: "Cacio e Pepe", tags: ["italian", "main"], ingredients: ["spaghetti", "pecorino", "black pepper"] },
     ],
     [
-        { name: "Pad Thai", nameAlt: "Pad Thai", tags: ["thai", "main", "dish"], ingredients: ["rice noodle", "shrimp", "tamarind", "peanut", "egg", "bean sprout"] },
-        { name: "Pad See Ew", nameAlt: "Pad See Ew", tags: ["thai", "main", "dish"], ingredients: ["wide rice noodle", "chicken", "soy sauce", "egg", "chinese broccoli"] },
+        { name: "Pad Thai", nameAlt: "Pad Thai", tags: ["thai", "main"], ingredients: ["rice noodle", "shrimp", "tamarind", "peanut", "egg", "bean sprout"] },
+        { name: "Pad See Ew", nameAlt: "Pad See Ew", tags: ["thai", "main"], ingredients: ["wide rice noodle", "chicken", "soy sauce", "egg", "chinese broccoli"] },
     ],
 ];
 
@@ -112,20 +112,20 @@ const HOMOGRAPH_PAIRS: Array<[DishFixture, DishFixture]> = [
         { name: "Manti", nameAlt: "Mänti", tags: ["kazakh", "main", "dumpling"], ingredients: ["lamb", "pumpkin", "onion", "flour", "black pepper"] },
     ],
     [
-        { name: "Tortilla", nameAlt: "Tortilla Española", tags: ["spanish", "main", "dish"], ingredients: ["potato", "egg", "onion", "olive oil"] },
+        { name: "Tortilla", nameAlt: "Tortilla Española", tags: ["spanish", "main"], ingredients: ["potato", "egg", "onion", "olive oil"] },
         { name: "Tortilla", nameAlt: "Tortilla de Maíz", tags: ["mexican", "side", "pancake"], ingredients: ["corn masa", "water", "salt"] },
     ],
     [
         { name: "Moussaka", nameAlt: "Μουσακάς", tags: ["greek", "main", "bake"], ingredients: ["eggplant", "ground lamb", "bechamel", "tomato", "cinnamon", "potato"] },
-        { name: "Moussaka", nameAlt: "Maghmour", tags: ["levantine", "appetizer", "dish"], ingredients: ["eggplant", "chickpea", "tomato", "onion", "olive oil", "garlic"] },
+        { name: "Moussaka", nameAlt: "Maghmour", tags: ["levantine", "appetizer"], ingredients: ["eggplant", "chickpea", "tomato", "onion", "olive oil", "garlic"] },
     ],
     [
         { name: "Empanada", nameAlt: "Empanada Criolla", tags: ["argentinian", "appetizer", "pie"], ingredients: ["ground beef", "onion", "green olive", "hard boiled egg", "cumin", "flour"] },
         { name: "Empanada", nameAlt: "Empanada Gallega", tags: ["spanish", "main", "pie"], ingredients: ["tuna", "bell pepper", "onion", "tomato", "flour", "olive oil"] },
     ],
     [
-        { name: "Halva", nameAlt: "Halawa", tags: ["levantine", "dessert", "dish"], ingredients: ["tahini", "sugar", "pistachio", "vanilla"] },
-        { name: "Halva", nameAlt: "Sooji Halwa", tags: ["indian", "dessert", "dish"], ingredients: ["semolina", "ghee", "sugar", "cardamom", "cashew", "raisin"] },
+        { name: "Halva", nameAlt: "Halawa", tags: ["levantine", "dessert"], ingredients: ["tahini", "sugar", "pistachio", "vanilla"] },
+        { name: "Halva", nameAlt: "Sooji Halwa", tags: ["indian", "dessert"], ingredients: ["semolina", "ghee", "sugar", "cardamom", "cashew", "raisin"] },
     ],
 ];
 
@@ -162,16 +162,16 @@ const HOMOGRAPH_PAIRS: Array<[DishFixture, DishFixture]> = [
  */
 const CUISINE_DRIFT_PAIRS: Array<[DishFixture, DishFixture]> = [
     [
-        { name: "Shakshuka", nameAlt: "Shakshouka", tags: ["middle eastern", "main", "dish"], ingredients: ["egg", "tomato", "bell pepper", "onion", "harissa"] },
-        { name: "Shakshuka", nameAlt: null, tags: ["north african", "main", "dish"], ingredients: ["eggs", "tomatoes", "pepper", "onion", "harissa"] },
+        { name: "Shakshuka", nameAlt: "Shakshouka", tags: ["middle eastern", "main"], ingredients: ["egg", "tomato", "bell pepper", "onion", "harissa"] },
+        { name: "Shakshuka", nameAlt: null, tags: ["north african", "main"], ingredients: ["eggs", "tomatoes", "pepper", "onion", "harissa"] },
     ],
     [
         { name: "Shawarma", nameAlt: "Shawarma Djaj", tags: ["levantine", "main", "wrap"], ingredients: ["chicken thigh", "garlic", "lemon", "flatbread", "tahini", "pickle"] },
         { name: "Shawarma", nameAlt: null, tags: ["middle eastern", "main", "wrap"], ingredients: ["chicken", "garlic sauce", "lemon juice", "pita", "tahini"] },
     ],
     [
-        { name: "Mapo Tofu", nameAlt: "Mápó Dòufu", tags: ["chinese", "main", "dish"], ingredients: ["tofu", "ground pork", "doubanjiang", "sichuan peppercorn", "scallion"] },
-        { name: "Mapo Tofu", nameAlt: null, tags: ["sichuan", "main", "dish"], ingredients: ["tofu", "pork", "chili bean paste", "sichuan peppercorn", "garlic"] },
+        { name: "Mapo Tofu", nameAlt: "Mápó Dòufu", tags: ["chinese", "main"], ingredients: ["tofu", "ground pork", "doubanjiang", "sichuan peppercorn", "scallion"] },
+        { name: "Mapo Tofu", nameAlt: null, tags: ["sichuan", "main"], ingredients: ["tofu", "pork", "chili bean paste", "sichuan peppercorn", "garlic"] },
     ],
     [
         { name: "Ghormeh Sabzi", nameAlt: "Qormeh Sabzi", tags: ["persian", "main", "stew"], ingredients: ["lamb", "parsley", "fenugreek", "kidney bean", "dried lime", "rice"] },
@@ -181,14 +181,14 @@ const CUISINE_DRIFT_PAIRS: Array<[DishFixture, DishFixture]> = [
 
 // Attested dishes — should PASS the authenticity gate.
 const AUTHENTIC_DISHES: DishFixture[] = [
-    { name: "Spaghetti alla Carbonara", nameAlt: "Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
-    { name: "Murgh Makhani", nameAlt: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream"] },
+    { name: "Spaghetti alla Carbonara", nameAlt: "Carbonara", tags: ["italian", "main"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
+    { name: "Murgh Makhani", nameAlt: "Butter Chicken", tags: ["indian", "main"], ingredients: ["chicken", "tomato", "butter", "cream"] },
 ];
 
 // Inventions / hallucinations — should be DROPPED by the authenticity gate.
 const INVENTION_DISHES: DishFixture[] = [
-    { name: "Carbonara with Asparagus", nameAlt: "Asparagus Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "asparagus"] },
-    { name: "Zorblatt Crunch", nameAlt: "Zorblatt Crunch", tags: ["fusion", "snack", "dish"], ingredients: ["moon dust", "glitter", "cardboard"] },
+    { name: "Carbonara with Asparagus", nameAlt: "Asparagus Carbonara", tags: ["italian", "main"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "asparagus"] },
+    { name: "Zorblatt Crunch", nameAlt: "Zorblatt Crunch", tags: ["fusion", "snack"], ingredients: ["moon dust", "glitter", "cardboard"] },
 ];
 
 /**
@@ -202,9 +202,9 @@ const INVENTION_DISHES: DishFixture[] = [
  * and tags are all impeccable, which is exactly what hides them.
  */
 const GUTTED_DISHES: DishFixture[] = [
-    { name: "Peruvian Seafood Ceviche", nameAlt: "Ceviche de Mariscos", tags: ["peruvian", "appetizer", "dish"], ingredients: ["cilantro", "corn", "lime", "onion", "red chili", "salt", "sweet potato"] },
-    { name: "Spaghetti alla Carbonara", nameAlt: "Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "olive oil", "nutritional yeast", "black pepper", "zucchini"] },
-    { name: "Green Papaya Salad", nameAlt: "Som Tam", tags: ["thai", "salad", "dish"], ingredients: ["cabbage", "carrot", "lime", "chili", "peanut", "soy sauce"] },
+    { name: "Peruvian Seafood Ceviche", nameAlt: "Ceviche de Mariscos", tags: ["peruvian", "appetizer"], ingredients: ["cilantro", "corn", "lime", "onion", "red chili", "salt", "sweet potato"] },
+    { name: "Spaghetti alla Carbonara", nameAlt: "Carbonara", tags: ["italian", "main"], ingredients: ["spaghetti", "olive oil", "nutritional yeast", "black pepper", "zucchini"] },
+    { name: "Green Papaya Salad", nameAlt: "Som Tam", tags: ["thai", "salad"], ingredients: ["cabbage", "carrot", "lime", "chili", "peanut", "soy sauce"] },
 ];
 
 /**
@@ -220,12 +220,42 @@ const GUTTED_DISHES: DishFixture[] = [
  * Alcohol is deliberately not the axis. Half these fixtures are alcohol-free,
  * because the rule is "is its purpose to be drunk" and a virgin daiquiri fails
  * it exactly as hard as the original.
+ *
+ * ## The last three are REAL escapes — keep them
+ *
+ * Same standing instruction as GUTTED_DISHES. These three are not invented
+ * probes: they are the rows that actually reached the dev catalogue on
+ * 2026-08-02, replayed here exactly as they were stored, and they sat there
+ * until 2026-08-14. The gate that would have stopped them (`not_food` +
+ * FOOD_ONLY_RULE) landed on 2026-08-06, four days after they were written, so
+ * they were never evidence of a live leak — but they ARE evidence of what this
+ * gate is asked to catch in production rather than in a fixture author's
+ * imagination.
+ *
+ * Each covers a trap the four above do not:
+ *
+ *  - `Té de Maguey` is a SIMMERED HERBAL INFUSION, and the hardest of the three.
+ *    Everything about its process reads as cooking — leaves simmered with
+ *    cinnamon and piloncillo — which puts it directly against the soup/consommé
+ *    carve-out in FOOD_WITH_DRINK below that must keep passing. A gate tuned to
+ *    reject this by its method rather than its purpose will start rejecting
+ *    Gazpacho and Beef Consommé, so the two sets have to be read together.
+ *  - `Pulque` is a FERMENTED SAP with a one-item ingredient list. Nothing in it
+ *    looks like a cocktail, and there is no preparation to judge.
+ *  - `Agave Margarita` is the one that carried a CORRECT COURSE TAG. It was
+ *    stored as `appetizer`, which is what makes it dangerous: a well-formed row
+ *    passes every structural check the pipeline makes, so the only thing standing
+ *    between it and the catalogue is this gate reading its purpose.
  */
 const DRINKS: DishFixture[] = [
-    { name: "Mojito", nameAlt: null, tags: ["cuban", "dessert", "dish"], ingredients: ["white rum", "lime", "mint", "sugar", "soda water"] },
-    { name: "Virgin Piña Colada", nameAlt: null, tags: ["caribbean", "dessert", "dish"], ingredients: ["pineapple juice", "coconut cream", "ice"] },
-    { name: "Mango Lassi", nameAlt: null, tags: ["indian", "dessert", "dish"], ingredients: ["mango", "yogurt", "sugar", "cardamom"] },
-    { name: "Horchata", nameAlt: null, tags: ["mexican", "dessert", "dish"], ingredients: ["rice", "cinnamon", "sugar", "milk"] },
+    { name: "Mojito", nameAlt: null, tags: ["cuban", "dessert"], ingredients: ["white rum", "lime", "mint", "sugar", "soda water"] },
+    { name: "Virgin Piña Colada", nameAlt: null, tags: ["caribbean", "dessert"], ingredients: ["pineapple juice", "coconut cream", "ice"] },
+    { name: "Mango Lassi", nameAlt: null, tags: ["indian", "dessert"], ingredients: ["mango", "yogurt", "sugar", "cardamom"] },
+    { name: "Horchata", nameAlt: null, tags: ["mexican", "dessert"], ingredients: ["rice", "cinnamon", "sugar", "milk"] },
+    // Escaped into the dev catalogue 2026-08-02, removed 2026-08-14. See above.
+    { name: "Té de Maguey", nameAlt: null, tags: ["mexican"], ingredients: ["agave leaf", "cinnamon", "piloncillo"] },
+    { name: "Pulque", nameAlt: null, tags: ["mexican"], ingredients: ["agave sap"] },
+    { name: "Agave Margarita", nameAlt: null, tags: ["mexican", "appetizer"], ingredients: ["agave", "lime juice", "salt", "tequila", "triple sec"] },
 ];
 
 /**
@@ -239,7 +269,7 @@ const DRINKS: DishFixture[] = [
  */
 const FOOD_WITH_DRINK: DishFixture[] = [
     { name: "Coq au Vin", nameAlt: null, tags: ["french", "main", "stew"], ingredients: ["chicken", "red wine", "bacon", "mushroom", "onion", "thyme"] },
-    { name: "Tiramisu", nameAlt: null, tags: ["italian", "dessert", "dish"], ingredients: ["mascarpone", "espresso", "marsala", "ladyfinger", "cocoa", "egg"] },
+    { name: "Tiramisu", nameAlt: null, tags: ["italian", "dessert"], ingredients: ["mascarpone", "espresso", "marsala", "ladyfinger", "cocoa", "egg"] },
     { name: "Gazpacho", nameAlt: null, tags: ["spanish", "appetizer", "soup"], ingredients: ["tomato", "cucumber", "bell pepper", "garlic", "olive oil", "bread"] },
     { name: "Beef Consommé", nameAlt: null, tags: ["french", "appetizer", "soup"], ingredients: ["beef", "egg white", "carrot", "celery", "leek"] },
 ];

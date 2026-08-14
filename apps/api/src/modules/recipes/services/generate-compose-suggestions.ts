@@ -16,6 +16,11 @@ import {
     DISH_NAME_RULE,
 } from "../../suggestions/services/naming-rules";
 import { persistOrReuseSuggestion } from "../../suggestions/services/persist-or-reuse-suggestion";
+import {
+    COMPONENT_RULE,
+    DISH_FORM_RULE,
+    TAGS_KEY_RULE,
+} from "../../suggestions/services/tagging-rules";
 import { DISH_TOTAL_TIME_RULE } from "../../suggestions/services/timing-rules";
 
 import { fetchRecipeMetadata } from "./fetch-recipe-metadata";
@@ -58,10 +63,10 @@ const SYSTEM_PROMPT = `You are a recipe composition assistant. Generate compleme
 - "hard": Elevated or advanced version with more complex techniques
 
 ## Tagging Rules (CRITICAL)
-- EXACTLY 1 component tag per recipe (use "dish" for finished dishes)
+- ${COMPONENT_RULE}
 - 1 OR 2 cuisine tags per recipe. One for almost every dish — its actual origin. Add a SECOND only when the dish genuinely belongs to two traditions at once (Tex-Mex is american + mexican, Nikkei is japanese + peruvian). Never add a second merely to be broader — the region and continent a cuisine belongs to are already known, so "italian" must NOT also carry "mediterranean" or "european".
 - EXACTLY 1 course tag per recipe: the course type being suggested. The ONLY valid course tags are: appetizer, dessert, main, side. Never omit it, and never invent another (not "starter", "dinner", "entree" or "main course") — a starter is "appetizer".
-- AT MOST 1 dish form tag per recipe, and only when the dish clearly IS one: soup, stew, salad, sandwich, wrap, pizza, pasta, noodles, curry, stir fry, roast, bake, casserole, grill, pie, dumpling, rice dish, porridge, pancake, skewer. This is the SHAPE of the dish, not when it is served — a soup served first is still course "appetizer" and form "soup". Omit it entirely for a dish that is simply a plate of food; most dishes have no form.
+- ${DISH_FORM_RULE}
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free)
 
 ## Ingredients
@@ -79,7 +84,7 @@ Each recipe object must include:
 - ${DISH_TOTAL_TIME_RULE}
 - course (the course type)
 - ingredients (array of key ingredient strings)
-- tags (array of strings with component, cuisine, course, and dietary tags)`;
+- ${TAGS_KEY_RULE}`;
 
 const buildUserPrompt = (
     baseRecipe: GenerateRecipeResponseDto & { imageUrl?: string },
@@ -257,13 +262,29 @@ export async function* generateComposeRecipes(
         // exact name then signature similarity, suggestions by exact name then
         // the calibrated band with LLM adjudication, plus the authenticity gate.
         const outcome = await persistOrReuseSuggestion(suggestion, {
-            // The cuisine tag the model gave this dish — not a course, not the
-            // "dish" component marker.
-            cuisine: suggestion.tags.find(
-                (tag) =>
-                    !courseTagNames.some((course) =>
-                        tag.toLowerCase().includes(course.toLowerCase())
-                    ) && tag.toLowerCase() !== "dish"
+            // The cuisine tag the model gave this dish, matched against the
+            // actual cuisine vocabulary — the same way `buildUserPrompt` above
+            // resolves the BASE recipe's cuisine, and for the same reason.
+            //
+            // This used to take the first tag that was neither a course nor
+            // "dish", which also matches DIETARY tags: a vegan Italian dish
+            // handed dedup "vegan" as its cuisine. That is worse than handing it
+            // nothing, because cuisine is an identity signal — two dishes agreeing
+            // on "vegan" look related when they are not.
+            //
+            // It also quietly depended on the `dish` component marker existing to
+            // exclude it. Matching positively removes that coupling, which is
+            // what lets the marker be dropped.
+            //
+            // A cuisine the model invents in THIS batch is not in the snapshot
+            // taken at the top of this function, so it resolves to undefined
+            // rather than being caught. That is the right trade: `cuisine` is an
+            // optional hint, and no hint beats a wrong one. `matchTags` still
+            // creates the tag during persistence, so the next call sees it.
+            cuisine: suggestion.tags.find((tag) =>
+                cuisineTagNames.some(
+                    (cuisine) => tag.toLowerCase() === cuisine.toLowerCase()
+                )
             ),
         });
 

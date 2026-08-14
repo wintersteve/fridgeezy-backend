@@ -24,6 +24,12 @@ import {
     persistOrReuseSuggestion,
     SuggestionOutcome,
 } from "./persist-or-reuse-suggestion";
+import {
+    COMPONENT_RULE,
+    DISH_FORM_FILTER_RULE,
+    DISH_FORM_RULE,
+    TAGS_KEY_RULE,
+} from "./tagging-rules";
 import { DISH_TOTAL_TIME_RULE } from "./timing-rules";
 
 /**
@@ -47,6 +53,7 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 - AUTHENTICITY IS PARAMOUNT: Only suggest a real, well-documented recipe that exists in a culinary tradition.
 - The recipe MUST be a genuine, documented dish — never an invented or descriptive name (e.g., NOT "Indian Tomato Butter Chicken"). Do NOT add alternative names in parenthesis.
 - Include ALL essential ingredients that define the dish. Never omit core ingredients that make the recipe authentic.
+- ${DISH_FORM_FILTER_RULE}
 - ${FOOD_ONLY_RULE}
 - If the request cannot be satisfied authentically under these constraints, pick the closest authentic dish that does satisfy them. The one exception is a request for a DRINK: there, return nothing rather than reaching for the closest food.
 
@@ -59,9 +66,10 @@ ${BLACKLIST_RULE}
 - "hard": A sophisticated, chef-level authentic interpretation featuring advanced techniques or upscale variations.
 
 ## Tagging Rules (CRITICAL)
-- EXACTLY 1 component tag: use the specific component type if it matches (e.g., roux, sauce, stock), otherwise "dish" for a regular finished dish/meal.
+- ${COMPONENT_RULE}
 - EXACTLY 1 cuisine tag (the most accurate cuisine origin).
 - EXACTLY 1 course tag (the most accurate course type).
+- ${DISH_FORM_RULE}
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free if the recipe qualifies).
 
 ## Ingredients
@@ -75,7 +83,7 @@ Emit the keys in EXACTLY this order:
 - difficulty (easy, medium, or hard)
 - ${DISH_TOTAL_TIME_RULE}
 - ingredients (array of strings)
-- tags (array of strings with component, cuisine, and dietary tags)
+- ${TAGS_KEY_RULE}
 - ${DISH_NAME_ALT_RULE}
 - ${ADAPTED_FOR_RULE}`;
 

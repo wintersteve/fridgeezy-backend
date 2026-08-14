@@ -195,6 +195,13 @@
                     "cwd": "apps/database"
                 }
             },
+            "backfill-dish-form-tags": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/backfill-dish-form-tags.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "classify-ingredient-diet": {
                 "executor": "nx:run-commands",
                 "options": {

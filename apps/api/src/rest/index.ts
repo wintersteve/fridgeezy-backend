@@ -5,6 +5,7 @@ import { BillingPublicRoutes, BillingRoutes } from "../modules/billing";
 import { ChatRoutes } from "../modules/chat";
 import { IngredientsRoutes } from "../modules/ingredients";
 import { RecipesPublicRoutes, RecipesRoutes } from "../modules/recipes";
+import { SpeechRoutes } from "../modules/speech";
 import { SubstitutesRoutes } from "../modules/substitutes";
 import { SuggestionsRoutes } from "../modules/suggestions";
 import { collectRoutes, RouteInfo } from "../utils/collect-routes";
@@ -41,6 +42,7 @@ const MOUNTS: Mount[] = [
     { prefix: "/recipes", router: RecipesRoutes, publicRouter: RecipesPublicRoutes },
     { prefix: "/substitutes", router: SubstitutesRoutes },
     { prefix: "/chat", router: ChatRoutes },
+    { prefix: "/speech", router: SpeechRoutes },
     { prefix: "/billing", router: BillingRoutes, publicRouter: BillingPublicRoutes },
 ];
 

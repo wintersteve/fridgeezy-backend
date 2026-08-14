@@ -32,6 +32,12 @@ import {
 import { persistOrReuseSuggestion } from "./persist-or-reuse-suggestion";
 import { createSuggestionBatch, type SuggestionBatch } from "./suggestion-batch";
 import type { SuggestionOutcome } from "./suggestion-outcome";
+import {
+    COMPONENT_RULE,
+    DISH_FORM_FILTER_RULE,
+    DISH_FORM_RULE,
+    TAGS_KEY_RULE,
+} from "./tagging-rules";
 import { DISH_TOTAL_TIME_RULE } from "./timing-rules";
 
 /** How many cards one `/suggestions/generate` call aims to deliver. */
@@ -91,6 +97,7 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 - Do NOT reach for obscure dishes to satisfy the exclusion list below. If the well-known dishes matching this request are already in the catalog, return FEWER dishes — even none. A short batch is correct; padding it with something nobody has heard of is not.
 - Include ALL essential ingredients that define the dish. Never omit core ingredients that make the recipe authentic.
 - EVERY DISH YOU RETURN MUST BE A DIFFERENT DISH. Never return a dish alongside a qualified version of itself ("Arancini" and "Arancini al Burro"), a dish alongside its own base ("Haemul Pajeon" and "Pajeon"), or the same dish under two names ("Som Tam" and "Green Papaya Salad"). If a request only really supports one of them, pick the best one — fill the other slot with a genuinely different dish if you have one, and drop the slot if you do not.
+- ${DISH_FORM_FILTER_RULE}
 - ${FOOD_ONLY_RULE}
 - When the request is ONLY for drinks and there is no food dish to offer, output exactly one line and nothing else: {"rejected":"not_food"}. Say it explicitly rather than returning nothing — silence and "I found nothing this time" are indistinguishable downstream, and the user is told the wrong one.
 - Return nothing at all only when there is genuinely nothing left to give: a truly incompatible INGREDIENT combination (e.g., rosemary in Thai cuisine), nonsensical input, or every well-known dish fitting the request already being in the catalog. Short of that, a real FOOD dish name, cuisine, or meal/course concept is satisfiable — do not return empty out of caution.
@@ -105,12 +112,10 @@ ${BLACKLIST_RULE}
 - "hard": A sophisticated, chef-level authentic interpretation featuring advanced techniques or upscale variations.
 
 ## Tagging Rules (CRITICAL)
-- EXACTLY 1 component tag per recipe:
-  - Use the specific component type if it matches (e.g., roux for a roux, sauce for bechamel, stock for a stock)
-  - Use "dish" for regular finished dishes/meals
+- ${COMPONENT_RULE}
 - 1 OR 2 cuisine tags per recipe. One for almost every dish — its actual origin, as specific as you can be ("sichuan" rather than "chinese" for a Sichuanese dish). Add a SECOND only when the dish genuinely belongs to two traditions at once: Tex-Mex is american + mexican, Nikkei is japanese + peruvian, banh mi is vietnamese + french. Never add a second merely to be broader — the region and continent a cuisine belongs to are already known, so "italian" must NOT also carry "mediterranean" or "european".
 - EXACTLY 1 course tag per recipe. The ONLY valid course tags are: appetizer, dessert, main, side. Pick exactly one of those four — a main dish is "main", a starter is "appetizer", an accompaniment is "side". Never omit it, and never invent another (not "dinner", "lunch", "breakfast", "entree" or "main course").
-- AT MOST 1 dish form tag per recipe, and only when the dish clearly IS one: soup, stew, salad, sandwich, wrap, pizza, pasta, noodles, curry, stir fry, roast, bake, casserole, grill, pie, dumpling, rice dish, porridge, pancake, skewer. This is the SHAPE of the dish, not when it is served — a soup served first is still course "appetizer" and form "soup". Omit it entirely for a dish that is simply a plate of food; most dishes have no form.
+- ${DISH_FORM_RULE}
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free if the recipe qualifies)
 
 ## Ingredients
@@ -127,7 +132,7 @@ Each recipe object must include:
 - difficulty (easy, medium, or hard)
 - ${DISH_TOTAL_TIME_RULE}
 - ingredients (array of strings)
-- tags (array of strings with component, cuisine, and dietary tags)
+- ${TAGS_KEY_RULE}
 - ${ADAPTED_FOR_RULE}`;
 }
 

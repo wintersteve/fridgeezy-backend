@@ -95,8 +95,11 @@ export const RECIPE_FIXTURES: RecipeFixture[] = [
         servings: 4,
     },
     {
-        // Short ingredient list + a component (not a finished dish) — stresses the
-        // "EXACTLY 1 component tag" rule, where `dish` is the wrong answer.
+        // Short ingredient list + a component (not a finished dish) — stresses
+        // the component rule from the side that is now the RARE one. Since the
+        // rule inverted to absent-by-default, the failure to catch here is a
+        // genuine sauce coming back with no component tag at all; the old
+        // failure ("dish" on a béchamel) is no longer expressible.
         label: "bechamel / easy (component, not dish)",
         name: "Béchamel",
         difficulty: "easy",

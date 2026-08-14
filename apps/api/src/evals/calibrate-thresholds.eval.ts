@@ -71,40 +71,40 @@ function cosine(a: number[], b: number[]): number {
 // Same dish, different names/languages — SHOULD score high (auto-merge).
 const SAME_PAIRS: Array<[DishFixture, DishFixture]> = [
     [
-        { name: "Som Tam", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut", "tomato"] },
-        { name: "Papaya Salad", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut"] },
+        { name: "Som Tam", tags: ["thai", "salad"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut", "tomato"] },
+        { name: "Papaya Salad", tags: ["thai", "salad"], ingredients: ["green papaya", "fish sauce", "lime", "chili", "peanut"] },
     ],
     [
-        { name: "Murgh Makhani", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "garam masala"] },
-        { name: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream"] },
+        { name: "Murgh Makhani", tags: ["indian", "main"], ingredients: ["chicken", "tomato", "butter", "cream", "garam masala"] },
+        { name: "Butter Chicken", tags: ["indian", "main"], ingredients: ["chicken", "tomato", "butter", "cream"] },
     ],
     [
-        { name: "Phở Bò", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "scallion", "cilantro"] },
-        { name: "Pho", tags: ["vietnamese", "soup", "dish"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "herbs"] },
+        { name: "Phở Bò", tags: ["vietnamese", "soup"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "scallion", "cilantro"] },
+        { name: "Pho", tags: ["vietnamese", "soup"], ingredients: ["rice noodle", "beef", "star anise", "ginger", "herbs"] },
     ],
     [
-        { name: "Gyōza", tags: ["japanese", "appetizer", "dish"], ingredients: ["pork", "cabbage", "garlic", "ginger", "dumpling wrapper"] },
-        { name: "Japanese Dumplings", tags: ["japanese", "appetizer", "dish"], ingredients: ["ground pork", "napa cabbage", "garlic", "ginger", "wrapper"] },
+        { name: "Gyōza", tags: ["japanese", "appetizer"], ingredients: ["pork", "cabbage", "garlic", "ginger", "dumpling wrapper"] },
+        { name: "Japanese Dumplings", tags: ["japanese", "appetizer"], ingredients: ["ground pork", "napa cabbage", "garlic", "ginger", "wrapper"] },
     ],
 ];
 
 // Distinct dishes (incl. hard near-miss pairs) — SHOULD stay below the merge band.
 const DIFFERENT_PAIRS: Array<[DishFixture, DishFixture]> = [
     [
-        { name: "Som Tam Thai", tags: ["thai", "salad", "dish"], ingredients: ["green papaya", "peanut", "dried shrimp", "tomato", "fish sauce", "lime"] },
-        { name: "Som Tam Lao", tags: ["lao", "salad", "dish"], ingredients: ["green papaya", "padaek", "field crab", "fish sauce", "lime", "eggplant"] },
+        { name: "Som Tam Thai", tags: ["thai", "salad"], ingredients: ["green papaya", "peanut", "dried shrimp", "tomato", "fish sauce", "lime"] },
+        { name: "Som Tam Lao", tags: ["lao", "salad"], ingredients: ["green papaya", "padaek", "field crab", "fish sauce", "lime", "eggplant"] },
     ],
     [
-        { name: "Butter Chicken", tags: ["indian", "main", "dish"], ingredients: ["chicken", "tomato", "butter", "cream", "fenugreek"] },
-        { name: "Chicken Tikka Masala", tags: ["indian", "main", "dish"], ingredients: ["chicken", "yogurt", "tomato", "cream", "garam masala", "onion"] },
+        { name: "Butter Chicken", tags: ["indian", "main"], ingredients: ["chicken", "tomato", "butter", "cream", "fenugreek"] },
+        { name: "Chicken Tikka Masala", tags: ["indian", "main"], ingredients: ["chicken", "yogurt", "tomato", "cream", "garam masala", "onion"] },
     ],
     [
-        { name: "Carbonara", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
-        { name: "Cacio e Pepe", tags: ["italian", "main", "dish"], ingredients: ["spaghetti", "pecorino", "black pepper"] },
+        { name: "Carbonara", tags: ["italian", "main"], ingredients: ["spaghetti", "egg", "pecorino", "guanciale", "black pepper"] },
+        { name: "Cacio e Pepe", tags: ["italian", "main"], ingredients: ["spaghetti", "pecorino", "black pepper"] },
     ],
     [
-        { name: "Pad Thai", tags: ["thai", "main", "dish"], ingredients: ["rice noodle", "shrimp", "tamarind", "peanut", "egg", "bean sprout"] },
-        { name: "Pad See Ew", tags: ["thai", "main", "dish"], ingredients: ["wide rice noodle", "chicken", "soy sauce", "egg", "chinese broccoli"] },
+        { name: "Pad Thai", tags: ["thai", "main"], ingredients: ["rice noodle", "shrimp", "tamarind", "peanut", "egg", "bean sprout"] },
+        { name: "Pad See Ew", tags: ["thai", "main"], ingredients: ["wide rice noodle", "chicken", "soy sauce", "egg", "chinese broccoli"] },
     ],
     [
         { name: "Roux", tags: ["french", "roux", "component"], ingredients: ["flour", "butter"] },
@@ -145,20 +145,20 @@ const HOMOGRAPH_PAIRS: Array<[DishFixture, DishFixture]> = [
         { name: "Manti", tags: ["kazakh", "main", "dumpling"], ingredients: ["lamb", "pumpkin", "onion", "flour", "black pepper"] },
     ],
     [
-        { name: "Tortilla", tags: ["spanish", "main", "dish"], ingredients: ["potato", "egg", "onion", "olive oil"] },
+        { name: "Tortilla", tags: ["spanish", "main"], ingredients: ["potato", "egg", "onion", "olive oil"] },
         { name: "Tortilla", tags: ["mexican", "side", "pancake"], ingredients: ["corn masa", "water", "salt"] },
     ],
     [
         { name: "Moussaka", tags: ["greek", "main", "bake"], ingredients: ["eggplant", "ground lamb", "bechamel", "tomato", "cinnamon", "potato"] },
-        { name: "Moussaka", tags: ["levantine", "appetizer", "dish"], ingredients: ["eggplant", "chickpea", "tomato", "onion", "olive oil", "garlic"] },
+        { name: "Moussaka", tags: ["levantine", "appetizer"], ingredients: ["eggplant", "chickpea", "tomato", "onion", "olive oil", "garlic"] },
     ],
     [
         { name: "Empanada", tags: ["argentinian", "appetizer", "pie"], ingredients: ["ground beef", "onion", "green olive", "hard boiled egg", "cumin", "flour"] },
         { name: "Empanada", tags: ["spanish", "main", "pie"], ingredients: ["tuna", "bell pepper", "onion", "tomato", "flour", "olive oil"] },
     ],
     [
-        { name: "Halva", tags: ["levantine", "dessert", "dish"], ingredients: ["tahini", "sugar", "pistachio", "vanilla"] },
-        { name: "Halva", tags: ["indian", "dessert", "dish"], ingredients: ["semolina", "ghee", "sugar", "cardamom", "cashew", "raisin"] },
+        { name: "Halva", tags: ["levantine", "dessert"], ingredients: ["tahini", "sugar", "pistachio", "vanilla"] },
+        { name: "Halva", tags: ["indian", "dessert"], ingredients: ["semolina", "ghee", "sugar", "cardamom", "cashew", "raisin"] },
     ],
 ];
 
@@ -184,16 +184,16 @@ const HOMOGRAPH_PAIRS: Array<[DishFixture, DishFixture]> = [
  */
 const CUISINE_DRIFT_PAIRS: Array<[DishFixture, DishFixture]> = [
     [
-        { name: "Shakshuka", tags: ["middle eastern", "main", "dish"], ingredients: ["egg", "tomato", "bell pepper", "onion", "cumin", "paprika"] },
-        { name: "Shakshuka", tags: ["north african", "main", "dish"], ingredients: ["eggs", "tomatoes", "pepper", "onion", "harissa"] },
+        { name: "Shakshuka", tags: ["middle eastern", "main"], ingredients: ["egg", "tomato", "bell pepper", "onion", "cumin", "paprika"] },
+        { name: "Shakshuka", tags: ["north african", "main"], ingredients: ["eggs", "tomatoes", "pepper", "onion", "harissa"] },
     ],
     [
         { name: "Shawarma", tags: ["levantine", "main", "wrap"], ingredients: ["chicken thigh", "garlic", "lemon", "flatbread", "tahini", "pickle"] },
         { name: "Shawarma", tags: ["middle eastern", "main", "wrap"], ingredients: ["chicken", "garlic sauce", "lemon juice", "pita", "tahini"] },
     ],
     [
-        { name: "Mapo Tofu", tags: ["chinese", "main", "dish"], ingredients: ["tofu", "ground pork", "doubanjiang", "sichuan peppercorn", "scallion"] },
-        { name: "Mapo Tofu", tags: ["sichuan", "main", "dish"], ingredients: ["tofu", "pork", "chili bean paste", "sichuan peppercorn", "garlic"] },
+        { name: "Mapo Tofu", tags: ["chinese", "main"], ingredients: ["tofu", "ground pork", "doubanjiang", "sichuan peppercorn", "scallion"] },
+        { name: "Mapo Tofu", tags: ["sichuan", "main"], ingredients: ["tofu", "pork", "chili bean paste", "sichuan peppercorn", "garlic"] },
     ],
     [
         { name: "Ghormeh Sabzi", tags: ["persian", "main", "stew"], ingredients: ["lamb", "parsley", "fenugreek", "kidney bean", "dried lime", "rice"] },
@@ -213,12 +213,12 @@ const CUISINE_DRIFT_PAIRS: Array<[DishFixture, DishFixture]> = [
  */
 const LABEL_ONLY_PAIRS: Array<[DishFixture, DishFixture]> = [
     [
-        { name: "Shakshuka", tags: ["middle eastern", "main", "dish"], ingredients: ["egg", "tomato", "bell pepper", "onion", "cumin", "paprika"] },
-        { name: "Shakshuka", tags: ["north african", "main", "dish"], ingredients: ["egg", "tomato", "bell pepper", "onion", "cumin", "paprika"] },
+        { name: "Shakshuka", tags: ["middle eastern", "main"], ingredients: ["egg", "tomato", "bell pepper", "onion", "cumin", "paprika"] },
+        { name: "Shakshuka", tags: ["north african", "main"], ingredients: ["egg", "tomato", "bell pepper", "onion", "cumin", "paprika"] },
     ],
     [
-        { name: "Mapo Tofu", tags: ["chinese", "main", "dish"], ingredients: ["tofu", "ground pork", "doubanjiang", "sichuan peppercorn", "scallion"] },
-        { name: "Mapo Tofu", tags: ["sichuan", "main", "dish"], ingredients: ["tofu", "ground pork", "doubanjiang", "sichuan peppercorn", "scallion"] },
+        { name: "Mapo Tofu", tags: ["chinese", "main"], ingredients: ["tofu", "ground pork", "doubanjiang", "sichuan peppercorn", "scallion"] },
+        { name: "Mapo Tofu", tags: ["sichuan", "main"], ingredients: ["tofu", "ground pork", "doubanjiang", "sichuan peppercorn", "scallion"] },
     ],
     [
         { name: "Manti", tags: ["turkish", "main", "dumpling"], ingredients: ["ground beef", "flour", "yogurt", "garlic", "butter", "paprika", "mint"] },

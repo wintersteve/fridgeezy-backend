@@ -10,3 +10,4 @@ export * from "./lib/suggestions";
 export * from "./lib/recipes";
 export * from "./lib/chat";
 export * from "./lib/substitutes";
+export * from "./lib/speech";

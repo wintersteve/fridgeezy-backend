@@ -12,6 +12,22 @@ export const GenerateSuggestionRequestSchema = z.object({
     difficulty: z.enum(["easy", "medium", "hard"]).optional(),
     dietaryRestrictions: z.array(z.string()).optional(),
     /**
+     * The SHAPE the user asked for — soup, salad, curry — as a plain tag name.
+     *
+     * Sent whenever the dish-form filter is set, including from the home screen's
+     * "Soups"/"Salads" quick chips. Without it, a filtered search that exhausts
+     * the catalogue generated unconstrained dishes: the tag id narrowed
+     * `find_recipes` correctly, then the AI top-up that fires on an empty page
+     * knew nothing about it and filled a soup feed with whatever it liked. That is
+     * the same gap `quickDietaryTag` closes for dietary chips, which the client
+     * has to hand the AI by NAME because the DB query only ever carried an id.
+     *
+     * A name, not an id, for that reason: the prompt cannot use a uuid. The client
+     * holds `{ id, name }` in its filter store precisely so both halves are
+     * available.
+     */
+    dishForm: z.string().optional(),
+    /**
      * Dish names the client is ALREADY showing — earlier batches of an
      * infinite-scroll feed, plus whatever came from the database — so the next
      * batch stays novel.

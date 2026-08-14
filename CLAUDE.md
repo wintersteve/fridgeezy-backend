@@ -775,6 +775,16 @@ those frames incrementally, which is why frame shapes are part of the contract.
   renamed or repriced. The recipe prompt's restraint rules are the variant that
   degraded best on Flash, so that fallback stays viable.
 
+  **Google retires model ids underneath you, and it presents as a 404.**
+  `gemini-2.5-flash` began answering *"no longer available to new users"* in
+  mid-August 2026, which reached the app as a dead microphone button rather than
+  as anything naming a model. `interpretCommand` therefore runs on the
+  `gemini-flash-latest` **alias**: for a classifier held to a tight prompt and a
+  strict schema, model drift is cheap and an outage is not. TTS and images stay
+  pinned, because there the exact model *is* part of the output. When a call
+  that worked last week 404s, check the model id before anything else — and note
+  that `GET /v1beta/models` will happily list a model the key can no longer use.
+
   Recipe images are **padded to a square by `padPngToSquare` before upload**.
   The client shows one asset in boxes from 0.62 to 1.36 aspect, all cropping to
   fill, and a 3:4 render loses 45% of its height in the widest of them — it cut

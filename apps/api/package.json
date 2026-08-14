@@ -148,6 +148,13 @@
                     "cwd": "apps/api"
                 }
             },
+            "check-dietary-rename": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/dietary-rename-guard.check.ts",
+                    "cwd": "apps/api"
+                }
+            },
             "eval-step-structure": {
                 "executor": "nx:run-commands",
                 "options": {

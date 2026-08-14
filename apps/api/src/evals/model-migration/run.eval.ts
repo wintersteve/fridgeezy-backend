@@ -387,6 +387,21 @@ function printTable(results: CandidateResult[]): void {
         );
     }
 
+    // Loud, and above the error list. An unscored judgement silently narrows the
+    // denominator `real` is computed from, so a run with several of them is not
+    // comparable to one without — and without this line nothing says so. See
+    // Score.unscored for the run that made this necessary.
+    const unscored = results.filter((r) => r.realDish.unscored > 0);
+    if (unscored.length > 0) {
+        console.log("\n⚠ authenticity judgements that did not happen:");
+        for (const r of unscored) {
+            const attempted = r.realDish.total + r.realDish.unscored;
+            console.log(
+                `  ${r.candidate.id}: ${r.realDish.unscored}/${attempted} unscored — 'real' is measured over ${r.realDish.total}, NOT comparable to a clean run`
+            );
+        }
+    }
+
     const withErrors = results.filter((r) => r.errors.length > 0);
     if (withErrors.length > 0) {
         console.log("\nerrors:");

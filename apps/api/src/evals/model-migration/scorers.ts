@@ -14,11 +14,29 @@ import { verifySuggestionAuthenticity } from "../../modules/suggestions/services
 export interface Score {
     hits: number;
     total: number;
+    /**
+     * Judgements that could not be MADE, as opposed to judgements that came back
+     * negative. Excluded from `total` so they cannot be read as failures.
+     *
+     * Only the authenticity scorer can produce these, and only when its LLM call
+     * fails — which on 2026-08-14 it did six times in one `--repeat=5` run, all
+     * gpt-4o rate limits. Because the production gate fails OPEN, each one was
+     * counted as "authentic" for a dish the fixture expected to be dropped, and
+     * `real` reported 79% against a true value of ~90%. Nothing in the summary
+     * said any judgement was missing, so the run looked like a model regression.
+     */
+    unscored: number;
 }
 
-export const emptyScore = (): Score => ({ hits: 0, total: 0 });
+export const emptyScore = (): Score => ({ hits: 0, total: 0, unscored: 0 });
 
-export const record = (score: Score, ok: boolean): void => {
+/** `null` means the judgement did not happen — see {@link Score.unscored}. */
+export const record = (score: Score, ok: boolean | null): void => {
+    if (ok === null) {
+        score.unscored += 1;
+        return;
+    }
+
     score.total += 1;
     if (ok) score.hits += 1;
 };
@@ -39,15 +57,26 @@ export function hasLeakedScaffolding(rawText: string): boolean {
 }
 
 /**
- * Structure adherence for the suggestion path: one cuisine tag, one course tag,
- * and AT MOST one component tag, per the prompt's "Tagging Rules (CRITICAL)".
+ * Structure adherence for the suggestion path: one course tag, one OR two
+ * cuisine tags, and at most one component tag, per the prompt's "Tagging Rules
+ * (CRITICAL)".
  *
- * The component count is `<= 1`, not `=== 1`. It used to be exact, back when
- * every recipe was required to carry one and `dish` was the catch-all for the
- * ~87% that are not components at all. Now a component tag is written only for a
- * genuine building block, so zero is the correct and overwhelmingly common
- * answer — leaving this at `=== 1` would fail every ordinary dish and report a
- * prompt improvement as a model regression.
+ * Each bound is the prompt's, not a tighter guess — a scorer stricter than the
+ * rule it scores reports correct output as a regression, and both of these did:
+ *
+ * - **component `<= 1`.** Exact until 2026-08-14, back when every recipe was
+ *   required to carry one and `dish` was the catch-all for the ~87% that are not
+ *   components at all. A component tag is now written only for a genuine building
+ *   block, so zero is the correct and overwhelmingly common answer.
+ * - **cuisine 1 OR 2.** Exact until 2026-08-14, while the prompt has always said
+ *   "1 OR 2 cuisine tags per recipe … when the dish genuinely belongs to two
+ *   traditions at once: Tex-Mex is american + mexican, Nikkei is japanese +
+ *   peruvian". So every correctly-tagged fusion dish scored as a failure. Caught
+ *   when a baseline run returned Chicken Tikka Masala as `british, indian` — a
+ *   textbook case of the rule being followed — and the harness marked it wrong.
+ *
+ * Note the direction of the harm: this scorer gates a model migration, so a
+ * false failure here argues against a candidate that was in fact behaving.
  *
  * `tagTypes` maps tag name -> type and comes from the live `tags` table, so this
  * scores against the taxonomy the app actually persists rather than a hardcoded
@@ -66,7 +95,12 @@ export function scoreTagCardinality(
         else if (type === "course") counts.course += 1;
     }
 
-    return counts.component <= 1 && counts.cuisine === 1 && counts.course === 1;
+    return (
+        counts.component <= 1 &&
+        counts.cuisine >= 1 &&
+        counts.cuisine <= 2 &&
+        counts.course === 1
+    );
 }
 
 /**
@@ -98,11 +132,57 @@ export function avoidsIngredients(
     );
 }
 
-/** Delegates to the production authenticity gate. Costs an LLM call per dish. */
+/**
+ * Delegates to the production authenticity gate. Costs an LLM call per dish.
+ *
+ * Returns `null` when the gate could not reach a verdict, so the caller can leave
+ * it out of the score rather than counting a missing judgement as a wrong one.
+ *
+ * ## How a non-judgement is detected without touching production
+ *
+ * The gate fails OPEN — on any API error it returns exactly
+ * `{ authentic: true, status: "unknown" }`. That pair is unreachable on the happy
+ * path: `authentic` requires `ATTESTED.includes(status)`, and `unknown` is not in
+ * ATTESTED, so a model that genuinely answers "unknown" scores `authentic: false`.
+ * The combination is therefore a reliable signal of the catch block, and reading
+ * it costs no change to the gate and no second copy of its ATTESTED +
+ * CONFIDENCE_FLOOR rule — which the note at the top of this file is explicit
+ * about not wanting.
+ *
+ * Fail-open is right for production: a throttled judgement should let a dish
+ * through rather than break a live stream. It is wrong for measurement, which is
+ * the whole distinction this function draws.
+ *
+ * Retried before giving up, because the failure that produces this is transient
+ * by nature — a token-per-minute ceiling clears in under a minute. The retry is
+ * just "ask again", so it stays free of any knowledge of why the call failed.
+ */
 export async function isRealDish(
     suggestion: GenerateSuggestionResponseDto
-): Promise<boolean> {
-    return (await verifySuggestionAuthenticity(suggestion)).authentic;
+): Promise<boolean | null> {
+    const ATTEMPTS = 3;
+
+    for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+        const review = await verifySuggestionAuthenticity(suggestion);
+        const judged = !(review.authentic && review.status === "unknown");
+
+        if (judged) return review.authentic;
+
+        if (attempt < ATTEMPTS) {
+            // 2s, then 8s. A TPM window is 60s, so this does not try to outwait
+            // one — it steps aside for the burst that tripped it.
+            const backoffMs = 2000 * 4 ** (attempt - 1);
+            console.warn(
+                `  [authenticity] no verdict for "${suggestion.name}" (attempt ${attempt}/${ATTEMPTS}) — retrying in ${backoffMs}ms`
+            );
+            await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        }
+    }
+
+    console.warn(
+        `  [authenticity] giving up on "${suggestion.name}" — excluded from the score`
+    );
+    return null;
 }
 
 /**

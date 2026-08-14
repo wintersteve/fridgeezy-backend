@@ -205,6 +205,52 @@ const GUTTED_DISHES: DishFixture[] = [
     { name: "Peruvian Seafood Ceviche", nameAlt: "Ceviche de Mariscos", tags: ["peruvian", "appetizer"], ingredients: ["cilantro", "corn", "lime", "onion", "red chili", "salt", "sweet potato"] },
     { name: "Spaghetti alla Carbonara", nameAlt: "Carbonara", tags: ["italian", "main"], ingredients: ["spaghetti", "olive oil", "nutritional yeast", "black pepper", "zucchini"] },
     { name: "Green Papaya Salad", nameAlt: "Som Tam", tags: ["thai", "salad"], ingredients: ["cabbage", "carrot", "lime", "chili", "peanut", "soy sauce"] },
+    // The NAMING escape, which the three above do not cover: they all arrive
+    // wearing the authentic name, so only TEST ONE has to hold. This one arrives
+    // honestly labelled, and the risk is the opposite — that an adaptation which
+    // ADMITS to being one reads as a legitimate named dish, minting a permanent
+    // second row beside Pad Thai instead of being dropped.
+    //
+    // Prompted by a --repeat=5 baseline run on 2026-08-14 that renamed the same
+    // dish both ways within one run: "Pad Thai" -> "Vegan Pad Thai" and
+    // "Pad Thai (Vegan)" -> "Pad Thai". Step 2C strips redundant qualifiers
+    // ("Apple Tarte Tatin" -> "Tarte Tatin"), and a dietary qualifier is not
+    // redundant; it now has an explicit carve-out.
+    //
+    // NOT PAIRED with a plain-named "Pad Thai", though that was the first
+    // instinct. Measured over five runs it split 2 adaptation / 3 well_known —
+    // a coin flip, because the assertion is genuinely contested: tofu Pad Thai is
+    // ordinary Thai street food sold as Pad Thai, and tamarind, rice noodle,
+    // peanut and bean sprout all survive the swap. That is nothing like ceviche
+    // without seafood. The plain-name direction is already covered above by the
+    // vegan Spaghetti alla Carbonara, where the swap is unambiguous and the
+    // result is stable — and a 50/50 fixture in a suite that gates model
+    // migrations is worse than no fixture, because it teaches people to ignore a
+    // red line.
+    { name: "Vegan Pad Thai", nameAlt: null, tags: ["thai", "main", "noodles"], ingredients: ["rice noodle", "tofu", "soy sauce", "tamarind", "peanut", "bean sprout", "lime"] },
+];
+
+/**
+ * Dishes that are authentically vegan or vegetarian. Should PASS.
+ *
+ * The false-positive half of the dietary rule TEST ONE gained on 2026-08-14, and
+ * it exists for the same reason FOOD_WITH_DRINK does below: a gate told to treat
+ * "the defining ingredient was swapped for a plant one" as an adaptation can
+ * overshoot into treating *any* meatless dish as an adaptation of some meat dish
+ * it never came from. That would quietly delete a large slice of Indian, Levantine
+ * and Ethiopian cooking from discovery — and it would do it invisibly, since a
+ * dish that is never suggested produces no error.
+ *
+ * None of these is "a vegan version" of anything. Nobody removed meat from a Dal.
+ * They are dishes, named in their own right, that happen to contain no animal
+ * products — which is exactly the distinction the rule asks the model to make.
+ */
+const AUTHENTICALLY_VEGAN: DishFixture[] = [
+    { name: "Baba Ganoush", nameAlt: null, tags: ["levantine", "appetizer"], ingredients: ["eggplant", "tahini", "lemon", "garlic", "olive oil"] },
+    { name: "Dal Tadka", nameAlt: null, tags: ["indian", "main"], ingredients: ["lentil", "cumin", "turmeric", "garlic", "tomato", "ghee"] },
+    { name: "Aloo Gobi", nameAlt: null, tags: ["indian", "main"], ingredients: ["potato", "cauliflower", "turmeric", "cumin", "ginger", "coriander"] },
+    { name: "Falafel", nameAlt: null, tags: ["levantine", "appetizer"], ingredients: ["chickpea", "parsley", "cumin", "garlic", "coriander"] },
+    { name: "Misir Wot", nameAlt: null, tags: ["ethiopian", "main"], ingredients: ["red lentil", "berbere", "onion", "garlic", "ginger"] },
 ];
 
 /**
@@ -359,6 +405,14 @@ async function main() {
     for (const d of GUTTED_DISHES) {
         const review = await verifySuggestionAuthenticity(toDto(d));
         check(`${d.name} [${review.status}]`, review.authentic, false);
+    }
+
+    console.log(
+        "\nAuthenticity — authentically vegan/vegetarian dishes, should PASS:"
+    );
+    for (const d of AUTHENTICALLY_VEGAN) {
+        const review = await verifySuggestionAuthenticity(toDto(d));
+        check(`${d.name} [${review.status}]`, review.authentic, true);
     }
 
     // Scored on the STATUS, not just on `authentic`. A drink dropped as

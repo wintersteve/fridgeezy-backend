@@ -13,7 +13,10 @@ import { Request } from "express";
 
 import { trackBackgroundTask } from "../../../../background-tasks";
 import {
+    adaptRecipeForBlacklist,
+    compileBlacklist,
     createRecipeStream,
+    decideReuse,
     RecipeStreamInitialState,
     fetchRecipeMetadata,
     formatUnitsForPrompt,
@@ -209,6 +212,20 @@ export const promoteSuggestion = createStreamHandler({
             throw new Error("Suggestion ID is required");
         }
 
+        // Both reuse shortcuts below hand back a recipe SOMEBODY ELSE's request
+        // generated, so neither may assume it suits this caller. `blacklist` is
+        // the one input that makes the right dish the wrong recipe, and it was
+        // being consulted only on the generate path — the shortcuts matched on
+        // the dish name and stopped there. Compiled once; null when there is
+        // nothing to check, which is the common case and skips the family read.
+        const blacklist = body.blacklist ?? [];
+        const blacklistMatcher = compileBlacklist(blacklist);
+
+        // Set when a shortcut found the dish but could not serve it: the
+        // promotion then writes a VARIANT of that family instead of a catalogue
+        // entry. Threaded through to the persist call at the bottom.
+        let variantBaseId: string | null = null;
+
         // 0. Promotion is one-way: the suggestion is deleted once its recipe
         // exists. So if this id has already been promoted, hand back that recipe
         // straight away rather than regenerating it — a client that dropped out
@@ -219,17 +236,54 @@ export const promoteSuggestion = createStreamHandler({
 
         if (promotedResult.success && promotedResult.value) {
             const promotedId = promotedResult.value;
-
-            console.log(
-                `Suggestion ${id} was already promoted to recipe ${promotedId}`
+            const decision = await decideReuse(
+                recipesRepository,
+                promotedId,
+                blacklistMatcher,
+                blacklist
             );
 
-            return {
-                type: "stream" as const,
-                stream: (async function* () {
-                    yield { type: "complete", id: promotedId };
-                })(),
-            };
+            if ("serve" in decision) {
+                console.log(
+                    `Suggestion ${id} was already promoted to recipe ${decision.serve}`
+                );
+
+                return {
+                    type: "stream" as const,
+                    stream: (async function* () {
+                        yield { type: "complete", id: decision.serve };
+                    })(),
+                };
+            }
+
+            // Note what is NOT available here: the suggestion. Promotion deleted
+            // it, which is exactly why this shortcut exists — so there is no
+            // adapted ingredient list to generate from and no falling through to
+            // the path below. The recipe itself is the only source material, so
+            // the adaptation is a modification of it.
+            console.log(
+                `Suggestion ${id} promoted to ${promotedId}, but it contains ${decision.adapt.offending.join(", ")} — adapting as a variant`
+            );
+
+            const adaptation = await adaptRecipeForBlacklist({
+                recipeId: decision.adapt.recipeId,
+                blacklist,
+                offending: decision.adapt.offending,
+            });
+
+            if (adaptation) {
+                return {
+                    type: "stream" as const,
+                    stream: adaptation.stream,
+                };
+            }
+
+            // The recipe has gone missing since the lookup. Fall through: the
+            // suggestion fetch below answers 404 honestly rather than serving a
+            // recipe we could not read.
+            console.error(
+                `Could not adapt recipe ${decision.adapt.recipeId} for suggestion ${id}`
+            );
         }
 
         // 1. Fetch enriched suggestion with ingredients and tags
@@ -266,20 +320,43 @@ export const promoteSuggestion = createStreamHandler({
 
         if (existingByName.success && existingByName.value) {
             const existingId = existingByName.value;
-
-            console.log(
-                `Suggestion ${id} ("${suggestion.name}") already exists as recipe ${existingId} — reusing`
+            const decision = await decideReuse(
+                recipesRepository,
+                existingId,
+                blacklistMatcher,
+                blacklist
             );
 
-            const suggestionsRepo = new SuggestionsRepository();
-            await suggestionsRepo.delete(id);
+            if ("serve" in decision) {
+                console.log(
+                    `Suggestion ${id} ("${suggestion.name}") already exists as recipe ${decision.serve} — reusing`
+                );
 
-            return {
-                type: "stream" as const,
-                stream: (async function* () {
-                    yield { type: "complete", id: existingId };
-                })(),
-            };
+                const suggestionsRepo = new SuggestionsRepository();
+                await suggestionsRepo.delete(id);
+
+                return {
+                    type: "stream" as const,
+                    stream: (async function* () {
+                        yield { type: "complete", id: decision.serve };
+                    })(),
+                };
+            }
+
+            // Unlike the shortcut above, the suggestion is still here — and its
+            // ingredient list was already written around this caller's blacklist
+            // by the generator. So the better adaptation is the ORDINARY
+            // generation below, from a clean list, rather than a modification of
+            // a recipe built on a dirty one. Don't take the shortcut; write the
+            // result into the existing family instead of alongside it.
+            //
+            // `existingId` is already a base — findByCanonicalName excludes
+            // variants — so it is the family id directly.
+            variantBaseId = existingId;
+
+            console.log(
+                `Suggestion ${id} ("${suggestion.name}") exists as recipe ${existingId}, but it contains ${decision.adapt.offending.join(", ")} — generating a variant`
+            );
         }
 
         // 2. Create ingredient ID map (lowercase name -> UUID)
@@ -364,15 +441,45 @@ export const promoteSuggestion = createStreamHandler({
 
             // After stream completes, persist the recipe and yield final message with ID
             if (lastResult?.type === "complete" && lastResult.recipe) {
-                // Persist using ingredient IDs directly (no canonical_id lookup needed)
+                // Persist using ingredient IDs directly (no canonical_id lookup
+                // needed). `variantBaseId` is set only when a reuse shortcut
+                // found this dish and could not serve it — the row then joins
+                // that family instead of standing beside it as a second base,
+                // which the partial unique index would reject anyway.
                 const persistResult = await persistRecipeWithIngredientIds(
-                    lastResult.recipe
+                    lastResult.recipe,
+                    variantBaseId
                 );
 
                 if (persistResult.success) {
                     console.log(
                         `Recipe persisted successfully with ID: ${persistResult.value}`
                     );
+
+                    if (variantBaseId) {
+                        // Deliberately NEITHER marked as promoted-from NOR
+                        // followed by deleting the suggestion.
+                        //
+                        // `source_suggestion_id` means "the catalogue recipe
+                        // this suggestion became", and this is not that — it is
+                        // one caller's adaptation. Marking it would also give
+                        // the suggestion two promoted recipes, which
+                        // `findBySuggestionId` reads with `maybeSingle()` and
+                        // would start erroring on. Leaving the suggestion
+                        // standing costs nothing: `find_recipes` already hides a
+                        // suggestion whose dish has a recipe, and the next
+                        // promote of it finds this variant through the family
+                        // check rather than generating a second one.
+                        yield {
+                            ...lastResult,
+                            id: persistResult.value,
+                            label: "Adapted for you",
+                            image: getRecipeImagePublicUrl(
+                                lastResult.recipe.name
+                            ),
+                        };
+                        return;
+                    }
 
                     // Point the recipe back at the suggestion it came from
                     // BEFORE the suggestion is deleted — that id is the only
@@ -425,6 +532,17 @@ export const promoteSuggestion = createStreamHandler({
                         "Failed to persist recipe:",
                         persistResult.error.message
                     );
+
+                    if (variantBaseId) {
+                        // No race recovery on this branch, on purpose. The
+                        // recovery below reuses the catalogue row under this
+                        // name — and on this branch that row is precisely the
+                        // one the caller's blacklist ruled out. Better a
+                        // completion with no id, which the client reports as a
+                        // failed generation, than the recipe they cannot eat.
+                        yield lastResult;
+                        return;
+                    }
 
                     // A concurrent promotion of the same dish may have committed
                     // the recipe between our reuse check and this insert (once the

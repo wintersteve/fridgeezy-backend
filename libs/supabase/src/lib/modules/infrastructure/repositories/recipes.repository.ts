@@ -335,7 +335,18 @@ export class RecipesRepository implements IRecipesRepository {
         recipe: GenerateRecipeResponseDto,
         imageUrl: string,
         /** See {@link RecipesRepository.persist}. */
-        identityCuisine?: string | null
+        identityCuisine?: string | null,
+        /**
+         * See {@link RecipesRepository.persist} — same parameter, same reason it
+         * has to be in the INSERT.
+         *
+         * The RPC only learned it in `20260815000002`. Before that this path
+         * could write base rows and nothing else, so a promotion that had to
+         * adapt a dish (a catalogue copy the caller's blacklist rules out) had
+         * no way to store the result: a second base row under the same name is
+         * what `recipes_canonical_id_difficulty_unique` exists to reject.
+         */
+        baseRecipeId?: string | null
     ): Promise<Result<string, PersistenceError>> {
         try {
             // Type assertion needed until database types are regenerated after migration
@@ -373,6 +384,9 @@ export class RecipesRepository implements IRecipesRepository {
                     p_tags: recipe.tags || [],
                     p_name_en: recipe.nameEn ?? null,
                     p_identity_cuisine: identityCuisine ?? undefined,
+                    // Omitted rather than nulled when absent, so the SQL default
+                    // applies — the RPC types it optional, not nullable.
+                    p_base_recipe_id: baseRecipeId ?? undefined,
                 }
             );
 
@@ -438,6 +452,90 @@ export class RecipesRepository implements IRecipesRepository {
             return failure(
                 new PersistenceError(
                     `Failed to resolve variant base: ${error instanceof Error ? error.message : "Unknown error"}`
+                )
+            );
+        }
+    }
+
+    /**
+     * Every version of one dish, with the ingredient names each one uses: the
+     * family base first, then its variants oldest-first.
+     *
+     * Takes any recipe in the family and resolves the base itself, so a caller
+     * holding a variant id gets the same answer as one holding the base.
+     *
+     * This is the read behind "can this user eat any version of this dish we
+     * already have". The reuse shortcuts in `promote` used to answer that
+     * question by not asking it — they returned the catalogue copy on a name
+     * match alone — and a blacklist is exactly the input that makes the
+     * catalogue copy the wrong answer. Ordered so the base wins ties: it carries
+     * the likes and the image, and a variant is somebody's adaptation.
+     *
+     * Ingredient names, not ids: the caller compares them against a blacklist of
+     * free-text names, and `ingredientCanonicalId` is the rule that makes both
+     * sides comparable.
+     */
+    async listFamilyVersions(recipeId: string): Promise<
+        Result<
+            Array<{
+                id: string;
+                isBase: boolean;
+                ingredientNames: string[];
+            }>,
+            PersistenceError
+        >
+    > {
+        try {
+            const { data: anchor, error: anchorError } = await supabaseAdmin
+                .from("recipes")
+                .select("id, base_recipe_id")
+                .eq("id", recipeId)
+                .maybeSingle();
+
+            if (anchorError) {
+                return failure(
+                    new PersistenceError(`Database error: ${anchorError.message}`)
+                );
+            }
+
+            if (!anchor) {
+                return success([]);
+            }
+
+            const baseId = anchor.base_recipe_id ?? anchor.id;
+
+            const { data, error } = await supabaseAdmin
+                .from("recipes")
+                .select(
+                    `id, base_recipe_id, created_at,
+                     recipe_ingredients ( ingredient:ingredients ( name ) )`
+                )
+                .or(`id.eq.${baseId},base_recipe_id.eq.${baseId}`)
+                .order("created_at", { ascending: true });
+
+            if (error) {
+                return failure(
+                    new PersistenceError(`Database error: ${error.message}`)
+                );
+            }
+
+            const versions = (data ?? []).map((row) => ({
+                id: row.id,
+                isBase: row.base_recipe_id === null,
+                ingredientNames: (row.recipe_ingredients ?? []).map(
+                    (link) => link.ingredient.name
+                ),
+            }));
+
+            versions.sort(
+                (left, right) => Number(right.isBase) - Number(left.isBase)
+            );
+
+            return success(versions);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to list recipe family versions: ${error instanceof Error ? error.message : "Unknown error"}`
                 )
             );
         }

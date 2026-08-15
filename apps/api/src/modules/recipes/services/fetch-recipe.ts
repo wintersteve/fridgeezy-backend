@@ -3,7 +3,10 @@ import { supabaseAdmin } from "@fridgeezy/supabase";
 
 export async function fetchRecipe(
     recipeId: string
-): Promise<(GenerateRecipeResponseDto & { imageUrl?: string }) | null> {
+): Promise<
+    | (GenerateRecipeResponseDto & { imageUrl?: string; origin?: string | null })
+    | null
+> {
     const { data: recipe, error } = await supabaseAdmin
         .from("recipes")
         .select(
@@ -22,6 +25,7 @@ export async function fetchRecipe(
             fat,
             tips,
             image,
+            origin,
             recipe_ingredients (
                 quantity,
                 ingredient:ingredients (
@@ -89,5 +93,8 @@ export async function fetchRecipe(
                 : null,
         tags: recipe.recipe_tags.map((rt) => rt.tag.name),
         imageUrl: recipe.image, // Include image URL for reuse
-    } as GenerateRecipeResponseDto & { imageUrl?: string };
+        // Provenance, carried so modify/escalate can keep it off an adapted
+        // copy's read path by accident — see 20260815000003.
+        origin: recipe.origin ?? null,
+    } as GenerateRecipeResponseDto & { imageUrl?: string; origin?: string | null };
 }

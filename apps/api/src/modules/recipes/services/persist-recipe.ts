@@ -234,13 +234,56 @@ export async function persistRecipe(
  * Used when generating a recipe from a suggestion where ingredient IDs are already known.
  *
  * @param recipe The recipe data with ingredientId attached to each ingredient
+ * @param baseRecipeId The family base, when this promotion is writing a VARIANT
+ *   rather than a catalogue entry — currently the case when the dish already
+ *   exists but the caller's blacklist rules that copy out. Set at INSERT time
+ *   for the reason recorded on {@link persistRecipe}.
  * @returns Result containing the recipe UUID or error
  */
 export async function persistRecipeWithIngredientIds(
-    recipe: GenerateRecipeResponseDto
+    recipe: GenerateRecipeResponseDto,
+    baseRecipeId?: string | null
 ): Promise<Result<string, PersistenceError>> {
     try {
         const repository = new RecipesRepository();
+
+        // A variant inherits its base's identity rather than re-deriving it —
+        // see the sibling call in `persistRecipe`. It also skips the
+        // reuse-before-generate check below entirely: that check exists to find
+        // the catalogue copy of this dish, and when we are writing a variant we
+        // have already been handed it and already decided it will not do.
+        if (baseRecipeId) {
+            const identityCuisine =
+                await repository.identityCuisineOf(baseRecipeId);
+
+            recipe.ingredients = dedupeIngredientsById(recipe.ingredients);
+
+            const imageUrl = getRecipeImagePublicUrl(recipe.name);
+
+            const unitsResolved = await resolveIngredientUnits(
+                recipe.ingredients
+            );
+            if (!unitsResolved.success) {
+                return unitsResolved;
+            }
+
+            const variantResult = await repository.persistWithIngredientIds(
+                recipe,
+                imageUrl,
+                identityCuisine,
+                baseRecipeId
+            );
+
+            if (variantResult.success) {
+                await storeRecipeSignature(
+                    repository,
+                    variantResult.value,
+                    recipe
+                );
+            }
+
+            return variantResult;
+        }
 
         // Promotion is not naturally idempotent: the suggestion row is deleted
         // once the recipe exists, so a repeated (or concurrent, or retried)

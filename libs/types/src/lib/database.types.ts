@@ -672,6 +672,69 @@ export type Database = {
         }
         Relationships: []
       }
+      recipe_family_defaults: {
+        Row: {
+          base_recipe_id: string
+          created_at: string
+          id: string
+          profile_id: string
+          recipe_id: string
+          updated_at: string
+        }
+        Insert: {
+          base_recipe_id: string
+          created_at?: string
+          id?: string
+          profile_id: string
+          recipe_id: string
+          updated_at?: string
+        }
+        Update: {
+          base_recipe_id?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+          recipe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_family_defaults_base_recipe_id_fkey"
+            columns: ["base_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "recipe_family_defaults_base_recipe_id_fkey"
+            columns: ["base_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_family_defaults_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_family_defaults_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "recipe_family_defaults_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recipe_ingredients: {
         Row: {
           comment: string | null
@@ -971,6 +1034,7 @@ export type Database = {
           label: string
           profile_id: string
           recipe_id: string
+          updated_at: string
         }
         Insert: {
           base_recipe_id: string
@@ -979,6 +1043,7 @@ export type Database = {
           label: string
           profile_id: string
           recipe_id: string
+          updated_at?: string
         }
         Update: {
           base_recipe_id?: string
@@ -987,6 +1052,7 @@ export type Database = {
           label?: string
           profile_id?: string
           recipe_id?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -1045,6 +1111,7 @@ export type Database = {
           kcal: number | null
           name: string
           name_en: string | null
+          origin: string
           prep_time: string | null
           protein: number | null
           servings: number
@@ -1072,6 +1139,7 @@ export type Database = {
           kcal?: number | null
           name: string
           name_en?: string | null
+          origin?: string
           prep_time?: string | null
           protein?: number | null
           servings?: number
@@ -1099,6 +1167,7 @@ export type Database = {
           kcal?: number | null
           name?: string
           name_en?: string | null
+          origin?: string
           prep_time?: string | null
           protein?: number | null
           servings?: number
@@ -1336,6 +1405,11 @@ export type Database = {
       }
     }
     Functions: {
+      clear_recipe_family_default: {
+        Args: { p_recipe_id: string }
+        Returns: boolean
+      }
+      current_profile_id: { Args: never; Returns: string }
       delete_orphan_generated_recipes: { Args: never; Returns: number }
       difficulty_preference_rank: {
         Args: { difficulty: string; pref: string }
@@ -1358,6 +1432,13 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      get_recipe_family_default: {
+        Args: { p_recipe_id: string }
+        Returns: {
+          base_recipe_id: string
+          default_recipe_id: string
+        }[]
       }
       has_user: { Args: { email: string }; Returns: boolean }
       ingredient_canonical_id: { Args: { input_text: string }; Returns: string }
@@ -1389,6 +1470,7 @@ export type Database = {
           p_kcal: number
           p_name: string
           p_name_en?: string
+          p_origin?: string
           p_prep_time: string
           p_protein: number
           p_servings: number
@@ -1399,6 +1481,7 @@ export type Database = {
       }
       persist_recipe_with_ingredient_ids: {
         Args: {
+          p_base_recipe_id?: string
           p_carbs: number
           p_cook_time: string
           p_description: string
@@ -1411,6 +1494,7 @@ export type Database = {
           p_kcal: number
           p_name: string
           p_name_en?: string
+          p_origin?: string
           p_prep_time: string
           p_protein: number
           p_servings: number
@@ -1432,6 +1516,24 @@ export type Database = {
           p_total_time_minutes?: number
         }
         Returns: string
+      }
+      rename_recipe_variant: {
+        Args: { p_label: string; p_variant_id: string }
+        Returns: {
+          base_recipe_id: string
+          created_at: string
+          id: string
+          label: string
+          profile_id: string
+          recipe_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "recipe_variants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       search_categories: {
         Args: { match_count?: number; query_embedding: string }
@@ -1506,6 +1608,23 @@ export type Database = {
           similarity: number
         }[]
       }
+      set_recipe_family_default: {
+        Args: { p_recipe_id: string }
+        Returns: {
+          base_recipe_id: string
+          created_at: string
+          id: string
+          profile_id: string
+          recipe_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "recipe_family_defaults"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       singularize_token: { Args: { tok: string }; Returns: string }
       tag_subtree: {
         Args: { root_ids: string[] }
@@ -1551,6 +1670,7 @@ export type Database = {
         tags: Json | null
         source: string | null
         total_time_minutes: number | null
+        origin: string | null
       }
     }
   }

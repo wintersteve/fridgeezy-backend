@@ -1060,3 +1060,108 @@ NULL means unknown and is never backfilled on suggestions; the client draws no
 chip. `minutes_from_time_text` parses the `'15 min'` column format and returns
 NULL on anything else rather than stripping non-digits, which would read
 `'1 h 30 min'` as 130.
+
+### Recipe variants: versions of one dish
+
+A dish is a **family**: one base recipe (`recipes.base_recipe_id IS NULL`) plus
+zero or more variants pointing at it. Families stay **flat** —
+`resolveVariantBase` points a new variant at its source's base, never at the
+source when that is itself a variant. Two things create one today, and both
+persist it with the parent set **in the INSERT**:
+
+| Path | RPC | Parameter |
+| --- | --- | --- |
+| `POST /recipes/modify`, `POST /recipes/difficulty/escalate` | `persist_recipe` | `p_base_recipe_id` (since the baseline) |
+| `POST /suggestions/:id/promote`, when the catalogue copy is unusable | `persist_recipe_with_ingredient_ids` | `p_base_recipe_id` (since `20260815000002`) |
+
+**Never patch `base_recipe_id` on afterwards.** A row that is briefly
+`base_recipe_id NULL` is, to `recipes_canonical_id_difficulty_unique`, a second
+base recipe under the base's name, and the insert is what fails — there is no
+window in which to re-parent it. That is what broke difficulty escalation once
+already, and the second persist RPC lacking the parameter is what made an
+adapted promotion impossible until now.
+
+The two tables beside `recipes` are per-USER and the split matters:
+
+- **`recipe_variants`** — "this profile saved that recipe as a version of this
+  dish", with a user-editable `label`. A variant recipe row exists before anyone
+  saves it (the generator writes it); the join row is what keeps it alive past
+  `delete_orphan_generated_recipes`. Written by the CLIENT, direct to Supabase
+  under `users_manage_own_recipe_variants` — nothing in this repo inserts one.
+- **`recipe_family_defaults`** — "when this profile opens this dish, give them
+  that version". `unique (profile_id, base_recipe_id)` IS the one-default rule;
+  setting a new one is an upsert on that key, so a family never briefly has two.
+
+**`recipe_id = base_recipe_id` means opposite things in those two tables**, and
+this is the sharpest edge in the area. In `recipe_family_defaults` it is the
+ordinary way of saying "pin the original". In `recipe_variants` it is
+**damage** — the shape a variant is left in after being merged into its own
+base, which is what `merge_recipe`'s guard (`20260815000001`) exists to detect.
+That is precisely why the pin is its own table rather than an `is_default`
+column on `recipe_variants`: the base has no join row, and inventing legitimate
+rows of the damaged shape would retire the only signal that tells damage apart.
+
+A pin on a VARIANT requires that variant to be saved (the validate trigger
+refuses otherwise), because an unsaved variant is exactly what the orphan sweep
+is free to delete — a preference whose target can vanish is worse than no
+preference. Un-saving a variant retracts its pin, by trigger.
+
+### The reuse shortcuts must re-check the blacklist
+
+`promote` has two of them — `findBySuggestionId` (already promoted) and
+`findByCanonicalName` (dish already in the catalogue) — and both hand back a
+recipe written for **somebody else's request**. They were built to answer "have
+we already paid to generate this dish?", for which a name match is the whole
+answer. A blacklist is the input that makes the right dish the wrong recipe.
+
+`decideReuse` (`recipes/services/blacklist.ts`) searches the whole FAMILY, not
+just the candidate, and that is where the value is: the first caller with a
+peanut allergy pays for one adaptation and everyone after them is served the
+variant that already exists — including that caller on their next promote. It is
+what makes an adaptation idempotent **without storing whose blacklist it was
+written for**; the ingredients are the record. It **fails closed**: a family read
+that errors adapts rather than serves, because a needless adaptation costs one
+LLM call and a wrong serve puts a blacklisted ingredient in front of someone who
+said they cannot eat it.
+
+Matching is by `ingredientCanonicalId` on both sides — never substring. "Butter"
+must not match "butternut squash".
+
+The two shortcuts then diverge, and the reason is what data survives:
+
+- **`findByCanonicalName`** — the suggestion is still here, and its ingredient
+  list was already written around this blacklist by the generator. So the
+  ordinary generation path runs, from a clean list, and only the persist changes:
+  `variantBaseId` is set and the result joins the existing family. It is
+  **not** marked `source_suggestion_id` and the suggestion is **not** deleted —
+  that column means "the catalogue recipe this suggestion became", and a
+  per-user adaptation is not that. (Marking it would also give one suggestion two
+  promoted recipes, which `findBySuggestionId`'s `maybeSingle()` would start
+  erroring on.)
+- **`findBySuggestionId`** — promotion already deleted the suggestion, so there
+  is no clean ingredient list and no falling through. The recipe itself is the
+  only source material, which makes the adaptation a *modification* of it:
+  `adaptRecipeForBlacklist` runs the `modify` prompt with the restriction as its
+  instruction. That prompt is now shared (`modify-recipe-prompt.ts`) rather than
+  copied — it carries the rule that matters, *replace* a non-compliant
+  ingredient rather than drop it, which is the difference between an adapted
+  dish and the gutted one `GUTTED_DISHES` pins.
+
+Both adaptations emit a `label` on the terminal frame, like `modify` does. The
+row is an unsaved variant until the client links it in `recipe_variants`.
+
+### `recipes.origin` — generated or imported
+
+`'generated' | 'imported'`, NOT NULL default `'generated'`, check-constrained
+(`20260815000003`). Scaffolding for Phase 2 photo import; nothing writes
+`'imported'` yet.
+
+**It is `origin` and not `source` because `source` is taken.**
+`find_recipes_result.source` is `'recipe' | 'suggestion'` — which TABLE a feed
+row came from — and the client orders on it. Two `source` columns on rows
+flowing through the same function would read as correct in every diff.
+
+`is_generated` is now DERIVED from it (`p_origin = 'generated'`) in both persist
+RPCs. That flag has distinguished nothing since the baseline, which is why
+`delete_orphan_generated_recipes` is defined and never scheduled; an import is
+the first row a 30-day reaper must never touch.

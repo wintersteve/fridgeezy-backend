@@ -26,6 +26,12 @@ export interface RecipeSummary {
      * draws no pill rather than guessing a band.
      */
     totalTimeMinutes?: number | null;
+    /**
+     * Provenance: `"generated"` (this app wrote it) or `"imported"` (a user
+     * brought it in). NOT the same axis as `find_recipes_result.source`, which
+     * says which TABLE a feed row came from — see `20260815000003`.
+     */
+    origin?: string | null;
     ingredients: Array<{ id: string; name: string }>;
     tags: Array<{ id: string; name: string }>;
 }
@@ -52,6 +58,7 @@ export async function fetchRecipeSummary(
             image,
             difficulty,
             total_time_minutes,
+            origin,
             recipe_ingredients (
                 ingredient:ingredients (
                     id,
@@ -82,6 +89,7 @@ export async function fetchRecipeSummary(
         image: recipe.image ?? null,
         difficulty: recipe.difficulty as "easy" | "medium" | "hard",
         totalTimeMinutes: recipe.total_time_minutes ?? null,
+        origin: recipe.origin ?? null,
         ingredients: recipe.recipe_ingredients.map((ri) => ({
             id: ri.ingredient.id,
             name: ri.ingredient.name,

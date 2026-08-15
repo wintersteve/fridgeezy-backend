@@ -19,6 +19,7 @@ export * from './profile-entitlements';
 export * from './profile-recipe-interactions';
 export * from './profile-settings';
 export * from './profiles';
+export * from './recipe-family-defaults';
 export * from './recipe-ingredients';
 export * from './recipe-instructions';
 export * from './recipe-suggestion-ingredients';

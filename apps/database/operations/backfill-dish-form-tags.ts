@@ -85,7 +85,27 @@ type Form = (typeof FORMS)[number];
 interface Row {
     id: string;
     name: string;
+    /**
+     * Sent to the classifier alongside the name, and the single biggest accuracy
+     * lever here.
+     *
+     * The first pass judged a BARE NAME, which for a dish the model does not know
+     * is a guess dressed as an answer — "Jeonju Bibimbap" and "Supplì al
+     * Telefono" both came back formless, and both are unmistakable once you can
+     * see rice in the list. It is also the evidence the authenticity gate is
+     * built on ("Judge the dish THE INGREDIENT LIST DESCRIBES, not the dish the
+     * name claims"), so withholding it here was the odd one out.
+     */
+    ingredients: string[];
 }
+
+/** Flattens the nested Supabase embed both tables return. */
+const ingredientNames = (
+    rows: { ingredients: { name: string } | null }[] | null | undefined
+): string[] =>
+    (rows ?? [])
+        .map((row) => row.ingredients?.name)
+        .filter((name): name is string => !!name);
 
 /**
  * The prompt is the generators' `DISH_FORM_RULE` restated for a classifier that
@@ -101,18 +121,22 @@ const SYSTEM_PROMPT = `You assign a DISH FORM to each dish for a recipe database
 
 The ONLY valid forms are: ${FORMS.join(", ")}.
 
+Each input line is a dish name, then " — ", then its ingredients. USE THE INGREDIENTS. They are the evidence; the name is often a dish you do not know, and a name you cannot place plus an ingredient list you can read is still an answerable question. Rice and gochujang and a fried egg is a rice dish whatever it is called.
+
 Form is the SHAPE the dish takes — how it is built and eaten — not when it is served and not how it is cooked.
 - A soup served as a starter is still form "soup". The course it fills is a separate question you are NOT being asked.
 - "roast", "bake" and "grill" are forms only when the dish IS that thing (a Sunday roast, a gratin, a mixed grill). A braise that happens to go in the oven is not a "bake".
 - Pick the form the dish most obviously IS. Ramen is "noodles", not "soup". Lasagne is "pasta", not "bake". A burrito is a "wrap". Shepherd's Pie is a "pie".
 
-MOST DISHES HAVE NO FORM, and "none" is the expected answer, not a failure. A dish that is simply a plate of food — a protein with sides, a stir-fried plate served with rice, a cake, a tart, a plate of grilled meat with salad — has NO form. Do not stretch a dish to fit one of the twenty words. Returning "none" for two thirds of the input is a correct outcome.
-- Chicken Tikka Masala is "curry". Beef Bourguignon is "stew". Caesar Salad is "salad". Pad Thai is "noodles". Margherita is "pizza". Congee is "porridge". Gyoza is "dumpling". Yakitori is "skewer".
-- Beef Wellington has NO form. Tiramisu has NO form. Crème Brûlée has NO form. Peking Duck has NO form. Fish and Chips has NO form. Guacamole has NO form.
+ANSWER "none" WHENEVER THE DISH GENUINELY HAS NO FORM, and do not stretch a dish to fit one of the words. A dish that is simply a plate of food — a protein with sides, a plate of grilled meat with salad, a cake, a tart, a custard — has no form, and that is a correct and common answer. But do not reach for "none" as a safe default either: if the ingredients plainly make it one of the forms, say so.
+- HAS a form: Chicken Tikka Masala is "curry". Beef Bourguignon is "stew". Caesar Salad is "salad". Pad Thai is "noodles". Margherita is "pizza". Congee is "porridge". Gyoza is "dumpling". Yakitori is "skewer".
+- These are the ones most often missed, and all of them HAVE a form. Anything built on a base of cooked rice is "rice dish": bibimbap, risotto, paella, fried rice, jollof, arancini and suppli. A savoury batter or bound pancake is "pancake": okonomiyaki, pajeon, blini, latkes. A flatbread with toppings baked on it is "pizza": pide, lahmacun, khachapuri. Anything wrapped in a leaf or a dough parcel is "dumpling": tamales, pierogi, momo, mandu. Anything rolled in a flatbread is "wrap".
+- A DERIVATIVE IS NOT THE BASE, and this is the easiest way to get the previous rule wrong. The form comes from what the dish is BUILT ON, not from every appearance of a word in the list. Rice flour, rice vinegar, rice wine, rice paper and rice noodles are not cooked rice: Chicken 65 is battered in rice flour and is NOT a "rice dish", it is fried chicken with no form at all. Likewise a splash of noodle-cooking water does not make a "noodles", and breadcrumbs do not make a "bake". Ask what you would find on the plate, not what is in the cupboard.
+- Has NO form: Beef Wellington, Tiramisu, Crème Brûlée, Peking Duck, Fish and Chips, Guacamole.
 
 Output ONE JSON object per line (JSONL), one line per dish, in the SAME ORDER as the input, and nothing else. No markdown, no code blocks.
 
-Each line must be: {"name":"<the dish name EXACTLY as given>","form":"<one of the forms above>"|"none"}`;
+Each line must be: {"name":"<the dish name EXACTLY as given, WITHOUT the ingredients>","form":"<one of the forms above>"|"none"}`;
 
 async function classify(rows: Row[]): Promise<Map<string, Form>> {
     const out = new Map<string, Form>();
@@ -123,7 +147,13 @@ async function classify(rows: Row[]): Promise<Map<string, Form>> {
         const { text } = await generateCompletion({
             model: { openai: MODEL },
             system: SYSTEM_PROMPT,
-            user: batch.map((row) => row.name).join("\n"),
+            user: batch
+                .map((row) =>
+                    row.ingredients.length > 0
+                        ? `${row.name} — ${row.ingredients.join(", ")}`
+                        : row.name
+                )
+                .join("\n"),
             // Sized for one short JSON object per dish, with headroom — a cap
             // that truncates would silently drop the tail of the batch.
             maxTokens: { openai: 60 * batch.length, bedrock: 60 * batch.length },
@@ -251,7 +281,7 @@ function matchFormsByName(
 async function suggestionsMissingForm(): Promise<Row[]> {
     const { data: rows, error } = await supabaseAdmin
         .from("recipe_suggestions")
-        .select("id, name");
+        .select("id, name, recipe_suggestion_ingredients ( ingredients ( name ) )");
 
     if (error) throw new Error(`recipe_suggestions: ${error.message}`);
 
@@ -266,13 +296,19 @@ async function suggestionsMissingForm(): Promise<Row[]> {
         (tagged ?? []).map((row) => row.recipe_suggestion_id)
     );
 
-    return (rows ?? []).filter((row) => !hasForm.has(row.id));
+    return (rows ?? [])
+        .filter((row) => !hasForm.has(row.id))
+        .map((row) => ({
+            id: row.id,
+            name: row.name,
+            ingredients: ingredientNames(row.recipe_suggestion_ingredients),
+        }));
 }
 
 async function recipesMissingForm(): Promise<Row[]> {
     const { data: rows, error } = await supabaseAdmin
         .from("recipes")
-        .select("id, name");
+        .select("id, name, recipe_ingredients ( ingredients ( name ) )");
 
     if (error) throw new Error(`recipes: ${error.message}`);
 
@@ -285,7 +321,13 @@ async function recipesMissingForm(): Promise<Row[]> {
 
     const hasForm = new Set((tagged ?? []).map((row) => row.recipe_id));
 
-    return (rows ?? []).filter((row) => !hasForm.has(row.id));
+    return (rows ?? [])
+        .filter((row) => !hasForm.has(row.id))
+        .map((row) => ({
+            id: row.id,
+            name: row.name,
+            ingredients: ingredientNames(row.recipe_ingredients),
+        }));
 }
 
 /** Log the assignment and return only the rows that got a form. */

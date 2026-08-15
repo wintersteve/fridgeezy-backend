@@ -5,10 +5,22 @@ import { z } from "zod/v4";
  * Defines the contract for the compose recipe use-case.
  */
 export const ComposeRecipeRequestSchema = z.object({
+    /**
+     * The course slots to fill, spelled EXACTLY as the `course` tag vocabulary
+     * does: "appetizer", "main", "side", "dessert". Nothing else resolves.
+     *
+     * The description used to offer "side dish" as an example. No caller has ever
+     * sent that — every one uses the four values verbatim (the client's
+     * COURSE_ORDER) — but it made the loose `includes` matching in
+     * `generate-compose-suggestions` look load-bearing when it was only hiding
+     * the ambiguity this line created.
+     */
     courseTypes: z
         .array(z.string().min(1))
         .min(1)
-        .describe("Desired course types (e.g., appetizer, side dish, dessert)"),
+        .describe(
+            'Course slots to fill, from the course vocabulary exactly: "appetizer", "main", "side", "dessert"'
+        ),
     matchCuisine: z
         .boolean()
         .default(true)

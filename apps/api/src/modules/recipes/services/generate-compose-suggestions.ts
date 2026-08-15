@@ -86,26 +86,52 @@ Each recipe object must include:
 - ingredients (array of key ingredient strings)
 - ${TAGS_KEY_RULE}`;
 
-const buildUserPrompt = (
+/**
+ * Which course slots the base recipe already fills, and which of the requested
+ * ones are therefore still open.
+ *
+ * Computed ONCE and handed to both callers. It used to be duplicated verbatim in
+ * `buildUserPrompt` and `generateComposeRecipes` — two copies of the rule that
+ * decides what the composer may suggest, free to drift into disagreeing about
+ * what the user asked for.
+ *
+ * Matched by EXACT name, not `includes`. The loose form was a false-positive
+ * waiting to happen — any tag whose name merely contained a course word counted
+ * as that course — and it is the same defect the cuisine lookup below carries a
+ * comment about having already fixed. Every caller sends the vocabulary verbatim
+ * (`["appetizer", "main", "side", "dessert"]`, see the client's COURSE_ORDER), so
+ * exact matching loses nothing.
+ */
+const splitCourses = (
     baseRecipe: GenerateRecipeResponseDto & { imageUrl?: string },
     request: ComposeRecipeRequestDto,
-    courseTagNames: string[],
-    cuisineTagNames: string[]
-): string => {
-    // Extract course tags from base recipe using DB course tags
-    const baseCourses = baseRecipe.tags.filter((tag) =>
-        courseTagNames.some((course) =>
-            tag.toLowerCase().includes(course.toLowerCase())
+    courseTagNames: string[]
+): { base: string[]; allowed: string[] } => {
+    const base = baseRecipe.tags.filter((tag) =>
+        courseTagNames.some(
+            (course) => tag.toLowerCase() === course.toLowerCase()
         )
     );
 
-    // Filter requested courses to exclude base courses
-    const allowedCourses = request.courseTypes.filter(
+    const allowed = request.courseTypes.filter(
         (course) =>
-            !baseCourses.some((baseCourse) =>
-                baseCourse.toLowerCase().includes(course.toLowerCase())
+            !base.some(
+                (baseCourse) =>
+                    baseCourse.toLowerCase() === course.toLowerCase()
             )
     );
+
+    return { base, allowed };
+};
+
+const buildUserPrompt = (
+    baseRecipe: GenerateRecipeResponseDto & { imageUrl?: string },
+    request: ComposeRecipeRequestDto,
+    courses: { base: string[]; allowed: string[] },
+    cuisineTagNames: string[]
+): string => {
+    const baseCourses = courses.base;
+    const allowedCourses = courses.allowed;
 
     // Matched against the actual cuisine vocabulary. This used to take the first
     // tag that was neither a course nor "dish", which also matches DIETARY tags —
@@ -177,18 +203,10 @@ export async function* generateComposeRecipes(
         .filter((tag) => tag.type === "cuisine")
         .map((tag) => tag.name);
 
-    // Validate that we have allowed courses
-    const baseCourses = baseRecipe.tags.filter((tag) =>
-        courseTagNames.some((course) =>
-            tag.toLowerCase().includes(course.toLowerCase())
-        )
-    );
-    const allowedCourses = request.courseTypes.filter(
-        (course) =>
-            !baseCourses.some((baseCourse) =>
-                baseCourse.toLowerCase().includes(course.toLowerCase())
-            )
-    );
+    // Validate that we have allowed courses. The same split is handed to
+    // `buildUserPrompt` below rather than recomputed there.
+    const courses = splitCourses(baseRecipe, request, courseTagNames);
+    const allowedCourses = courses.allowed;
 
     if (allowedCourses.length === 0) {
         throw new Error(
@@ -212,12 +230,7 @@ export async function* generateComposeRecipes(
         model: { openai: "gpt-4.1" },
         label: "recipe.compose",
         system: SYSTEM_PROMPT,
-        user: buildUserPrompt(
-            baseRecipe,
-            request,
-            courseTagNames,
-            cuisineTagNames
-        ),
+        user: buildUserPrompt(baseRecipe, request, courses, cuisineTagNames),
         provider,
     });
 

@@ -47,6 +47,13 @@ let cache: { names: string[]; at: number } | null = null;
  * `Arancini al Burro` and `Arancini di Riso al Ragù` all ended up stored: three
  * separate batches, days apart, none of which knew the earlier ones existed.
  *
+ * Only ONE of those three was actually a duplicate. `Arancini di Riso al Ragù`
+ * carried the same ragù-and-peas filling as plain `Arancini` and was deleted on
+ * 2026-08-15; `Arancini al Burro` is béchamel, ham and provolone, a genuinely
+ * different dish that correctly stayed. Worth remembering when reading a cluster
+ * of similar names as a cluster of duplicates — and note the signature could not
+ * separate them either, scoring all three pairs within 0.015 of each other.
+ *
  * Fetches one past the limit so a single query answers both "what are they" and
  * "are there too many", rather than paying for a separate count.
  */

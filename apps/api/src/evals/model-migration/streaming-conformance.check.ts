@@ -19,7 +19,11 @@ import {
 } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 
-import { accumulateSuggestionReveals } from "../../modules/suggestions/services/stream-single-suggestion";
+// From `suggestion-reveals`, NOT from `stream-single-suggestion` which
+// re-exports it: that module pulls in `@fridgeezy/supabase`, which constructs a
+// client at import and throws on a missing key — so importing it from there is
+// what made this "offline, no API keys" check impossible to actually run.
+import { accumulateSuggestionReveals } from "../../modules/suggestions/services/suggestion-reveals";
 
 /**
  * Phase 1 — "port the streaming shape" conformance check.

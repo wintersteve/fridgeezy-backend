@@ -1,8 +1,4 @@
-import {
-    generateStream,
-    type CompletionChunk,
-    type LlmProvider,
-} from "@fridgeezy/llm";
+import { generateStream, type LlmProvider } from "@fridgeezy/llm";
 import {
     GenerateSuggestionRequestDto,
     GenerateSuggestionResponseSchema,
@@ -14,7 +10,6 @@ import {
     BLACKLIST_RULE,
     FOOD_ONLY_RULE,
 } from "./constraint-rules";
-import { extractStableJsonFields } from "./extract-stable-json-fields";
 import {
     DISH_GLOSS_RULE,
     DISH_NAME_ALT_RULE,
@@ -24,6 +19,10 @@ import {
     persistOrReuseSuggestion,
     SuggestionOutcome,
 } from "./persist-or-reuse-suggestion";
+import {
+    accumulateSuggestionReveals,
+    type PartialSuggestionFields,
+} from "./suggestion-reveals";
 import {
     COMPONENT_RULE,
     DISH_FORM_FILTER_RULE,
@@ -87,21 +86,6 @@ Emit the keys in EXACTLY this order:
 - ${DISH_NAME_ALT_RULE}
 - ${ADAPTED_FOR_RULE}`;
 
-/**
- * The subset of a suggestion's raw fields that have streamed in so far. Fields
- * are cumulative — each `onField` call carries every field known up to that
- * point — so a consumer can render the latest state directly.
- */
-export interface PartialSuggestionFields {
-    name?: string;
-    nameEn?: string;
-    description?: string;
-    difficulty?: "easy" | "medium" | "hard";
-    totalTimeMinutes?: number;
-    ingredients?: string[];
-    tags?: string[];
-}
-
 export interface StreamSingleSuggestionOptions {
     /**
      * Overrides `LLM_PROVIDER` for this call only, so the two providers can be
@@ -117,47 +101,13 @@ export interface StreamSingleSuggestionOptions {
     onField?: (fields: PartialSuggestionFields) => void;
 }
 
-/**
- * Accumulate a streamed suggestion object, firing `onReveal` each time another
- * top-level key finishes — with every key stable so far, so a consumer renders
- * the latest state rather than diffing.
- *
- * Exported because the streaming-conformance check
- * (`evals/model-migration/streaming-conformance.check.ts`) asserts this exact
- * algorithm holds across chunking regimes — monotonic, never revised, complete,
- * in prompt order. It used to keep a verbatim copy, which could drift silently
- * from the code it claimed to verify; it can drive the real loop now that the
- * stream is provider-neutral rather than a live OpenAI client.
- *
- * Returns the raw accumulated buffer, since the caller still has to parse and
- * validate the completed object.
- */
-export async function accumulateSuggestionReveals(
-    stream: AsyncIterable<CompletionChunk>,
-    onReveal?: (stable: Record<string, unknown>) => void
-): Promise<string> {
-    let buffer = "";
-    // Which top-level keys we've already surfaced, so we only emit on new ones.
-    let emittedKeys = 0;
-
-    for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content;
-        if (!content) continue;
-
-        buffer += content;
-
-        const stable = extractStableJsonFields(buffer);
-        const keyCount = Object.keys(stable).length;
-
-        // A new field finished — surface everything known so far.
-        if (keyCount > emittedKeys) {
-            emittedKeys = keyCount;
-            onReveal?.(stable);
-        }
-    }
-
-    return buffer;
-}
+// `accumulateSuggestionReveals` lives in `suggestion-reveals.ts` so the
+// streaming-conformance check can import it without loading this module's
+// Supabase and LLM graph; it is used locally below and deliberately NOT
+// re-exported, since importing it from here is what broke that check.
+// The type is re-exported because `StreamSingleSuggestionOptions.onField`
+// exposes it and callers need to name it.
+export type { PartialSuggestionFields };
 
 /** Map the raw JSONL field names onto the enriched/DTO field names. */
 function mapFields(stable: Record<string, unknown>): PartialSuggestionFields {

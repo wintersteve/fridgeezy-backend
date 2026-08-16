@@ -475,6 +475,7 @@ mount path anyway; the nesting only made every import inside it `../../../`.
 | `POST /rest/recipes/generate` | `modules/recipes` |
 | `POST /rest/recipes/difficulty/escalate` | `modules/recipes` |
 | `POST /rest/recipes/modify` | `modules/recipes` |
+| `POST /rest/recipes/import` | `modules/recipes` |
 | `POST /rest/recipes/:recipeId/compose` | `modules/recipes` |
 | `POST /rest/recipes/:recipeId/chat` | `modules/recipes` |
 | `GET /rest/recipes/:recipeId/share` | `modules/recipes` — **open** |
@@ -1153,8 +1154,9 @@ row is an unsaved variant until the client links it in `recipe_variants`.
 ### `recipes.origin` — generated or imported
 
 `'generated' | 'imported'`, NOT NULL default `'generated'`, check-constrained
-(`20260815000003`). Scaffolding for Phase 2 photo import; nothing writes
-`'imported'` yet.
+(`20260815000003`). Written by `POST /rest/recipes/import` since
+`20260815000005` — see "Imported recipes" below and `RECIPE_IMPORT.md` for the
+client-facing contract.
 
 **It is `origin` and not `source` because `source` is taken.**
 `find_recipes_result.source` is `'recipe' | 'suggestion'` — which TABLE a feed
@@ -1165,3 +1167,78 @@ flowing through the same function would read as correct in every diff.
 RPCs. That flag has distinguished nothing since the baseline, which is why
 `delete_orphan_generated_recipes` is defined and never scheduled; an import is
 the first row a 30-day reaper must never touch.
+
+### Imported recipes, and who owns a recipe at all
+
+`POST /rest/recipes/import` reads a recipe off a photograph — a cookbook page, a
+screenshot, a handwritten card — and saves it as the caller's own. The full
+client-facing contract is `RECIPE_IMPORT.md`; what follows is the part that
+constrains everything else in this repo.
+
+**`recipes.created_by IS NULL` means the shared catalogue; a non-null
+`created_by` means exactly one profile can see it.** That is the whole ownership
+model (`20260815000005`). Generated and catalogue recipes keep `created_by NULL`
+and behave exactly as they did — `modify` and `escalate` still write shared
+variants — so this is an addition, not a change of policy.
+
+`check (origin <> 'imported' or created_by is not null)` makes **imported implies
+owned** true by construction. That is what lets every consumer scope on
+`created_by` alone and never also test `origin`: one predicate repeated, rather
+than two that have to agree.
+
+**The rule is written once, as `recipe_is_visible(created_by)`, because it has to
+hold in six places and a divergence between any two of them is a silent leak
+rather than an error:**
+
+| Surface | How |
+| --- | --- |
+| `recipes` RLS | `using (recipe_is_visible(created_by))` |
+| `recipe_ingredients` / `_instructions` / `_tags` RLS | resolved through the parent recipe |
+| `find_recipes` | its own WHERE clause — SECURITY DEFINER, so it never sees a policy |
+| `search_recipes` | `created_by is null`; dedup is about the catalogue, whoever asks |
+| API routes taking a recipe id | `callerMayReadRecipe` — these read as the service role |
+| `GET /recipes/:id/share` | 404 for anything owned |
+
+The API half is the one that looks redundant and is not: **every repository here
+reads through `supabaseAdmin`, which bypasses RLS by design**, so a route that
+takes a recipe id from the request and hands the row back has to apply the rule
+itself. `modify`, `escalate`, `compose`, `chat` and `substitutes` all do, each
+folding refusal into its existing not-found branch so "you may not read it" and
+"it is not there" are indistinguishable. **A new route that loads a recipe by a
+caller-supplied id must call `callerMayReadRecipe`** — nothing enforces that but
+this paragraph and the audit below.
+
+```bash
+npx nx run @fridgeezy/database:check-recipe-visibility
+```
+
+builds a real owned recipe with real content and tries to reach it as `anon`
+down every path a guest has. It does not read policy definitions back — a
+predicate can be present and still wrong. Run it after touching any of the six.
+
+Three consequences that are easy to undo by accident:
+
+- **`recipes_dish_identity_difficulty_unique` no longer covers owned rows.** It
+  is a statement about the catalogue (one canonical dish per cuisine per
+  difficulty); an import is not a catalogue entry. Without the exemption the
+  first user to photograph a lasagna gets a row and everyone after them gets a
+  unique-violation on a dish the catalogue already has.
+- **`/share` refuses an owned recipe**, with the same 404 a missing one gets.
+  The route is open *because its caller is not the app*, so there is no session
+  to compare an owner against and the choice is everyone or no one. Sharing an
+  import needs a signed, expiring token minted through an authenticated route —
+  do not "fix" it by opening the read.
+- **An import gets no dish-signature embedding.** `fts` feeds `search_recipes`,
+  which excludes owned rows by definition, so writing one would be an OpenAI call
+  per import whose only reader has been told to ignore it.
+
+The import path is also the reason `persist-recipe.ts` has a THIRD persist
+function. `persistImportedRecipe` skips the reuse-before-persist shortcut
+deliberately: that shortcut is right for a promotion (the dish is the
+catalogue's, paying twice is waste) and catastrophic here, where it would discard
+the user's page and hand back the app's own lasagna.
+
+Known and accepted: `recipe_display_tags` and `recipe_dietary` are views without
+`security_invoker`, so they see past the policies and expose an owned recipe's
+TAG NAMES to anyone holding its id. Not its content. Changing that affects every
+existing caller, `find_recipes` included, and belongs in its own migration.

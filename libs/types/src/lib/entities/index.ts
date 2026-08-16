@@ -18,6 +18,7 @@ export * from './profile-dietary-preferences';
 export * from './profile-entitlements';
 export * from './profile-recipe-interactions';
 export * from './profile-settings';
+export * from './profile-taste-signals';
 export * from './profiles';
 export * from './recipe-family-defaults';
 export * from './recipe-ingredients';

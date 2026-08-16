@@ -5,6 +5,8 @@ import {
     escalateDifficulty,
     composeRecipe,
     modifyRecipe,
+    personaliseRecipe,
+    importRecipe,
     recipeChat,
     shareRecipe,
 } from "./usecases";
@@ -53,6 +55,30 @@ export class RecipesController {
     ) => {
         try {
             return modifyRecipe(req, res);
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    static personalise = async (
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) => {
+        try {
+            return personaliseRecipe(req, res);
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    static import = async (
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) => {
+        try {
+            return importRecipe(req, res);
         } catch (err) {
             next(err);
         }

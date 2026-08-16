@@ -8,7 +8,7 @@ import {
     parseJsonBody,
     writeSseEvent,
 } from "../../../chat/services";
-import { fetchRecipe } from "../../services";
+import { callerMayReadRecipe, fetchRecipe } from "../../services";
 
 /** The classification sentinel the model emits for modification requests. */
 const MODIFY_SENTINEL = /^\s*MODIFY:/i;
@@ -82,9 +82,18 @@ export async function recipeChat(req: Request, res: Response): Promise<void> {
 
         const recipe = recipeId ? await fetchRecipe(recipeId) : null;
 
+        // Owned recipes are readable only by their owner; this fetch runs as the
+        // service role and so sees past the RLS that enforces that elsewhere.
+        // Reported as the same "not found" frame, so refusal and absence look
+        // identical to a caller probing ids — and checked BEFORE the stream
+        // opens, so it stays one decision rather than two.
+        const readable =
+            recipe !== null &&
+            (await callerMayReadRecipe(recipe.createdBy, req));
+
         initSseStream(res);
 
-        if (!recipe) {
+        if (!recipe || !readable) {
             writeSseEvent(res, {
                 type: "error",
                 data: { error: `Recipe not found: ${recipeId}` },

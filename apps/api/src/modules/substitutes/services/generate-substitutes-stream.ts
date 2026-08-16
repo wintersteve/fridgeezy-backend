@@ -1,3 +1,5 @@
+import type { IncomingMessage } from "node:http";
+
 import { generateStream, type LlmProvider } from "@fridgeezy/llm";
 import {
     MissingIngredientDto,
@@ -9,7 +11,11 @@ import {
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { canonicalizeName } from "@fridgeezy/toolkit";
 
-import { fetchRecipeSummary, RecipeSummary } from "../../recipes/services";
+import {
+    callerMayReadRecipe,
+    fetchRecipeSummary,
+    RecipeSummary,
+} from "../../recipes/services";
 
 // Exported for the model-migration eval harness, which must send byte-identical
 // prompts to every candidate — a copy in the eval would drift and invalidate the
@@ -136,7 +142,14 @@ const toSuggestion = (
  */
 export async function* generateSubstitutesStream(
     request: SuggestSubstitutesRequestDto,
-    provider?: LlmProvider
+    provider?: LlmProvider,
+    /**
+     * The originating request, so an OWNED recipe (an import) only enriches its
+     * own owner's prompt. Optional because the eval harness has no request —
+     * and `callerMayReadRecipe` fails closed on one that is absent, so an eval
+     * simply gets the un-enriched prompt rather than somebody's private recipe.
+     */
+    req?: IncomingMessage
 ): AsyncGenerator<SubstituteSuggestionDto> {
     // Deduped by canonical name, not just by id: the client keys its cards on
     // `ingredientName`, so two selections that read the same would collide there
@@ -149,7 +162,16 @@ export async function* generateSubstitutesStream(
 
     // Best-effort: the recipe only enriches the prompt, and a cook whose recipe
     // row has gone missing still deserves an answer from the name alone.
-    const recipe = await fetchRecipeSummary(request.recipeId);
+    //
+    // Which is exactly why an unreadable one is dropped rather than refused: an
+    // owned recipe belongs to one profile, this read runs as the service role
+    // and sees past the RLS enforcing that, and the graceful degradation is
+    // already here. Somebody else's import contributes nothing to the prompt
+    // instead of leaking its ingredient list through the answer.
+    const summary = await fetchRecipeSummary(request.recipeId);
+    const recipe = (await callerMayReadRecipe(summary?.createdBy, req))
+        ? summary
+        : null;
 
     const stream = generateStream({
         model: { openai: "gpt-4.1" },

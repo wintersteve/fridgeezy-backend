@@ -13,29 +13,17 @@ import { RecipesRepository } from "@fridgeezy/supabase";
 
 import {
     buildModifySystemPrompt,
+    callerMayReadRecipe,
     buildModifyUserPrompt,
     createRecipeStream,
+    deriveVariantLabel,
     fetchRecipe,
     fetchRecipeMetadata,
     formatTagsForPrompt,
     formatUnitsForPrompt,
+    recordTasteSignal,
 } from "../../services";
 import { persistRecipe } from "../../services/persist-recipe";
-
-/**
- * Derive a short, human-readable label for the variant from the raw
- * instruction, e.g. "make it vegetarian" -> "Vegetarian". Best-effort only —
- * the user can rename it when saving.
- */
-const deriveLabel = (instruction: string): string => {
-    const cleaned = instruction
-        .trim()
-        .replace(/^(please\s+)?(can you\s+)?(make (it|this)|turn (it|this) into|convert (it|this) to)\s+/i, "")
-        .trim();
-    const label = cleaned.length > 0 ? cleaned : instruction.trim();
-    const capped = label.length > 40 ? `${label.slice(0, 39).trimEnd()}…` : label;
-    return capped.charAt(0).toUpperCase() + capped.slice(1);
-};
 
 export const modifyRecipe = createStreamHandler({
     requestSchema: ModifyRecipeRequestSchema,
@@ -47,11 +35,20 @@ export const modifyRecipe = createStreamHandler({
         TipSchema,
     ],
 
-    handler: async ({ body }) => {
+    handler: async ({ body, req }) => {
         // 1. Fetch existing recipe
         const existingRecipe = await fetchRecipe(body.id);
 
-        if (!existingRecipe) {
+        // An owned recipe (an import) is readable only by its owner, and the
+        // service-role client this fetch goes through sees past the RLS that
+        // enforces that everywhere else — so the check lives here. Folded into
+        // the not-found branch on purpose: "you may not read it" and "it is not
+        // there" must be indistinguishable, or the error message becomes a way
+        // to test whether a given id exists.
+        if (
+            !existingRecipe ||
+            !(await callerMayReadRecipe(existingRecipe.createdBy, req))
+        ) {
             throw new Error(`Recipe not found: ${body.id}`);
         }
 
@@ -60,7 +57,15 @@ export const modifyRecipe = createStreamHandler({
         const existingImageUrl = (existingRecipe as { imageUrl?: string })
             .imageUrl;
 
-        const label = deriveLabel(body.instruction);
+        const label = deriveVariantLabel(body.instruction);
+
+        // What the cook asks for here is the strongest taste signal the app
+        // gets: they read a recipe and said what was wrong with it. Recorded
+        // from the LABEL rather than the raw instruction so that repeated asks
+        // land on one row and can cross the threshold — see
+        // `derive-variant-label.ts`. Fire-and-forget; it cannot fail this
+        // request.
+        recordTasteSignal(req, "modification", label);
 
         // 2. Fetch metadata for the prompt
         const metadata = await fetchRecipeMetadata();

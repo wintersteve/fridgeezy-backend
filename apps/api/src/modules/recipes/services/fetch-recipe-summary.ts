@@ -32,6 +32,16 @@ export interface RecipeSummary {
      * says which TABLE a feed row came from — see `20260815000003`.
      */
     origin?: string | null;
+    /**
+     * Owning profile, or null for the shared catalogue (20260815000005).
+     *
+     * Read through the service-role client, which sees past RLS — so anything
+     * serving this summary to somebody OTHER than the owner has to check it
+     * itself. `/share` is the live case and the reason this field is selected at
+     * all: it is an open route, so it has no caller identity to compare against
+     * and must refuse an owned recipe outright.
+     */
+    createdBy?: string | null;
     ingredients: Array<{ id: string; name: string }>;
     tags: Array<{ id: string; name: string }>;
 }
@@ -59,6 +69,7 @@ export async function fetchRecipeSummary(
             difficulty,
             total_time_minutes,
             origin,
+            created_by,
             recipe_ingredients (
                 ingredient:ingredients (
                     id,
@@ -90,6 +101,7 @@ export async function fetchRecipeSummary(
         difficulty: recipe.difficulty as "easy" | "medium" | "hard",
         totalTimeMinutes: recipe.total_time_minutes ?? null,
         origin: recipe.origin ?? null,
+        createdBy: recipe.created_by ?? null,
         ingredients: recipe.recipe_ingredients.map((ri) => ({
             id: ri.ingredient.id,
             name: ri.ingredient.name,

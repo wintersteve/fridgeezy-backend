@@ -346,7 +346,22 @@ export class RecipesRepository implements IRecipesRepository {
          * no way to store the result: a second base row under the same name is
          * what `recipes_canonical_id_difficulty_unique` exists to reject.
          */
-        baseRecipeId?: string | null
+        baseRecipeId?: string | null,
+        /**
+         * Provenance and owner, for the one caller that is not writing a
+         * catalogue row: recipe import.
+         *
+         * A single object rather than two more positional parameters, because
+         * the two are never independently useful — `recipes_imported_has_owner`
+         * (20260815000005) rejects an `'imported'` row with no owner at the
+         * database, so a call site able to pass one without the other could only
+         * ever pass an invalid pair. Appended, so every existing positional call
+         * keeps meaning what it meant.
+         *
+         * Omitted, the RPC's own defaults apply — `'generated'` and a NULL
+         * owner, which is the shared catalogue.
+         */
+        ownership?: { origin: "generated" | "imported"; createdBy: string }
     ): Promise<Result<string, PersistenceError>> {
         try {
             // Type assertion needed until database types are regenerated after migration
@@ -387,6 +402,11 @@ export class RecipesRepository implements IRecipesRepository {
                     // Omitted rather than nulled when absent, so the SQL default
                     // applies — the RPC types it optional, not nullable.
                     p_base_recipe_id: baseRecipeId ?? undefined,
+                    // Same treatment, same reason. Both keys or neither: the
+                    // check constraint is what makes a half-filled pair a failed
+                    // insert rather than a private recipe nobody owns.
+                    p_origin: ownership?.origin,
+                    p_created_by: ownership?.createdBy,
                 }
             );
 

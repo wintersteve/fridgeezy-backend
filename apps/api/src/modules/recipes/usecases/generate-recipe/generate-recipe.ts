@@ -132,6 +132,14 @@ You MUST provide quantity and unit for EACH ingredient above.`;
 /**
  * Build user prompt using suggestion data. Exported alongside
  * `buildRecipeSystemPrompt` for the model-migration eval harness.
+ *
+ * **Deliberately carries nothing about the caller.** What this writes is
+ * persisted with `created_by NULL` — a SHARED catalogue row that
+ * `findByCanonicalName` then serves to the next person who promotes the same
+ * dish. Personalising it would put one cook's preferences in front of everyone
+ * else, and with one catalogue slot per dish+difficulty, whoever promoted first
+ * would define the dish for all of them. Standing preferences apply through the
+ * VARIANT path instead — see `personalise-recipe`.
  */
 export const buildRecipeUserPrompt = (
     name: string,

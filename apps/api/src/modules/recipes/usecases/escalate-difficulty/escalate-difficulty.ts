@@ -12,16 +12,30 @@ import { createStreamHandler } from "@fridgeezy/streaming-server";
 import { RecipesRepository } from "@fridgeezy/supabase";
 
 import {
+    callerMayReadRecipe,
     createRecipeStream,
     fetchRecipe,
     fetchRecipeMetadata,
     formatTagsForPrompt,
     formatUnitsForPrompt,
+    recordTasteSignal,
     HEADER_DESCRIPTION_RULES,
     TEMPERATURE_RULES,
     STEP_DURATION_RULES,
 } from "../../services";
 import { persistRecipe } from "../../services/persist-recipe";
+
+/**
+ * Ordering only, for reading a transition as a direction. Deliberately local
+ * and not exported: the database has `difficulty_preference_rank` for ranking
+ * rows in a feed, and a second exported ranking invites the two to drift into
+ * disagreeing about what "harder" means.
+ */
+const DIFFICULTY_RANK: Record<string, number> = {
+    easy: 0,
+    medium: 1,
+    hard: 2,
+};
 
 const buildSystemPrompt = (
     units: string,
@@ -167,11 +181,18 @@ export const escalateDifficulty = createStreamHandler({
         TipSchema,
     ],
 
-    handler: async ({ body }) => {
+    handler: async ({ body, req }) => {
         // 1. Fetch existing recipe
         const existingRecipe = await fetchRecipe(body.id);
 
-        if (!existingRecipe) {
+        // Owned recipes are readable only by their owner; this fetch runs as the
+        // service role and so sees past the RLS that enforces that. Folded into
+        // the not-found branch so refusal and absence are indistinguishable —
+        // see the sibling check in `modify-recipe.ts`.
+        if (
+            !existingRecipe ||
+            !(await callerMayReadRecipe(existingRecipe.createdBy, req))
+        ) {
             throw new Error(`Recipe not found: ${body.id}`);
         }
 
@@ -185,6 +206,19 @@ export const escalateDifficulty = createStreamHandler({
                 `Recipe is already at ${body.difficulty} difficulty`
             );
         }
+
+        // The signal is the DIRECTION, not the level. "This cook asked for hard"
+        // says nothing on its own — a hard recipe simplified to medium and an
+        // easy one pushed to medium are opposite preferences that both record
+        // "medium". Which way they reach, repeatedly, is the durable fact.
+        recordTasteSignal(
+            req,
+            "difficulty",
+            DIFFICULTY_RANK[body.difficulty] >
+            DIFFICULTY_RANK[existingRecipe.difficulty]
+                ? "harder"
+                : "easier"
+        );
 
         // 3. Fetch metadata
         const metadata = await fetchRecipeMetadata();

@@ -4,7 +4,16 @@ import { supabaseAdmin } from "@fridgeezy/supabase";
 export async function fetchRecipe(
     recipeId: string
 ): Promise<
-    | (GenerateRecipeResponseDto & { imageUrl?: string; origin?: string | null })
+    | (GenerateRecipeResponseDto & {
+          imageUrl?: string;
+          origin?: string | null;
+          /**
+           * Owning profile, or null for the shared catalogue. Read through the
+           * service-role client, which sees past RLS — so a caller handing this
+           * recipe to somebody must check it with `callerMayReadRecipe` first.
+           */
+          createdBy?: string | null;
+      })
     | null
 > {
     const { data: recipe, error } = await supabaseAdmin
@@ -26,6 +35,7 @@ export async function fetchRecipe(
             tips,
             image,
             origin,
+            created_by,
             recipe_ingredients (
                 quantity,
                 ingredient:ingredients (
@@ -96,5 +106,10 @@ export async function fetchRecipe(
         // Provenance, carried so modify/escalate can keep it off an adapted
         // copy's read path by accident — see 20260815000003.
         origin: recipe.origin ?? null,
-    } as GenerateRecipeResponseDto & { imageUrl?: string; origin?: string | null };
+        createdBy: recipe.created_by ?? null,
+    } as GenerateRecipeResponseDto & {
+        imageUrl?: string;
+        origin?: string | null;
+        createdBy?: string | null;
+    };
 }

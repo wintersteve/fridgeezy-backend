@@ -118,7 +118,23 @@ export async function shareRecipe(req: Request, res: Response) {
 
     const summary = await fetchRecipeSummary(recipeId);
 
-    if (!summary) {
+    // An OWNED recipe is not shareable through this route, and the reason is the
+    // same one that makes the route open in the first place: its caller is not
+    // the app. iMessage, Slack and the tapper's browser hold no Supabase
+    // session, so there is nobody here to compare `created_by` against — the
+    // choice is "everyone" or "no one", and for a page somebody photographed out
+    // of their own cookbook it is no one.
+    //
+    // Answered as the SAME 404 a missing recipe gets, deliberately: a distinct
+    // status would tell an unauthenticated stranger that a given id exists and
+    // is private, which is more than they could learn from the recipe tables
+    // themselves now that RLS is on.
+    //
+    // Note this is a product decision, not a technical limit. Sharing an import
+    // is buildable — a signed, expiring share token minted by the owner through
+    // an authenticated route — and that is what to build if it is wanted. Do not
+    // "fix" it by opening the read.
+    if (!summary || summary.createdBy) {
         res.status(404)
             .type("html")
             .send(

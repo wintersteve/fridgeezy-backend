@@ -364,3 +364,77 @@ export async function persistRecipeWithIngredientIds(
         );
     }
 }
+
+/**
+ * Persist a recipe a user brought in from a photograph.
+ *
+ * A third persist path rather than a flag on
+ * {@link persistRecipeWithIngredientIds}, because almost every decision that
+ * function makes is about the shared catalogue and every one of them is wrong
+ * here:
+ *
+ * - **No reuse-before-persist.** That path looks for an existing base recipe of
+ *   the same name and difficulty and hands its id back instead of writing. For a
+ *   promotion that is right — the dish is the catalogue's and paying twice for it
+ *   is waste. For an import it would discard the user's page and return the
+ *   app's own lasagna, which is the one outcome the feature must never produce.
+ *   `recipes_dish_identity_difficulty_unique` no longer covers owned rows
+ *   (20260815000005) precisely so that this insert can go through.
+ * - **No dedup embedding.** {@link storeRecipeSignature} exists to feed
+ *   `search_recipes`, which is catalogue dedup, and which now excludes owned
+ *   rows by definition. Writing one would be an OpenAI call per import whose
+ *   only reader has been told to ignore it. The client's own recipe search goes
+ *   straight at the table with `ilike` and picks imports up through RLS, so
+ *   nothing the user can see depends on the vector.
+ * - **No variant base.** An import heads its own family (`base_recipe_id NULL`),
+ *   as `20260815000003` records: it is a dish the user brought in, not a version
+ *   of one already here, and it can carry variants of its own.
+ *
+ * What it DOES keep is unit resolution and ingredient collapsing, which are
+ * about the shape of the rows rather than about where the recipe came from — and
+ * are, if anything, more necessary here, since the ingredient list was read off
+ * a page rather than written to a schema.
+ *
+ * @param recipe The recipe read from the image, with ingredient ids attached.
+ * @param createdBy The importing profile. Required: the database rejects an
+ *   `origin = 'imported'` row without one, which is what stops a failure to
+ *   resolve the caller from silently publishing their recipe to everybody.
+ * @param imageUrl The deterministic hero URL for this dish name. The use case
+ *   has already kicked off the generation that backfills it.
+ */
+export async function persistImportedRecipe(
+    recipe: GenerateRecipeResponseDto,
+    createdBy: string,
+    imageUrl: string
+): Promise<Result<string, PersistenceError>> {
+    try {
+        const repository = new RecipesRepository();
+
+        recipe.ingredients = dedupeIngredientsById(recipe.ingredients);
+
+        const unitsResolved = await resolveIngredientUnits(recipe.ingredients);
+        if (!unitsResolved.success) {
+            return unitsResolved;
+        }
+
+        // Derived from the tags the reader assigned, exactly as the catalogue
+        // paths do. It costs nothing and keeps the row's identity columns
+        // populated the same way every other row's are — so an import that a
+        // user later wants folded into the catalogue is not a special case.
+        const identityCuisine = await resolveIdentityCuisine(recipe.tags ?? []);
+
+        return await repository.persistWithIngredientIds(
+            recipe,
+            imageUrl,
+            identityCuisine,
+            null,
+            { origin: "imported", createdBy }
+        );
+    } catch (error) {
+        return failure(
+            new PersistenceError(
+                `Failed to persist imported recipe: ${error instanceof Error ? error.message : "Unknown error"}`
+            )
+        );
+    }
+}

@@ -642,6 +642,44 @@ export type Database = {
           },
         ]
       }
+      profile_taste_signals: {
+        Row: {
+          first_seen_at: string
+          id: string
+          kind: string
+          last_seen_at: string
+          occurrences: number
+          profile_id: string
+          value: string
+        }
+        Insert: {
+          first_seen_at?: string
+          id?: string
+          kind: string
+          last_seen_at?: string
+          occurrences?: number
+          profile_id: string
+          value: string
+        }
+        Update: {
+          first_seen_at?: string
+          id?: string
+          kind?: string
+          last_seen_at?: string
+          occurrences?: number
+          profile_id?: string
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_taste_signals_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -1099,6 +1137,7 @@ export type Database = {
           carbs: number | null
           cook_time: string | null
           created_at: string
+          created_by: string | null
           description: string | null
           difficulty: Database["public"]["Enums"]["difficulty_type"] | null
           fat: number | null
@@ -1127,6 +1166,7 @@ export type Database = {
           carbs?: number | null
           cook_time?: string | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           fat?: number | null
@@ -1155,6 +1195,7 @@ export type Database = {
           carbs?: number | null
           cook_time?: string | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           fat?: number | null
@@ -1190,6 +1231,13 @@ export type Database = {
             columns: ["base_recipe_id"]
             isOneToOne: false
             referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1484,6 +1532,7 @@ export type Database = {
           p_base_recipe_id?: string
           p_carbs: number
           p_cook_time: string
+          p_created_by?: string
           p_description: string
           p_difficulty: Database["public"]["Enums"]["difficulty_type"]
           p_fat: number
@@ -1516,6 +1565,11 @@ export type Database = {
           p_total_time_minutes?: number
         }
         Returns: string
+      }
+      recipe_is_visible: { Args: { p_created_by: string }; Returns: boolean }
+      record_taste_signal: {
+        Args: { p_kind: string; p_profile_id: string; p_value: string }
+        Returns: undefined
       }
       rename_recipe_variant: {
         Args: { p_label: string; p_variant_id: string }

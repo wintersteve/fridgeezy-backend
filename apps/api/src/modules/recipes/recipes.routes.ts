@@ -11,6 +11,20 @@ router.post("/difficulty/escalate", RecipesController.escalate);
 router.post("/modify", RecipesController.modify);
 
 /**
+ * Read a recipe off a photograph and save it as the caller's own.
+ *
+ * A static segment, so it is unambiguous against the `/:recipeId/...` routes
+ * below whatever order they are registered in — those are two segments and this
+ * is one, and Express never has to choose.
+ *
+ * Account tier, not premium: it is one vision call, and what it produces is
+ * content the user brought in rather than content this app wrote for them. See
+ * the use case for that decision and for why the route is SSE despite the read
+ * itself being a single blocking call.
+ */
+router.post("/import", RecipesController.import);
+
+/**
  * The one premium route, and the reason `requireEntitlement` is attached per
  * route rather than per mount: the free/paid line runs through this module, not
  * between modules. Generating, modifying and escalating a recipe are what a
@@ -25,6 +39,20 @@ router.post("/modify", RecipesController.modify);
 router.post("/:recipeId/compose", requireEntitlement, RecipesController.compose);
 
 router.post("/:recipeId/chat", RecipesController.chat);
+
+/**
+ * Rewrite this dish the way the caller keeps asking for it, as a variant.
+ *
+ * **Account tier, not premium, and that is on purpose rather than an
+ * oversight.** It is `POST /recipes/modify` with the instruction read off the
+ * caller's own history instead of typed — and modify is free. Gating this while
+ * the manual equivalent sits next door unmetered would paywall the convenience
+ * and nothing else, which anyone can walk around by typing "make it spicier"
+ * themselves. If standing preferences are to carry a subscription, the thing to
+ * charge for is having them applied *automatically* rather than on request, or
+ * the per-user quota sketched in TODOS — not this route.
+ */
+router.post("/:recipeId/personalise", RecipesController.personalise);
 
 export const RecipesRoutes = router;
 

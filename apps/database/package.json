@@ -202,6 +202,13 @@
                     "cwd": "apps/database"
                 }
             },
+            "check-recipe-visibility": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/check-recipe-visibility.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "classify-ingredient-diet": {
                 "executor": "nx:run-commands",
                 "options": {

@@ -10,7 +10,11 @@ import {
 } from "@fridgeezy/streaming-server";
 import { Request, Response } from "express";
 
-import { fetchRecipe, generateComposeRecipes } from "../../services";
+import {
+    callerMayReadRecipe,
+    fetchRecipe,
+    generateComposeRecipes,
+} from "../../services";
 
 /**
  * Parse JSON body from request stream
@@ -56,7 +60,14 @@ export async function composeRecipe(
         // 3. Fetch base recipe
         const baseRecipe = await fetchRecipe(recipeId);
 
-        if (!baseRecipe) {
+        // Owned recipes are readable only by their owner, and this fetch runs as
+        // the service role, past the RLS that enforces that elsewhere. Answered
+        // as the same 404 a missing recipe gets, so the two are
+        // indistinguishable to a caller probing ids.
+        if (
+            !baseRecipe ||
+            !(await callerMayReadRecipe(baseRecipe.createdBy, req))
+        ) {
             res.status(404).json({
                 error: "Recipe not found",
                 recipeId,

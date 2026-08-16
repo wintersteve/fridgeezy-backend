@@ -1,4 +1,5 @@
 import { supabase, supabaseAdmin } from "@fridgeezy/supabase";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 
 config();
@@ -14,19 +15,23 @@ config();
  * forgets; a stranger simply starts seeing somebody's imported cookbook page.
  *
  * So this does not inspect definitions, it makes a real owned recipe with real
- * content and asks the ANON client to find it, down every path a guest has: the
- * row, each child table that holds its content, and the discovery feed. A
- * predicate can be present and still wrong, and reading the policy back would
+ * content and tries to reach it down every path, as each caller who must not.
+ * A predicate can be present and still wrong, and reading the policy back would
  * only prove that somebody wrote one.
+ *
+ * Two callers, because they exercise different halves of the same predicate:
+ *
+ *  - A GUEST, where `current_profile_id()` is null. This is the broader exposure
+ *    and the easier one to get right.
+ *  - ANOTHER SIGNED-IN USER, where `current_profile_id()` returns a real id that
+ *    simply is not the owner's. A rule reduced to `created_by is null or
+ *    auth.uid() is not null` — one plausible slip — passes the guest half and
+ *    hands every logged-in user everybody else's private recipes. Only the second
+ *    caller notices, so the check creates two throwaway auth users and signs in
+ *    as each.
  *
  * ## What it does NOT prove, and why
  *
- * - **Profile A against profile B.** This tests the GUEST case, where
- *   `current_profile_id()` is null. Both cases run through the same single
- *   predicate and guest is the broader exposure, but a rule that somehow admitted
- *   only other logged-in users would pass here. Testing it properly needs a
- *   signed JWT per user and real auth rows a check script has no business
- *   creating.
  * - **A child table added LATER.** The tables below are named explicitly, so a
  *   future `recipe_equipment` with no policy is invisible to this script — which
  *   is precisely the realistic drift. Enumerating them needs `information_schema`,
@@ -44,11 +49,15 @@ config();
  *   as known and accepted — they expose tag names, not content — so this asserts
  *   nothing about them. If that decision is revisited, assert it here.
  *
- * SAFE TO RUN ANY TIME. Writes one recipe plus a row in each content table, all
- * removed in a finally block. No LLM, no spend.
+ * SAFE TO RUN ANY TIME. Writes one recipe plus a row in each content table, and
+ * two auth users at `@example.invalid` (a reserved TLD that cannot receive mail),
+ * all removed in finally blocks. No LLM, no spend.
  *
  *   npx nx run @fridgeezy/database:check-recipe-visibility
  */
+
+/** Throwaway users are named so a leaked one is obvious in the auth table. */
+const TEST_EMAIL_PREFIX = "zz-visibility-check";
 
 let pass = 0;
 let fail = 0;
@@ -59,8 +68,8 @@ const check = (label: string, ok: boolean, detail = "") => {
     else fail++;
 };
 
-async function main() {
-    console.log("recipe visibility — a guest must not reach an owned recipe\n");
+async function guestCannotReach() {
+    console.log("GUEST — no session at all:");
 
     const { data: profile } = await supabaseAdmin
         .from("profiles")
@@ -206,6 +215,168 @@ async function main() {
             check("test fixture cleaned up", (left ?? []).length === 0);
         }
     }
+}
+
+/**
+ * The half a guest test cannot reach: a REAL session belonging to someone else.
+ *
+ * Creates two throwaway users, gives A a private recipe, and asks B for it. The
+ * slip this exists for is a predicate that checks "is anyone logged in" rather
+ * than "is it THIS person" — which a guest run passes cleanly while handing every
+ * signed-in user everybody else's imports.
+ *
+ * A is asserted to SEE its own recipe as well. Without that the suite could pass
+ * by hiding owned recipes from everyone including their owner, which is a
+ * different bug wearing the same green tick.
+ */
+async function otherUserCannotReach() {
+    console.log("\nOWNER vs OTHER USER — two real sessions:");
+
+    const url = process.env.SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY;
+
+    if (!url || !anonKey) {
+        check("SUPABASE_URL and SUPABASE_ANON_KEY are set", false);
+        return;
+    }
+
+    const stamp = Date.now();
+    const users: { id: string; client: SupabaseClient }[] = [];
+    let recipeId: string | null = null;
+
+    /** Sign-in per user, on its own client so the two sessions cannot collide. */
+    const makeUser = async (which: string) => {
+        const email = `${TEST_EMAIL_PREFIX}-${which}-${stamp}@example.invalid`;
+        const password = `pw-${stamp}-${which}-Aa1!`;
+
+        const { data, error } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+        });
+
+        if (error || !data.user) {
+            throw new Error(`could not create user ${which}: ${error?.message}`);
+        }
+
+        const client = createClient(url, anonKey, {
+            auth: { persistSession: false, autoRefreshToken: false },
+        });
+
+        const { error: signInError } = await client.auth.signInWithPassword({
+            email,
+            password,
+        });
+
+        if (signInError) {
+            throw new Error(`could not sign in ${which}: ${signInError.message}`);
+        }
+
+        return { id: data.user.id, client };
+    };
+
+    try {
+        users.push(await makeUser("a"), await makeUser("b"));
+        const [ownerUser, otherUser] = users;
+
+        // `current_profile_id()` maps auth.uid() -> profiles.id, so the recipe is
+        // owned by A's PROFILE, not by its auth user.
+        const { data: ownerProfile } = await supabaseAdmin
+            .from("profiles")
+            .select("id")
+            .eq("user_id", ownerUser.id)
+            .single();
+
+        if (!ownerProfile) {
+            check("a profile row exists for the new user", false, "no trigger?");
+            return;
+        }
+
+        const { data: created, error } = await supabaseAdmin
+            .from("recipes")
+            .insert({
+                name: "ZZ Visibility Check (A vs B) — delete me",
+                created_by: ownerProfile.id,
+            })
+            .select("id")
+            .single();
+
+        if (error) throw new Error(`could not create the recipe: ${error.message}`);
+        recipeId = created.id;
+
+        await supabaseAdmin.from("recipe_instructions").insert({
+            recipe_id: recipeId,
+            step_number: 1,
+            instruction_text: "ZZ Visibility Check — only A may read this",
+        });
+
+        const ownerRows = await ownerUser.client
+            .from("recipes")
+            .select("id")
+            .eq("id", recipeId);
+        check(
+            "the OWNER can read their own recipe",
+            (ownerRows.data ?? []).length === 1,
+            (ownerRows.data ?? []).length === 0
+                ? "owner locked out of their own row"
+                : ""
+        );
+
+        const otherRows = await otherUser.client
+            .from("recipes")
+            .select("id")
+            .eq("id", recipeId);
+        check(
+            "another signed-in user cannot read the row",
+            (otherRows.data ?? []).length === 0,
+            (otherRows.data ?? []).length > 0 ? "LEAK" : ""
+        );
+
+        const otherSteps = await otherUser.client
+            .from("recipe_instructions")
+            .select("instruction_text")
+            .eq("recipe_id", recipeId);
+        check(
+            "another signed-in user cannot read its instructions",
+            (otherSteps.data ?? []).length === 0,
+            (otherSteps.data ?? []).length > 0 ? "LEAK — the method is readable" : ""
+        );
+
+        const { data: feed } = await otherUser.client.rpc("find_recipes", {
+            limit_count: 500,
+            p_offset: 0,
+        });
+        const leaked = (feed ?? []).some(
+            (row: { id: string }) => row.id === recipeId
+        );
+        check(
+            "owned recipe is absent from another user's find_recipes",
+            !leaked,
+            leaked ? "LEAK — it is in their feed" : ""
+        );
+    } finally {
+        if (recipeId) {
+            await supabaseAdmin.from("recipes").delete().eq("id", recipeId);
+        }
+
+        // Deleting the auth user cascades to its profile.
+        for (const user of users) {
+            await supabaseAdmin.auth.admin.deleteUser(user.id);
+        }
+
+        const { data: strays } = await supabaseAdmin
+            .from("recipes")
+            .select("id")
+            .ilike("name", "ZZ Visibility Check%");
+        check("test users and recipe cleaned up", (strays ?? []).length === 0);
+    }
+}
+
+async function main() {
+    console.log("recipe visibility — an owned recipe must reach nobody else\n");
+
+    await guestCannotReach();
+    await otherUserCannotReach();
 
     console.log(`\n${pass} passed, ${fail} failed`);
     if (fail > 0) process.exit(1);

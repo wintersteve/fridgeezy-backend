@@ -4,6 +4,25 @@ import { requireEntitlement } from "../../middleware/require-entitlement";
 
 import { RecipesController } from "./recipes.controller";
 
+/**
+ * The taste-profile surface — `POST /:recipeId/personalise` and everything the
+ * client hangs off it — is **off unless this is set**, and it is set nowhere.
+ *
+ * CLAUDE.md's rule is "build a flag scoped to a risky change, not as a standing
+ * fixture", and this is the first half of that: a scoped switch with a decision
+ * date, recorded in TODOS.md §11. It is not a permanent configuration knob.
+ * When the evaluation lands, this and the route below either become
+ * unconditional or leave together — do not let it settle in as furniture.
+ *
+ * **Recording is deliberately NOT behind this.** `profile_taste_signals` keeps
+ * filling from `modify`, `escalate` and `substitutes` while the surface is
+ * dark, because the whole question the evaluation has to answer — do people
+ * repeat themselves often enough for a threshold of two to ever fire — can only
+ * be answered by data that accumulates in the meantime. Turning the switch on
+ * later with an empty table would just restart the wait.
+ */
+const TASTE_PROFILE_ENABLED = process.env.TASTE_PROFILE_ENABLED === "true";
+
 const router = Router();
 
 router.post("/generate", RecipesController.generate);
@@ -43,16 +62,24 @@ router.post("/:recipeId/chat", RecipesController.chat);
 /**
  * Rewrite this dish the way the caller keeps asking for it, as a variant.
  *
- * **Account tier, not premium, and that is on purpose rather than an
- * oversight.** It is `POST /recipes/modify` with the instruction read off the
- * caller's own history instead of typed — and modify is free. Gating this while
- * the manual equivalent sits next door unmetered would paywall the convenience
- * and nothing else, which anyone can walk around by typing "make it spicier"
- * themselves. If standing preferences are to carry a subscription, the thing to
- * charge for is having them applied *automatically* rather than on request, or
- * the per-user quota sketched in TODOS — not this route.
+ * **Registered only when `TASTE_PROFILE_ENABLED` is set**, which it is not — so
+ * this is a 404 today and does not appear in the startup banner at all. That is
+ * deliberate over returning 403 from a mounted route: an unmounted path leaks
+ * nothing about a feature that has not been decided on, and the banner stays an
+ * honest inventory of what the server actually serves.
+ *
+ * **Account tier, not premium, when it does come back.** It is
+ * `POST /recipes/modify` with the instruction read off the caller's own history
+ * instead of typed — and modify is free. Gating this while the manual
+ * equivalent sits next door unmetered would paywall the convenience and nothing
+ * else, which anyone can walk around by typing "make it spicier" themselves. If
+ * standing preferences are to carry a subscription, the thing to charge for is
+ * having them applied *automatically* rather than on request, or the per-user
+ * quota sketched in TODOS — not this route.
  */
-router.post("/:recipeId/personalise", RecipesController.personalise);
+if (TASTE_PROFILE_ENABLED) {
+    router.post("/:recipeId/personalise", RecipesController.personalise);
+}
 
 export const RecipesRoutes = router;
 

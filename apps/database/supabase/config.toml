@@ -105,12 +105,34 @@ enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
-# Uncomment to configure local storage buckets
-# [storage.buckets.images]
-# public = false
-# file_size_limit = "50MiB"
-# allowed_mime_types = ["image/png", "image/jpeg"]
-# objects_path = "./images"
+# The app's static artwork, committed under ./art and seeded into the local
+# stack by `supabase seed buckets --local`.
+#
+# `storage.objects` is a table, so `db reset` takes these with it. Without the
+# reseed the client's URLs still resolve to a running storage service and every
+# one of them 404s — the cuisine rail and the compose card go blank locally
+# while working fine against the hosted project, which reads as a client bug.
+#
+# The buckets themselves are created by migrations (20260805000001/3/4) with
+# their read policies; those are authoritative and apply to prod too. `public`
+# is repeated here only so a bucket created from this declaration alone is not
+# private, which would break local reads.
+#
+# These 24 files are NOT reproducible: `operations/generate-{cuisine-cards,
+# cuisine-banners,dish-tiles}.ts` call an image model, so re-running them
+# returns different paintings. Git is their source of truth — regenerate
+# deliberately, then commit the new set and upload it.
+[storage.buckets.cuisine_cards]
+public = true
+objects_path = "./art/cuisine_cards"
+
+[storage.buckets.cuisine_banners]
+public = true
+objects_path = "./art/cuisine_banners"
+
+[storage.buckets.dish_tiles]
+public = true
+objects_path = "./art/dish_tiles"
 
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]

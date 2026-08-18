@@ -59,6 +59,7 @@ const ImportedRecipeSchema = z.object({
         .array(
             z.object({
                 text: z.string().min(1),
+                title: z.string().nullable().optional(),
                 duration_seconds: z.coerce.number().int().nullable().optional(),
                 temperature_c: z.coerce.number().int().nullable().optional(),
                 equipment: z.array(z.string()).nullable().optional(),
@@ -110,7 +111,7 @@ export type RecipeReadOutcome =
  * because a single "be faithful" at the top does not survive a page with a
  * smudged line on it.
  *
- * ## The two places invention IS allowed, and why they are bounded
+ * ## The three places invention IS allowed, and why they are bounded
  *
  * **Nutrition.** Cookbook pages almost never print it, and the schema and the
  * database both want four integers. Estimating them is the alternative to
@@ -123,6 +124,13 @@ export type RecipeReadOutcome =
  * the absence. Bounded by forcing the printed wording into `comment`, so the
  * screen still says "to taste" and the number is only ever the scaffolding under
  * it.
+ *
+ * **A title for a step.** Cookbook pages number their steps; they do not head
+ * them. This is the one exception that invents no fact at all — the headline is
+ * a two-word summary of a sentence that IS on the page, the same "deriving, not
+ * inventing" the nutrition case rests on. It is also the only way an imported
+ * recipe reads like a generated one in cook mode, where the headline is part of
+ * the layout rather than a decoration on it.
  *
  * Everything else — a step, an ingredient, a temperature, a time — is either on
  * the page or absent, and absent is an outcome the schema can carry.
@@ -222,7 +230,7 @@ When you cannot use the page, "reason" is a short description OF WHAT YOU ACTUAL
 {"status":"unreadable","reason":"<which part you cannot read, and why>"}
 
 When you can:
-{"status":"ok","recipe":{"name":"Tarte Tatin","name_en":null,"description":"...","short_description":"...","difficulty":"medium","servings":6,"prep_time_minutes":30,"cook_time_minutes":45,"kcal":420,"carbs":52,"protein":4,"fat":22,"tags":["french","dessert"],"ingredients":[{"name":"apple","category":"fruits","quantity":1.2,"unit":"kg","comment":"peeled and quartered"}],"instructions":[{"text":"Melt the butter and sugar in an ovenproof pan until amber.","duration_seconds":600,"temperature_c":null,"equipment":["pan"],"ingredients":["butter","sugar"]}],"tips":[],"confidence":"high"}}`;
+{"status":"ok","recipe":{"name":"Tarte Tatin","name_en":null,"description":"...","short_description":"...","difficulty":"medium","servings":6,"prep_time_minutes":30,"cook_time_minutes":45,"kcal":420,"carbs":52,"protein":4,"fat":22,"tags":["french","dessert"],"ingredients":[{"name":"apple","category":"fruits","quantity":1.2,"unit":"kg","comment":"peeled and quartered"}],"instructions":[{"title":"Caramelise the butter and sugar","text":"Melt the butter and sugar in an ovenproof pan until amber.","duration_seconds":600,"temperature_c":null,"equipment":["pan"],"ingredients":["butter","sugar"]}],"tips":[],"confidence":"high"}}`;
 
 /**
  * Read a recipe off a photograph.

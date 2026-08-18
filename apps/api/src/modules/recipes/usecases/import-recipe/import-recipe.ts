@@ -75,6 +75,7 @@ function toRecipeDto(
 
         return {
             text: instruction.text,
+            ...(instruction.title ? { title: instruction.title } : {}),
             ingredients: referenced,
             ...(ingredientIds.length > 0 ? { ingredientIds } : {}),
             ...(instruction.duration_seconds

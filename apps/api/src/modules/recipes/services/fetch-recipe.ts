@@ -48,6 +48,7 @@ export async function fetchRecipe(
             recipe_instructions (
                 step_number,
                 instruction_text,
+                title,
                 duration_seconds,
                 temperature_c,
                 equipment
@@ -89,6 +90,7 @@ export async function fetchRecipe(
             .sort((a, b) => a.step_number - b.step_number)
             .map((inst) => ({
                 text: inst.instruction_text,
+                title: inst.title ?? undefined,
                 // Carried through so modify/escalate can show the source
                 // recipe's timings; both regenerate their own, but a step the
                 // model leaves untouched keeps the duration it already had.

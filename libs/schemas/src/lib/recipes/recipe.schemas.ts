@@ -1,6 +1,9 @@
 import { z } from "zod/v4";
 
-import { clampToDetailLength } from "../text/clamp-description";
+import {
+    clampToDetailLength,
+    clampToTitleLength,
+} from "../text/clamp-description";
 
 /**
  * Shared Zod schemas for recipe generation and manipulation.
@@ -50,6 +53,28 @@ const absentAsUndefined = (value: unknown) =>
 export const InstructionSchema = z.object({
     type: z.literal("instruction"),
     text: z.string(),
+    /**
+     * A short headline for the step — "Blanch the pork ribs" over text that
+     * opens "Bring 2.5 l water to a rolling boil in a large pot".
+     *
+     * Optional for the same reason `durationSeconds` is: a rejected JSONL line
+     * is discarded whole rather than raised, so a required key would silently
+     * drop any step the model wrote without one. Every recipe generated before
+     * this field existed also has none, and the app renders that case as it
+     * always did — the headline row is conditional, not a fallback string.
+     *
+     * Clamped rather than bounded, and an empty string becomes undefined: a
+     * model that emits `"title": ""` must not persist a blank headline the app
+     * would then draw as an empty line.
+     */
+    title: z
+        .string()
+        .trim()
+        .transform((value) =>
+            value.length > 0 ? clampToTitleLength(value) : undefined
+        )
+        .optional()
+        .catch(undefined),
     /**
      * How long the step takes or waits.
      *

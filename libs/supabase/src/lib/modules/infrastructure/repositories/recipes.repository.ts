@@ -95,6 +95,10 @@ export class RecipesRepository implements IRecipesRepository {
                     // not a TS object — `persist_recipe` looks up
                     // `duration_seconds`. Null rather than omitted so the shape
                     // stays uniform across steps.
+                    //
+                    // `title` is the one that reads the same in both cases; the
+                    // SQL takes it as `v_instruction->>'title'`.
+                    title: (inst as any).title ?? null,
                     duration_seconds: inst.durationSeconds ?? null,
                     temperature_c: inst.temperatureC ?? null,
                     equipment: inst.equipment ?? null,
@@ -391,6 +395,7 @@ export class RecipesRepository implements IRecipesRepository {
                         text: inst.text,
                         ingredient_ids: (inst as any).ingredientIds || [],
                         // See the sibling mapping in persistWithRelations.
+                        title: (inst as any).title ?? null,
                         duration_seconds:
                             (inst as any).durationSeconds ?? null,
                         temperature_c: (inst as any).temperatureC ?? null,

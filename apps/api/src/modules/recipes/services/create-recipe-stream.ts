@@ -139,9 +139,19 @@ export async function* createRecipeStream(
                 ingredients: cleanedNames,
             };
 
-            // Only when present: the schema drops it for steps with no duration,
-            // and setting the key to undefined would still serialise into the
-            // RPC payload as an explicit null.
+            // Only when present: the schema drops each of these for a step that
+            // has none, and setting the key to undefined would still serialise
+            // into the RPC payload as an explicit null.
+            //
+            // **Every field the model returns has to be copied here as well as
+            // declared on the schema.** The frame yielded to the client is the
+            // raw `parsed` object, so a field added to the schema and the prompt
+            // but forgotten here streams to the app correctly, typechecks, and
+            // is then silently dropped on the way to the database — the bug only
+            // shows on reopening the recipe.
+            if (parsed.title !== undefined) {
+                instruction.title = parsed.title;
+            }
             if (parsed.durationSeconds !== undefined) {
                 instruction.durationSeconds = parsed.durationSeconds;
             }

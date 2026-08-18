@@ -35,6 +35,20 @@ export const CARD_DESCRIPTION_MAX = 34;
  */
 export const DETAIL_DESCRIPTION_MAX = 160;
 
+/**
+ * A step's headline — "Blanch the pork ribs".
+ *
+ * The prompt asks for two to five words, which is the target; this is the
+ * backstop for a model that writes a sentence instead. Forty characters holds
+ * five comfortable words and is short enough that anything longer is a
+ * different kind of thing rather than a long example of this one.
+ *
+ * Clamped rather than bounded for the reason at the top of this file: a step's
+ * frame is dropped whole if it fails to parse, so an over-long headline would
+ * cost the instruction it belongs to.
+ */
+export const STEP_TITLE_MAX = 40;
+
 /** Trailing punctuation left dangling by a cut. */
 const TRAILING_PUNCTUATION = /[\s,;:-]+$/;
 
@@ -81,4 +95,20 @@ export const clampToDetailLength = (value: string): string => {
     }
 
     return clampToWord(trimmed, DETAIL_DESCRIPTION_MAX);
+};
+
+/**
+ * Clamp a step headline to {@link STEP_TITLE_MAX} at a word boundary.
+ *
+ * No sentence-boundary pass, unlike {@link clampToDetailLength}: a headline
+ * that has run long is a model writing prose where a label was asked for, and
+ * the first sentence of that prose is still prose. The word cut with its
+ * ellipsis at least reads as truncated rather than as a title someone chose.
+ */
+export const clampToTitleLength = (value: string): string => {
+    const trimmed = value.trim();
+
+    return trimmed.length <= STEP_TITLE_MAX
+        ? trimmed
+        : clampToWord(trimmed, STEP_TITLE_MAX);
 };

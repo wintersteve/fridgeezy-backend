@@ -4,7 +4,10 @@ import { config } from "dotenv";
 
 import { adjudicateSameDish } from "../modules/suggestions/services/adjudicate-suggestion";
 import { describeSuggestion } from "../modules/suggestions/services/suggestion-signature";
-import { verifySuggestionAuthenticity } from "../modules/suggestions/services/verify-suggestion-authenticity";
+import {
+    classifySuggestionAuthenticity,
+    verifySuggestionAuthenticity,
+} from "../modules/suggestions/services/verify-suggestion-authenticity";
 
 config();
 
@@ -200,6 +203,14 @@ const INVENTION_DISHES: DishFixture[] = [
  * same dish with its seafood intact, because it was reading the name and not the
  * ingredient list. These are harder than the inventions above — the name, cuisine
  * and tags are all impeccable, which is exactly what hides them.
+ *
+ * **The first fixture is flaky, and it is not a symptom of whatever you just
+ * changed.** Measured 2026-08-18, six runs each side of the cuisine-naming
+ * change: it escaped as `well_known` 1/6 both before and after, and the misses
+ * scatter across `obscure`, `invention` and `well_known`. So a red line here on
+ * a single run is one sample of a ~1-in-6, not evidence — re-run it before
+ * reaching for the prompt. It is kept as a hard fixture on purpose; the rate is
+ * the thing to watch, not any one result.
  */
 const GUTTED_DISHES: DishFixture[] = [
     { name: "Peruvian Seafood Ceviche", nameAlt: "Ceviche de Mariscos", tags: ["peruvian", "appetizer"], ingredients: ["cilantro", "corn", "lime", "onion", "red chili", "salt", "sweet potato"] },
@@ -320,6 +331,70 @@ const FOOD_WITH_DRINK: DishFixture[] = [
     { name: "Beef Consommé", nameAlt: null, tags: ["french", "appetizer", "soup"], ingredients: ["beef", "egg white", "carrot", "celery", "leek"] },
 ];
 
+/**
+ * Names wearing a cuisine word that is a LABEL rather than part of the name.
+ * The gate should hand each one back without it.
+ *
+ * The card prints the cuisine as an eyebrow directly above the title, so these
+ * spend a third of their width saying what the reader is already looking at.
+ * The first two are verbatim rows from the dev catalogue on 2026-08-18, which is
+ * what prompted the rule.
+ *
+ * Scored on the ABSENCE OF THE WORD, not on an expected string: the gate is
+ * entitled to reword a name for other reasons at the same time (that is what
+ * Step A is for), and pinning the whole string would fail on a rewrite that
+ * obeyed this rule perfectly. Run against `classifySuggestionAuthenticity`
+ * rather than the gate, because a dish dropped as `obscure` never reaches the
+ * naming path and would silently score as a pass.
+ */
+const CUISINE_LABELLED: Array<{ dish: DishFixture; cuisineWord: string }> = [
+    { cuisineWord: "thai", dish: { name: "Spicy Thai Cabbage Salad", nameAlt: null, tags: ["thai", "salad"], ingredients: ["cabbage", "chili", "lime", "fish sauce", "peanut", "shallot"] } },
+    { cuisineWord: "chinese", dish: { name: "Chinese Smashed Cucumber Salad", nameAlt: "Pai Huang Gua", tags: ["chinese", "appetizer"], ingredients: ["cucumber", "garlic", "black vinegar", "sesame oil", "soy sauce"] } },
+    { cuisineWord: "indian", dish: { name: "Indian Butter Chicken", nameAlt: "Murgh Makhani", tags: ["indian", "main"], ingredients: ["chicken", "tomato", "butter", "cream", "garam masala"] } },
+    { cuisineWord: "mexican", dish: { name: "Mexican Chicken Tinga", nameAlt: "Tinga de Pollo", tags: ["mexican", "main"], ingredients: ["chicken", "chipotle", "tomato", "onion", "oregano"] } },
+    // The calibration fixture. English menus DO list this one as "Thai Fried
+    // Rice", and the rule still strips it — "an English menu would print the
+    // origin" is true of half the catalogue, so it is not the test. The word
+    // stays only when the remainder stops naming the dish. Deleting this
+    // fixture is how the rule drifts back to keeping every demonym a menu uses.
+    { cuisineWord: "thai", dish: { name: "Thai Fried Rice", nameAlt: "Khao Pad", tags: ["thai", "main"], ingredients: ["jasmine rice", "egg", "fish sauce", "shallot", "lime", "chinese broccoli"] } },
+];
+
+/**
+ * Names where the cuisine word IS the name. The gate must leave it alone.
+ *
+ * The false-positive half, and the reason the rule is a test rather than "strip
+ * the demonym": three of these four are unrecognisable without it, and
+ * "Som Tam Thai" without its last word is the LAO dish.
+ *
+ * "Vietnamese Spring Rolls" is the load-bearing one. Its cuisine word survives
+ * for a different reason than the others — the name is a translation, and the
+ * bare remainder names the fried Chinese roll instead. A gate that strips it is
+ * obeying the rule's letter and merging two dishes.
+ */
+const CUISINE_IN_NAME: Array<{ dish: DishFixture; cuisineWord: string }> = [
+    { cuisineWord: "thai", dish: { name: "Pad Thai", nameAlt: null, tags: ["thai", "main"], ingredients: ["rice noodle", "shrimp", "tamarind", "peanut", "egg", "bean sprout"] } },
+    { cuisineWord: "french", dish: { name: "French Onion Soup", nameAlt: "Soupe à l'Oignon", tags: ["french", "appetizer", "soup"], ingredients: ["onion", "beef stock", "gruyère", "baguette", "butter"] } },
+    { cuisineWord: "thai", dish: { name: "Som Tam Thai", nameAlt: "Thai Green Papaya Salad", tags: ["thai", "salad"], ingredients: ["green papaya", "peanut", "dried shrimp", "tomato", "fish sauce", "lime"] } },
+    { cuisineWord: "vietnamese", dish: { name: "Vietnamese Spring Rolls", nameAlt: "Gỏi Cuốn", tags: ["vietnamese", "appetizer"], ingredients: ["rice paper", "shrimp", "pork belly", "rice vermicelli", "mint", "lettuce"] } },
+    // The cuisine word here belongs to an INGREDIENT, and the dish is Thai
+    // regardless. Chinese broccoli is gai lan — a different vegetable, not
+    // broccoli with a flag on it — so stripping the word changes what is
+    // cooked. Caught in the 2026-08-18 backfill dry run, where the model
+    // proposed exactly that edit and it was a clean single-token deletion, so
+    // no structural guard could refuse it.
+    { cuisineWord: "chinese", dish: { name: "Crispy Pork with Chinese Broccoli", nameAlt: null, tags: ["thai", "main"], ingredients: ["pork belly", "chinese broccoli", "garlic", "oyster sauce", "chili"] } },
+];
+
+/**
+ * Whole-word match, so "thai" does not fire on "Thailand" and — the one that
+ * matters — "french" does not fire on a name that merely contains the letters.
+ */
+const hasWord = (name: string, word: string): boolean =>
+    ` ${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `.includes(
+        ` ${word} `
+    );
+
 async function main() {
     let pass = 0;
     let fail = 0;
@@ -366,15 +441,22 @@ async function main() {
         );
     }
 
-    // Does the homograph actually COLLIDE? The gate's Step C strips a qualifier
-    // that adds nothing but keeps one that "marks a genuinely different dish",
-    // so it may hand back "Kazakh Manti" and disambiguate the pair by naming.
-    // That is a fine outcome — but it means the pair never reaches the identity
-    // key, and the assertion above would then be passing for the wrong reason:
-    // green on a mechanism nothing exercised.
+    // Does the homograph actually COLLIDE? It is supposed to. Step C used to be
+    // free to hand back "Kazakh Manti" and disambiguate the pair by naming, and
+    // that was recorded here as a fine outcome; since the cuisine rule landed on
+    // 2026-08-18 it is the opposite — the step is told never to ADD a cuisine
+    // word, precisely because two cuisines are allowed to share a name and the
+    // identity key `(canonical_id, identity_cuisine)` is what separates them.
     //
-    // Reported, not failed. Naming its way out is a legitimate answer; silently
-    // believing the dedup path was tested is not.
+    // So a "disambiguated by naming" line now means one of two things, both
+    // worth looking at: the gate added a word it was told not to, or the pair
+    // never reaches the identity key at all — in which case the assertion above
+    // is green on a mechanism nothing exercised.
+    //
+    // Still reported rather than failed. The gate is also entitled to rename a
+    // dish for unrelated reasons, and a fixture that fails on any rename would
+    // fail for the wrong reason; CUISINE_LABELLED below is where the rule itself
+    // is asserted.
     console.log("\nHomographs — do the canonical names still collide?");
     for (const [a, b] of HOMOGRAPH_PAIRS) {
         const [reviewA, reviewB] = await Promise.all([
@@ -387,7 +469,29 @@ async function main() {
         const collides = suggestionCanonicalId(nameA) === suggestionCanonicalId(nameB);
         console.log(
             `  ${collides ? "→" : "·"} ${a.name}: "${nameA}" [${a.tags[0]}] vs "${nameB}" [${b.tags[0]}]` +
-                `${collides ? "  COLLIDES — needs the identity key" : "  disambiguated by naming"}`
+                `${collides ? "  COLLIDES — needs the identity key" : "  disambiguated by naming — should not happen"}`
+        );
+    }
+
+    console.log("\nNaming — a cuisine LABEL, should be stripped:");
+    for (const { dish, cuisineWord } of CUISINE_LABELLED) {
+        const verdict = await classifySuggestionAuthenticity(toDto(dish));
+        const named = verdict.name ?? dish.name;
+        check(
+            `${dish.name} -> "${named}" [${verdict.status}]`,
+            hasWord(named, cuisineWord),
+            false
+        );
+    }
+
+    console.log("\nNaming — a cuisine word that IS the name, should be kept:");
+    for (const { dish, cuisineWord } of CUISINE_IN_NAME) {
+        const verdict = await classifySuggestionAuthenticity(toDto(dish));
+        const named = verdict.name ?? dish.name;
+        check(
+            `${dish.name} -> "${named}" [${verdict.status}]`,
+            hasWord(named, cuisineWord),
+            true
         );
     }
 

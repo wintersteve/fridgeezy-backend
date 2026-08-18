@@ -109,7 +109,7 @@ Then one line per ingredient (use approved unit abbreviations only):
 Note: The "comment" field is optional but should be included when the ingredient requires preparation (e.g., "peeled", "deveined", "crushed", "finely chopped", "at room temperature"). Omit if no special preparation is needed.
 
 Then one line per instruction step (include ingredients array with names of ingredients used in this step):
-{"type":"instruction","text":"Step description without number prefix","durationSeconds":600,"temperatureC":180,"equipment":["oven"],"ingredients":["ingredient1","ingredient2"]}
+{"type":"instruction","title":"Short headline for this step","text":"Step description without number prefix","durationSeconds":600,"temperatureC":180,"equipment":["oven"],"ingredients":["ingredient1","ingredient2"]}
 
 No markdown, no code blocks, just JSONL.
 

@@ -134,6 +134,29 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
   course tag on suggestions and recipes that have none, classifying each dish
   with an LLM. Dry run unless `COURSE_APPLY=true`; idempotent, so it is safe
   to re-run — rows that already carry a course are skipped.
+- `strip-cuisine-from-names` — one-off repair, run against local on 2026-08-18
+  (14 rows). Takes the cuisine label back out of dish names now that the card
+  prints it above the title anyway ("Spicy Thai Cabbage Salad" ->
+  "Spicy Cabbage Salad"). Dry run unless `RENAME_APPLY=true`; idempotent,
+  because a name with no cuisine word in it is never sent to the model.
+
+  **It exists because a prompt fix cannot reach a row that already exists.**
+  Dedup RESOLVES to the stored suggestion or recipe rather than regenerating
+  it, so a name written before the rule landed is served under that name for as
+  long as the row lives — which, for a catalogue dish, is forever.
+
+  Three things it will not do: touch an imported recipe (`created_by` non-null —
+  that name was read off someone's own cookbook page), accept any edit from the
+  model that is not a DELETION of cuisine words (the check is structural, so the
+  worst a bad batch can do is lose a word), or force a rename that collides on
+  the identity key — two dishes landing on one name means they want merging,
+  which is not this script's call, so it reports them.
+
+  It sets the renamed row's vector to NULL rather than recomputing it, which is
+  exactly what `embed-suggestions` / `embed-recipes` look for. **Run those
+  after.** The dish signature embeds the name, so a stale vector stays
+  comparable — just to a name that no longer exists, which degrades dedup
+  silently instead of failing.
 - `dedupe-ingredients` — an audit, not routine. Nothing calls it; run it only
   when the catalog visibly holds two names for one thing ("scallion" /
   "green onion"). Dry run unless `DEDUP_APPLY=true`, and it costs ~5N LLM calls.
@@ -1025,6 +1048,50 @@ measured against, and nothing will fail to tell you.
 statement about what a weeknight allows, not a fitted value — there is no
 distribution to fit it to — so it is safe to move by hand and no `calibrate*`
 target has any say. Do not add one.
+
+### What a dish is called
+
+`DISH_NAME_RULE` (`suggestions/services/naming-rules.ts`) is the single copy,
+shared by all three generators and quoted verbatim into the naming gate's Step A
+— so the rule the generator was given and the rule it is judged against cannot
+drift. `verify-suggestion-authenticity` is what actually enforces it: Step C
+rewrites the name before anything is persisted, and the gate runs FIRST, so
+every dedup layer keys on the corrected name.
+
+**The name carries no cuisine** (2026-08-18). The card already prints it as an
+eyebrow directly above the title ("Thai · Salad"), so "Spicy Thai Cabbage Salad"
+spent a third of its title on a word the reader was looking at. Stripping it is
+safe because dish identity is `(canonical_id, identity_cuisine)`: two cuisines
+may hold one name and `pickIdentityMatch` keeps them apart, so nothing
+downstream needs the name to carry its origin.
+
+It is a TEST, not "remove the demonym", and the four keep-cases are each a
+concrete failure it would otherwise cause:
+
+| Keeps the word | Because |
+| --- | --- |
+| Pad Thai, French Onion Soup, Som Tam Thai | The word is inseparable — the remainder is not the dish's name. "Som Tam" alone is the LAO dish. |
+| Vietnamese Spring Rolls | The name is a translation; bare "Spring Rolls" names the fried Chinese one. |
+| Som Tam Thai vs Som Tam Lao, Hiroshima-style Okonomiyaki | It is the only thing separating two real dishes — and it survives translation, giving "Thai Green Papaya Salad". |
+| Crispy Pork with Chinese Broccoli | The word belongs to an INGREDIENT. Chinese broccoli is gai lan, not broccoli. |
+
+**"An English menu would print the origin" is NOT the test** — that is true of
+half the catalogue, and taking it as the test keeps the word on most of the
+dishes this was built to fix. "Thai Fried Rice" -> "Fried Rice", "Sichuan Boiled
+Fish" -> "Boiled Fish". The word goes whenever the remainder still names the
+dish. `CUISINE_LABELLED` in `dedup-authenticity.eval.ts` pins that decision with
+"Thai Fried Rice" specifically, next to `CUISINE_IN_NAME` for the other side.
+
+Two consequences worth knowing:
+
+- **The gate may no longer disambiguate by naming.** It used to be free to
+  answer "Kazakh Manti" for the Kazakh row, and the eval recorded that as a fine
+  outcome; it is now told never to add a cuisine word, because the identity key
+  is what separates homographs and an added word outlives the pair it was added
+  for. The homograph report in that eval now expects a collision.
+- **Existing rows do not fix themselves.** Dedup resolves to the stored row, so
+  the prompt only governs dishes nobody has generated yet —
+  `strip-cuisine-from-names` is the repair for everything already written.
 
 ### How long a dish takes
 

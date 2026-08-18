@@ -845,6 +845,7 @@ export type Database = {
           step_number: number
           temperature_c: number | null
           tips: string | null
+          title: string | null
         }
         Insert: {
           cooking_action_id?: string | null
@@ -858,6 +859,7 @@ export type Database = {
           step_number: number
           temperature_c?: number | null
           tips?: string | null
+          title?: string | null
         }
         Update: {
           cooking_action_id?: string | null
@@ -871,6 +873,7 @@ export type Database = {
           step_number?: number
           temperature_c?: number | null
           tips?: string | null
+          title?: string | null
         }
         Relationships: [
           {

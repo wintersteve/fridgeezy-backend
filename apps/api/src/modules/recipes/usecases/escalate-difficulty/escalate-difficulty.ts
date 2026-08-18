@@ -116,7 +116,7 @@ Then one line per ingredient (use approved unit abbreviations only):
 {"type":"ingredient","name":"ingredient_name","category":"meat","parent":"lamb","quantity":100,"unit":"g"}
 
 Then one line per instruction step (include ingredients array with names of ingredients used in this step):
-{"type":"instruction","text":"Step description without number prefix","durationSeconds":600,"temperatureC":180,"equipment":["oven"],"ingredients":["ingredient1","ingredient2"]}
+{"type":"instruction","title":"Short headline for this step","text":"Step description without number prefix","durationSeconds":600,"temperatureC":180,"equipment":["oven"],"ingredients":["ingredient1","ingredient2"]}
 
 No markdown, no code blocks, just JSONL.`;
 
@@ -129,7 +129,14 @@ const buildUserPrompt = (
         .join("\n");
 
     const instructionsList = existingRecipe.instructions
-        .map((inst, idx) => `${idx + 1}. ${inst.text}`)
+        // The headline goes in too. A rewrite regenerates the whole method from
+        // this rendering, so a title left out here is a title re-invented from
+        // scratch — and a dish's steps would then be headed differently in its
+        // base recipe and in every variant of it.
+        .map(
+            (inst, idx) =>
+                `${idx + 1}. ${inst.title ? `${inst.title} — ` : ""}${inst.text}`
+        )
         .join("\n");
 
     const nutritionInfo = `Calories: ${existingRecipe.kcal}kcal, Carbs: ${existingRecipe.carbs}g, Protein: ${existingRecipe.protein}g, Fat: ${existingRecipe.fat}g`;

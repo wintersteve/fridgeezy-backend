@@ -20,7 +20,10 @@ const DECISION_MIN_CHARS = 7;
  * classification. The `MODIFY:` sentinel is an internal signal — this endpoint
  * parses it and emits a structured `modify` event, so the client never sees it.
  */
-const buildRecipeChatPrompt = (recipe: GenerateRecipeResponseDto): string => {
+const buildRecipeChatPrompt = (
+    recipe: GenerateRecipeResponseDto,
+    focusedStep?: number
+): string => {
     const lines: string[] = [
         "You are a cooking assistant helping the user with one specific recipe they are currently viewing.",
         "Answer questions about this recipe: substitutions, scaling portions, techniques, timing, equipment, storage and pairings.",
@@ -65,6 +68,31 @@ const buildRecipeChatPrompt = (recipe: GenerateRecipeResponseDto): string => {
 
     lines.push("--- END RECIPE ---");
 
+    /**
+     * Where the cook actually is, when the client knows.
+     *
+     * Placed AFTER the recipe rather than in the opening instructions, so the
+     * model reads the method first and then is told which line of it the user
+     * is standing over. Without this, cook mode's questions have no subject:
+     * "is this brown enough" is unanswerable against a whole recipe and obvious
+     * against one step of it.
+     *
+     * Clamped to the method's own length, because the number is the client's
+     * and a stale one must not index into a recipe that has since been edited.
+     */
+    const step =
+        focusedStep && focusedStep >= 1 && focusedStep <= recipe.instructions.length
+            ? focusedStep
+            : undefined;
+
+    if (step) {
+        lines.push(
+            "",
+            `The user is cooking right now and is on step ${step}: "${recipe.instructions[step - 1].text}"`,
+            "Assume any question without an explicit subject is about that step. Answer for where they are, not for the recipe as a whole."
+        );
+    }
+
     return lines.join("\n");
 };
 
@@ -104,7 +132,10 @@ export async function recipeChat(req: Request, res: Response): Promise<void> {
 
         // Own the system message — drop any the client sent and prepend ours.
         const messages = [
-            { role: "system" as const, content: buildRecipeChatPrompt(recipe) },
+            {
+                role: "system" as const,
+                content: buildRecipeChatPrompt(recipe, request.focusedStep),
+            },
             ...request.messages.filter((message) => message.role !== "system"),
         ];
 

@@ -497,6 +497,110 @@ in the client repo's TODOS.md.
 
 ---
 
+# 11. Taste profile — BUILT, DARK, awaiting evidence
+
+**Everything is written and switched off. Recording is deliberately still on.**
+Review on **2026-09-13** (four weeks from 2026-08-16), by which point the table
+either shows people repeating themselves or it does not.
+
+The app records what a cook asks for more than once — the instruction they type
+into `modify`, the direction they push `escalate`, the ingredients they ask
+`substitutes` about — and can rewrite a dish to match, as a variant. What is
+dark is the *surface*: the "cook it your usual way" offer on a recipe and the
+"How You Cook" screen in Settings.
+
+| | |
+| --- | --- |
+| Server switch | `TASTE_PROFILE_ENABLED=true` (`recipes.routes.ts`) — unset, so `POST /recipes/:recipeId/personalise` is **not registered**: a real 404, absent from the startup banner |
+| Client switch | `TASTE_PROFILE_ENABLED` in `src/core/config/flags.ts` — `false` |
+| Still running | `profile_taste_signals` keeps filling from `modify` / `escalate` / `substitutes` |
+
+Both switches or neither — the client flag alone gets you a button that 404s.
+
+## The question it is switched off to answer
+
+**Do people repeat themselves often enough for a threshold of two to ever
+fire?** The design only acts on a preference asked for twice, because one "make
+this vegetarian" is a fact about a dinner party and two is a fact about the
+cook. That rule is sound. What is unproven is whether anyone ever reaches it.
+
+Early evidence says **partly, and not where it matters most**. Four real signals
+recorded through the running app on 2026-08-15:
+
+```
+modification | increase_the_chili_oil_or_add_fresh_chi | 1
+modification | increase_the_white_pepper_or_add_chili  | 1
+modification | add_chocolate_filling_to_the_croissant  | 1
+difficulty   | harder                                  | 1
+```
+
+`difficulty` is a closed vocabulary (`easier` / `harder`) and will accumulate.
+So will `substitution`, which stores ingredient names. **`modification` almost
+certainly will not** — nobody types the same sentence twice, and it was supposed
+to be the strongest signal of the three. A feature that fires only on "harder"
+is thin.
+
+## What to look at on the review date
+
+```sql
+select kind, count(*) filter (where occurrences >= 2) as qualifying,
+       count(*) as total, max(occurrences) as best
+from profile_taste_signals group by kind;
+```
+
+- **Nothing qualifying outside `difficulty`** → take it out. Nothing depends on
+  it: drop the two switches, the route, the use case, the client screen and
+  offer, and `20260815000007`. The recording call sites are three one-liners.
+- **`substitution` and `modification` both qualifying** → turn both switches on
+  and fix the defects below.
+- **Only `substitution` qualifying** → the honest feature is smaller and is not
+  this one: "you never have coriander in" is closer to a soft blacklist than to
+  a taste profile, and belongs with `profile_blacklisted_ingredients`.
+
+## Two known defects, deliberately unfixed
+
+Both cost money or effort to fix and neither is worth paying before the data
+says the feature lives.
+
+- **Free-text modifications are canonicalised too literally.** "make it spicier"
+  and "increase the chili oil" are one preference and two rows. Fixing it means
+  mapping free text onto a small vocabulary — a keyword table (cheap, brittle)
+  or an LLM classification per modify (accurate, and adds a call to a path that
+  currently costs nothing extra). **Do not build the LLM version first.**
+- **The stored value is truncated mid-word at 40 characters**, inherited from
+  `deriveVariantLabel`, which was written for a *display* label with an ellipsis.
+  Harmless as a key — it is deterministic — but the settings screen renders the
+  raw value, so it shows "increase the chili oil or add fresh chi". Fix before
+  the screen is ever shown to anyone.
+
+## Two decisions already taken, so they are not re-litigated
+
+- **It must never apply at generation time.** `promote` and `generate-recipe`
+  persist with `created_by NULL`, into the **shared catalogue** that
+  `findByCanonicalName` serves to the next person promoting the same dish — and
+  with one slot per `(canonical_id, difficulty)`, whoever promoted first would
+  define the dish for everyone. An earlier version did exactly this. It is also
+  precisely the drift `verifySuggestionAuthenticity` exists to stop, arriving
+  through a door that gate does not watch. Preferences apply as a **variant**,
+  the same shape `decideReuse` uses for a blacklist.
+- **It is account tier, not premium.** It is `modify` with the instruction read
+  off your own history instead of typed, and modify is free — gating it would
+  paywall the convenience and nothing else, walkable around by typing "make it
+  spicier" yourself. If this is ever to carry a subscription, charge for
+  *automatic* application, or use the quota in §2.
+
+## The one thing that is not deferrable
+
+Recording continues while the surface is dark, so the app is accumulating
+inferred data about people with **no user-visible way to see or delete it** —
+the settings screen that does exactly that is behind the same switch. That is
+fine pre-launch and is not fine after. **Before the app ships to real users,
+either turn the settings screen back on or gate recording too.** The RLS already
+grants the owner `delete` (and deliberately no insert or update), so the
+capability exists; what is missing is only the screen.
+
+---
+
 # Out of scope
 
 - Moving images off Gemini.

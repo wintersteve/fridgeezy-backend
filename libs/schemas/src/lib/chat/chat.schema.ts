@@ -55,6 +55,20 @@ export const ChatRequestSchema = z.object({
      * whatever difficulty the generator happened to pick.
      */
     difficulty: z.enum(["easy", "medium", "hard"]).optional(),
+    /**
+     * The step the cook is standing on, 1-based, on `/recipes/{id}/chat` only.
+     *
+     * Sent by cook mode, where the question is nearly always about the thing in
+     * the pan right now — "is this brown enough", "how small is finely" — and
+     * arrives with no subject the model can resolve. Ignored by the open `/chat`
+     * endpoint, which has no recipe to index into.
+     *
+     * A NUMBER rather than the step's text: the recipe is already fetched
+     * server-side, so sending the sentence would be sending back something the
+     * prompt is about to quote anyway, and a client and server that both hold
+     * the text are two places for it to be wrong.
+     */
+    focusedStep: z.number().int().positive().optional(),
 });
 
 // Export types

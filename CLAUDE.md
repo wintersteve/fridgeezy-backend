@@ -72,6 +72,32 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
   rows it creates, so anything the LLM added arrives without a vector and stays
   invisible to similarity matching until this runs.
 - `seed-ingredients`, `generate-ingredient-seed`
+- `classify-ingredient-diet` — fills `ingredients.dietary_properties`, which is
+  what every dietary filter and every dietary chip on a card derives from. Dry
+  run unless `DIET_APPLY=true`; `DIET_ONLY=`, `DIET_LIMIT=` and
+  `DIET_RECLASSIFY=true` narrow or repeat it.
+
+  **This is the BULK path, not the only one.** The API classifies each
+  ingredient as it is created — `classifyNewIngredients`
+  (`modules/ingredients/services`), called from both ingredient pipelines — so
+  this is for a freshly seeded catalogue, for a re-run after a prompt change
+  (`DIET_RECLASSIFY=true`), and for anything the write path missed. Both share
+  one prompt, in `libs/dietary`, so they cannot disagree about what "gluten"
+  means.
+
+  **An unclassified ingredient is invisible, not wrong**, and that asymmetry is
+  the design: `dietary_classified_at IS NULL` makes every recipe using it
+  UNKNOWN, and unknown is excluded from every dietary filter — because the
+  alternative is telling someone a dish is nut-free when nobody has checked. The
+  cost is that one unclassified ingredient silently withdraws its dish from the
+  vegan, gluten-free and allergen filters *and* from `recipe_display_tags`, with
+  nothing to report it. That is exactly what a fresh local stack looks like:
+  the seeds insert ingredients with no classification, so **every card shows no
+  dietary chip and every dietary filter comes back empty until this is run.**
+
+  An empty property array is a real answer ("carries none of them") and is what
+  lets a dish read as vegan — not the same as never having asked, which is why
+  the timestamp is stored rather than inferred from the array being empty.
 - `generate-cuisine-cards` / `generate-cuisine-banners` — the two cuisine
   surfaces on the home feed, into the `cuisine_cards` (portrait card) and
   `cuisine_banners` (wide banner) buckets. Both key on the client's curated
@@ -201,6 +227,15 @@ Optionally `seed-ingredients` then `embed-ingredients` for a realistic ingredien
 catalog. Without it the pipeline still works — unmatched ingredients are simply
 created on the fly — but every dish pays LLM adjudication for ingredients a
 seeded catalog would have matched outright.
+
+**Then `DIET_APPLY=true … classify-ingredient-diet`, or the app looks broken in
+a way nothing reports.** Ingredients arrive from the seeds unclassified, and an
+unclassified ingredient makes its recipe UNKNOWN for dietary purposes — excluded
+from every dietary filter, and absent from `recipe_display_tags`, which is what
+the cards and the recipe screen draw their dietary chips from. So a fresh local
+stack shows every dish with no dietary chip and every dietary filter empty,
+which reads as a rendering bug and is not one. Ingredients created after this
+classify themselves; see the target's entry above.
 
 Local keys are the CLI's fixed values, identical on every machine and not
 secrets: URL `http://127.0.0.1:54321`, Studio on `:54323`, Postgres on `:54322`.
@@ -447,6 +482,7 @@ libs/openai       OpenAI client + embeddings
 libs/bedrock      Anthropic-on-Bedrock streaming completions
 libs/llm          Provider seam: resolveProvider() / generateStream() over openai|bedrock
 libs/genai        @google/genai image generation + the shared food-illustration art direction
+libs/dietary      Ingredient dietary-property vocabulary + the classification prompt
 libs/streaming-server   createStreamHandler, SSE plumbing, CORS, raw-body parsing
 libs/toolkit      Canonicalisation helpers (names, ingredient canonical ids, signatures)
 ```
@@ -964,6 +1000,15 @@ and left alone on purpose. Don't "fix" one without the trigger next to it:
   (TS). Only the TS one has the gray-band creation gate, alias learning and LLM
   categories. *Revisit when* a category bug reproduces through recipe
   persistence but not through suggestions — that is this divergence failing.
+
+  Dietary classification is the one thing that now spans both, and it had to:
+  the SQL path creates its ingredients inside the same statement that writes the
+  recipe, so nothing in TypeScript ever sees the new row. `persistRecipe`
+  therefore re-resolves the recipe's ingredients by canonical id afterwards and
+  classifies them — which is also a live check that `ingredient_canonical_id`
+  (SQL) and `ingredientCanonicalId` (TS) still agree. **A third creation path
+  would need the same treatment**, and nothing would fail if it were forgotten:
+  the dishes would just go quietly missing from the dietary filters.
 - **Ingredient names aren't grounded by retrieval** (dish names are, via
   `listCatalogDishes`): the generator free-texts them and `matchIngredients`
   reconciles after the fact. *Revisit when* the `[Ingredients]` logs show the

@@ -2,36 +2,33 @@
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
         "outDir": "dist",
-        "types": [
-            "node"
-        ],
+        "types": ["node"],
         "rootDir": ".",
         "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo"
     },
-    "include": [
-        "operations/**/*.ts",
-        "codegen/**/*.ts"
-    ],
-    "exclude": [
-        "eslint.config.js",
-        "eslint.config.cjs",
-        "eslint.config.mjs"
-    ],
+    "include": ["operations/**/*.ts", "codegen/**/*.ts"],
+    "exclude": ["eslint.config.js", "eslint.config.cjs", "eslint.config.mjs"],
     "references": [
         {
-            "path": "../../libs/llm/tsconfig.lib.json"
-        },
-        {
             "path": "../../libs/genai/tsconfig.lib.json"
-        },
-        {
-            "path": "../../libs/supabase/tsconfig.lib.json"
         },
         {
             "path": "../../libs/openai/tsconfig.lib.json"
         },
         {
+            "path": "../../libs/types/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/dietary/tsconfig.lib.json"
+        },
+        {
             "path": "../../libs/toolkit/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/supabase/tsconfig.lib.json"
+        },
+        {
+            "path": "../../libs/llm/tsconfig.lib.json"
         }
     ]
 }

@@ -226,11 +226,13 @@
         }
     },
     "dependencies": {
+        "@fridgeezy/dietary": "0.0.1",
         "@fridgeezy/genai": "0.0.1",
         "@fridgeezy/llm": "0.0.1",
         "@fridgeezy/openai": "0.0.1",
         "@fridgeezy/supabase": "0.0.1",
         "@fridgeezy/toolkit": "0.0.1",
+        "@fridgeezy/types": "0.0.1",
         "ts-case-convert": "^2.1.0"
     }
 }

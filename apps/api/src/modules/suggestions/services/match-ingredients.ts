@@ -3,6 +3,9 @@ import { generateBatchEmbeddings } from "@fridgeezy/openai";
 import { CategoriesRepository, IngredientsRepository } from "@fridgeezy/supabase";
 import { ingredientCanonicalId, splitIngredientName } from "@fridgeezy/toolkit";
 
+import { trackBackgroundTask } from "../../../background-tasks";
+import { classifyNewIngredients } from "../../ingredients/services";
+
 import { adjudicateIngredient } from "./adjudicate-ingredient";
 
 // Calibrated from real ingredient name-embedding similarity (see
@@ -249,6 +252,8 @@ export async function matchIngredients(
         // Apply phase (SERIAL): the writes (alias learning, ingredient creation)
         // run in order — keeps create error semantics and avoids intra-suggestion
         // insert races on the ingredient canonical_id unique constraint.
+        const createdIngredientIds: string[] = [];
+
         for (const r of resolutions) {
             if (r.kind === "skip") continue;
 
@@ -327,6 +332,7 @@ export async function matchIngredients(
                     ingredientId: createResult.value.id,
                     matchType: "created",
                 });
+                createdIngredientIds.push(createResult.value.id);
             } catch (error) {
                 console.error(`Failed to create ingredient "${r.name}":`, error);
                 return failure(
@@ -335,6 +341,21 @@ export async function matchIngredients(
                     )
                 );
             }
+        }
+
+        // Dietary classification for whatever was just invented, in ONE call for
+        // the whole set rather than one per ingredient.
+        //
+        // Deliberately not awaited: this sits inside suggestion persistence,
+        // behind a provisional card the client has already drawn, and a `gpt-4o`
+        // round trip here would be latency the reader pays for a fact they are
+        // not looking at yet. Nothing downstream in THIS request reads the
+        // properties — they are what the dietary filters and the cards' dietary
+        // chips consult on later reads — and an ingredient that never gets
+        // classified is merely invisible to those filters, not wrong. See
+        // `classifyNewIngredients` for why it cannot reject.
+        if (createdIngredientIds.length > 0) {
+            trackBackgroundTask(classifyNewIngredients(createdIngredientIds));
         }
 
         return success(matches);

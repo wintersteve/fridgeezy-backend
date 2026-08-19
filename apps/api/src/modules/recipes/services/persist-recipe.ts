@@ -1,9 +1,18 @@
 import { failure, PersistenceError, Result, success } from "@fridgeezy/domain";
 import { generateEmbedding } from "@fridgeezy/openai";
 import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
-import { RecipesRepository, UnitsRepository } from "@fridgeezy/supabase";
-import { buildSuggestionSignature } from "@fridgeezy/toolkit";
+import {
+    IngredientsRepository,
+    RecipesRepository,
+    UnitsRepository,
+} from "@fridgeezy/supabase";
+import {
+    buildSuggestionSignature,
+    ingredientCanonicalId,
+} from "@fridgeezy/toolkit";
 
+import { trackBackgroundTask } from "../../../background-tasks";
+import { classifyNewIngredients } from "../../ingredients/services";
 import { resolveIdentityCuisine } from "../../suggestions/services/cuisine-identity";
 import { pickIdentityMatch } from "../../suggestions/services/pick-identity-match";
 
@@ -158,6 +167,56 @@ function dedupeIngredientsById(
  *   and the partial unique index rejects it.
  * @returns Result containing the recipe UUID or error
  */
+/**
+ * Classify whatever `persist_recipe` just invented in SQL.
+ *
+ * This is the OTHER ingredient pipeline. `matchIngredients` (TypeScript) hands
+ * its creations straight to `classifyNewIngredients`; the SQL persist functions
+ * `INSERT INTO ingredients ... ON CONFLICT DO UPDATE` inside the same statement
+ * that writes the recipe, so nothing in TypeScript ever sees the new row and it
+ * would otherwise stay unclassified forever — silently withdrawing the dish from
+ * every dietary filter (see the divergence noted in CLAUDE.md).
+ *
+ * Resolved by CANONICAL id rather than by reading the rows back, because that is
+ * the key the SQL just used: `ingredient_canonical_id(name)` there and
+ * `ingredientCanonicalId(name)` here are required to agree, and this is one more
+ * thing that breaks loudly if they ever stop.
+ *
+ * Passes every ingredient of the recipe, not only the new ones — telling them
+ * apart would cost the read this avoids, and `classifyNewIngredients` filters to
+ * the unclassified itself, so an already-known ingredient costs one indexed
+ * lookup and no LLM call.
+ */
+async function classifyRecipeIngredients(
+    recipe: GenerateRecipeResponseDto
+): Promise<void> {
+    const canonicalIds = [
+        ...new Set(
+            (recipe.ingredients ?? [])
+                .map((ingredient) => ingredientCanonicalId(ingredient.name))
+                .filter(Boolean)
+        ),
+    ];
+
+    if (canonicalIds.length === 0) return;
+
+    const found = await new IngredientsRepository().findByCanonicalIds(
+        canonicalIds
+    );
+
+    if (found.success === false) {
+        console.error(
+            "[Dietary] Failed to resolve persisted ingredients:",
+            found.error
+        );
+        return;
+    }
+
+    await classifyNewIngredients(
+        [...found.value.values()].map((ingredient) => ingredient.id)
+    );
+}
+
 export async function persistRecipe(
     recipe: GenerateRecipeResponseDto,
     existingImageUrl?: string,
@@ -217,6 +276,11 @@ export async function persistRecipe(
 
         if (result.success) {
             await storeRecipeSignature(repository, result.value, recipe);
+
+            // Unawaited for the same reason as the sibling call in
+            // `matchIngredients`: the recipe is already written and streaming,
+            // and nothing in this request reads the properties.
+            trackBackgroundTask(classifyRecipeIngredients(recipe));
         }
 
         return result;
@@ -353,6 +417,11 @@ export async function persistRecipeWithIngredientIds(
 
         if (result.success) {
             await storeRecipeSignature(repository, result.value, recipe);
+
+            // Unawaited for the same reason as the sibling call in
+            // `matchIngredients`: the recipe is already written and streaming,
+            // and nothing in this request reads the properties.
+            trackBackgroundTask(classifyRecipeIngredients(recipe));
         }
 
         return result;

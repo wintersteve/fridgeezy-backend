@@ -1,4 +1,5 @@
 import {
+    DietaryPropertyValue,
     IIngredientsRepository,
     VectorMatch,
     DomainError,
@@ -238,6 +239,62 @@ export class IngredientsRepository implements IIngredientsRepository {
             return failure(
                 new PersistenceError(
                     `Failed to create ingredient: ${error instanceof Error ? error.message : String(error)}`
+                )
+            );
+        }
+    }
+
+    async findUnclassifiedDietary(
+        ids: string[]
+    ): Promise<Result<Array<Pick<Ingredient, "id" | "name">>, DomainError>> {
+        if (ids.length === 0) return success([]);
+
+        try {
+            const { data, error } = await supabaseAdmin
+                .from("ingredients")
+                .select("id, name")
+                .in("id", ids)
+                .is("dietary_classified_at", null);
+
+            if (error) {
+                return failure(new PersistenceError(error.message));
+            }
+
+            return success(data ?? []);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to find unclassified ingredients: ${error instanceof Error ? error.message : String(error)}`
+                )
+            );
+        }
+    }
+
+    async setDietaryProperties(
+        ingredientId: string,
+        properties: DietaryPropertyValue[]
+    ): Promise<Result<void, DomainError>> {
+        try {
+            // An UPDATE of exactly these two columns, never an upsert: an upsert
+            // would have to restate every NOT NULL column of `ingredients`, and
+            // getting one wrong would overwrite real data.
+            const { error } = await supabaseAdmin
+                .from("ingredients")
+                .update({
+                    dietary_properties: properties,
+                    dietary_classified_at: new Date().toISOString(),
+                })
+                .eq("id", ingredientId);
+
+            if (error) {
+                return failure(new PersistenceError(error.message));
+            }
+
+            return success(undefined);
+        } catch (error) {
+            return failure(
+                new PersistenceError(
+                    `Failed to set dietary properties: ${error instanceof Error ? error.message : String(error)}`
                 )
             );
         }

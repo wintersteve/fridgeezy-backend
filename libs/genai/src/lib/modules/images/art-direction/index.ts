@@ -249,8 +249,55 @@ const lightRule = (vessel: VesselMode, tone: ToneMode) =>
  * hue, which neither tone is allowed to touch.
  */
 /**
- * The medium, which is the line that actually decides whether a dark ground
- * survives — and the one it took two failed rounds to find.
+ * The medium — what the paint physically is and how it behaves.
+ *
+ * ## High-key: causes, not adjectives (2026-08-19)
+ *
+ * It used to read "delicate hand-drawn linework, gentle gouache and
+ * watercolour-like washes with soft, slightly bleeding edges, clean
+ * flat-leaning shapes; minimal, airy and warm" — a description of the *look*
+ * wanted. On `gemini-2.5-flash-image` that produced none of it: even fills, one
+ * uniform contour, no evidence of a tool anywhere in the picture. Which is the
+ * bias `generate-image` already documents ("renders this art direction flatter
+ * and more hard-outlined than the style block describes"), arriving exactly
+ * where it was least wanted.
+ *
+ * The fix is not more adjectives. Adjectives ask a model already biased toward
+ * flat and hard-outlined to show restraint; this line gives it *causes* — a
+ * wash dries lighter through its middle, a dry brush skips where it crosses the
+ * grain, a line breaks where the tooth rides high. Each one is a physical
+ * reason for a mark, and a mark with a reason survives a model that would
+ * otherwise tidy it away.
+ *
+ * Measured over 18 renders on Flash (6 prompts x 3 dishes: a plated mass dish,
+ * a deep bowl, a pale dessert). Five candidate directions were rendered side by
+ * side — a wavering line, a stroke-economy loosening, this one, coloured-pencil
+ * hatching over a wash, and a full swap to dry coloured pencil. This one won on
+ * cost: the shapes, the strokes and the medium are all unchanged, and only what
+ * they are *made of* moved, so nothing else in the file had to be renegotiated.
+ * The pencil directions read as more drawn still and are the answer if the house
+ * style is ever meant to leave watercolour — they are not a setting of this one.
+ *
+ * **Expect the tooth to vary by dish, and do not treat that as a failure.** It
+ * is loud on a saturated savoury plate and quiet on a pale dessert, because a
+ * pale subject lays down less pigment for the tooth to granulate. That is the
+ * medium behaving correctly.
+ *
+ * The clamp — "the surface the whole picture is made on, never a sheet or a
+ * page lying inside it" — is load-bearing and must not be trimmed. Naming a
+ * substrate is the most reliable way to get the framed image the trailer bans:
+ * a deckle edge, a taped corner, a sketchbook page on a table. Note where the
+ * clamp is *not*: the trailer was deliberately left alone, because putting the
+ * word "paper" in the last paragraph plants the banned noun in the
+ * highest-attention position of every prompt, including the abstract surfaces
+ * whose whole point is that nothing is recognisable.
+ *
+ * It is high-key only, and the section below is why: watercolour on paper is
+ * the one thing a dark ground cannot survive.
+ *
+ * ## Low-key: the line that decides whether a dark ground survives
+ *
+ * It took two failed rounds to find.
  *
  * Round one moved `ground` alone: three renders came back on cream. Round two
  * moved `Tone`, `Palette` and `Light` as well: three more came back on cream,
@@ -275,7 +322,7 @@ const lightRule = (vessel: VesselMode, tone: ToneMode) =>
  * recipe hero.
  */
 const RENDERING_MEDIUM: Record<ToneMode, string> = {
-    "high-key": `delicate hand-drawn linework, gentle gouache and watercolour-like washes with soft, slightly bleeding edges, clean flat-leaning shapes; minimal, airy and warm.`,
+    "high-key": `true watercolour and gouache worked into the tooth of cold-press paper — the surface the whole picture is made on, never a sheet or a page lying inside it. No wash is an even fill: pigment granulates into that tooth, each wash loads unevenly and dries a little lighter through its middle and a shade deeper where it pooled or stopped, and a dry brush skips and breaks where it crosses the grain. Where a wash dried back on itself it leaves a slightly harder rim inside its own colour, half a step deeper — never a dark contour and never an outline around a shape — and the paper takes the ground colour named above, with only its tooth showing. The warm grey linework is drawn over that same tooth, sparse and fine, breaking where the tooth rides high, open rather than a sealed continuous outline, and never darkening toward black even at its heaviest. The tooth is one fine, quiet, even scale in every image and runs unbroken to all four edges with no edge, corner or shadow of its own; shapes stay simple, minimal, airy and warm.`,
     "low-key": `delicate hand-drawn linework, and soft OPAQUE gouache and chalk pastel laid down over a dark ground. The pigment is body colour that covers the darkness beneath it, never a transparent wash that lets a pale paper glow through — every soft edge is pigment blending into pigment. Clean flat-leaning shapes; minimal and warm. This is not watercolour, and there is no white or cream paper anywhere in the picture.`,
 };
 
@@ -287,13 +334,33 @@ const paletteRule = (tone: ToneMode, ground: { hex: string }) =>
 /**
  * A function of the ground, not a constant table, because the colour varies per
  * surface. `VESSEL_RULE` above stays a table: it names no colour that moves.
+ *
+ * The tooth clause in the ceramic branch is the one shared line the 2026-08-19
+ * medium change had to touch, and it is that direction's own defence rather
+ * than a decoration: **a texture that stops inside the frame is a paper edge**,
+ * which is the frame the trailer bans. If the picture is made on a tooth, the
+ * empty ground is made on it too.
+ *
+ * It is worded WITHOUT the word "paper" on purpose. This rule takes no `tone`,
+ * and `generate-app-icon` renders its dark bowls as `ceramic` + `low-key` — so
+ * a paper reference here would reach the one place `RENDERING_MEDIUM` records
+ * as fatal, and put the cream ground back. "Pigment settled into a tooth" is
+ * true of chalk pastel on a dark ground as much as of watercolour on a light
+ * one. **Those two low-key surfaces are the untested edge of this change**: they
+ * are generated by hand from a script and committed, so nothing regenerates
+ * them by accident — but eyeball a re-run of `generate-app-icon` / `generate-splash`
+ * before trusting it.
+ *
+ * The `none` branch keeps "lightly textured" and is deliberately not matched:
+ * its subject is expected to cover the frame, so almost no ground shows, and
+ * the Rendering line already carries the tooth for every high-key surface.
  */
 const backgroundRule = (
     vessel: VesselMode,
     ground: { name: string; hex: string }
 ) =>
     vessel === "ceramic"
-        ? `- Background: flat, lightly textured ${ground.name} (${ground.hex}), completely empty. No table surface, marble, wood grain, cloth, cutlery, napkins, hands, or stray garnish outside the vessel. No borders, frames or inset panels — the background runs to all four edges of the image.`
+        ? `- Background: flat ${ground.name} (${ground.hex}), completely empty — its colour is pigment settled into a fine, quiet, even tooth, and that tooth continues unbroken beneath everything else in the picture, at the same scale everywhere. No table surface, marble, wood grain, cloth, cutlery, napkins, hands, or stray garnish outside the vessel. No borders, frames or inset panels — the background runs to all four edges of the image.`
         : `- Background: no table surface, marble, wood grain, cloth, cutlery, napkins or hands, ever. Wherever the subject does not reach, the ground is flat, lightly textured ${ground.name} (${ground.hex}) — but the subject is expected to cover the frame, so little or none of it may show. No borders, frames or inset panels — the image runs to all four edges.`;
 
 export const buildFoodIllustrationStyle = ({

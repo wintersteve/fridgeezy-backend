@@ -30,11 +30,23 @@ export const SuggestSubstitutesRequestSchema = z.object({
  * conversion, and `note` is a short "when to use this" aside — the client
  * renders the name inline with the ratio and the note beneath it, so both must
  * read as fragments, not sentences.
+ *
+ * **`ratio` is free text and is NOT a multiplier.** It carries "1:1" and "3/4
+ * the amount", but also "1 tbsp per clove" — a unit change no scalar can
+ * express. The client applies it to the quantity only when it parses as a clean
+ * scalar and renders it as text otherwise; do not tighten this to a number
+ * without also deciding what a unit-changing swap returns.
+ *
+ * `changesMethod` is what lets the client offer a full rewrite on the swaps
+ * that need one and stay free on the swaps that do not. Oil for butter in a
+ * pan sauce is a straight swap; in shortcrust it changes how the pastry is
+ * made, and only the model knows which of the two it just suggested.
  */
 export const SubstituteOptionSchema = z.object({
     name: z.string(),
     ratio: z.string().optional(),
     note: z.string().optional(),
+    changesMethod: z.boolean().optional(),
 });
 
 /**
@@ -65,6 +77,10 @@ export const SubstituteSuggestionLlmSchema = z.object({
             name: z.string(),
             ratio: z.string().nullable().optional(),
             note: z.string().nullable().optional(),
+            // Absent means "no", so a model that ignores the field leaves every
+            // swap on the free path rather than offering a paid rewrite nobody
+            // asked for. The failure direction is deliberate.
+            changes_method: z.boolean().nullable().optional(),
         })
     ),
 });

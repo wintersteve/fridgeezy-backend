@@ -33,12 +33,13 @@ The cook has listed the ingredients they are MISSING. For each one, suggest what
 - Use "note" for a SHORT fragment saying when the swap works or what it changes ("Best for sautéing", "Adds slight sweetness", "Add off the heat"). Max 60 characters, no trailing period. Omit it when you have nothing useful to add.
 - When an ingredient is genuinely optional in this dish, "Leave it out" is a legitimate first suggestion — say what is lost in the note.
 - Never refuse an ingredient. Every requested ingredient gets its own line, even if the only honest advice is to omit it or accept a noticeable change.
+- Set "changes_method" to true ONLY when following the recipe's existing steps with this swap would go wrong — the technique itself has to change, not just the ingredient. Oil for butter in a pan sauce is false; oil for butter in a shortcrust is true, because the rubbing-in step no longer works. Omit it or use false for a straight swap. Most swaps are straight swaps, so this should be false far more often than true.
 
 ## Output Format
 Output ONE JSON object per line (JSONL), one line per missing ingredient, in the SAME ORDER they were requested. No markdown, no code blocks, no extra text.
 
 Each object must be:
-{"ingredient_name": "<the ingredient name EXACTLY as requested>", "substitutes": [{"name": "...", "ratio": "...", "note": "..."}]}`;
+{"ingredient_name": "<the ingredient name EXACTLY as requested>", "substitutes": [{"name": "...", "ratio": "...", "note": "...", "changes_method": false}]}`;
 
 export const buildSubstitutesUserPrompt = (
     request: SuggestSubstitutesRequestDto,
@@ -127,6 +128,10 @@ const toSuggestion = (
         name: option.name,
         ...(option.ratio ? { ratio: option.ratio } : {}),
         ...(option.note ? { note: option.note } : {}),
+        // Only carried when true. Absent and false mean the same thing to the
+        // client — no rewrite offered — so sending an explicit false on every
+        // swap would spend wire bytes to say nothing.
+        ...(option.changes_method ? { changesMethod: true } : {}),
     })),
 });
 

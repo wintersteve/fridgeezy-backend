@@ -1,7 +1,9 @@
 import {
+    ComposeRecipeErrorDtoSchema,
     ComposeRecipeRequestSchema,
     ComposeRecipeResultDtoSchema,
     ComposeRecipeProgressDtoSchema,
+    ComposeRecipeWithdrawnDtoSchema,
 } from "@fridgeezy/schemas";
 import {
     initSseStream,
@@ -96,20 +98,32 @@ export async function composeRecipe(
                     const validated =
                         ComposeRecipeProgressDtoSchema.parse(item);
                     writeSseEvent(res, validated);
+                } else if (item.type === "withdrawn") {
+                    const validated =
+                        ComposeRecipeWithdrawnDtoSchema.parse(item);
+                    writeSseEvent(res, validated);
                 }
             }
 
             // 6. End stream
             endSseStream(res);
         } catch (streamError) {
-            // If error occurs during streaming, send error event and end stream
-            writeSseEvent(res, {
-                type: "error",
-                message:
-                    streamError instanceof Error
-                        ? streamError.message
-                        : "Unknown error",
-            });
+            // Headers are already out, so the only way to report this is in the
+            // stream. Validated like every other frame, and declared in the
+            // schema alongside them — it went undeclared for a long time, and a
+            // client that did not know the shape parsed it as an ordinary item
+            // and then took the `[DONE]` success path, turning a failed
+            // composition into an empty menu it also wrote to cache as valid.
+            writeSseEvent(
+                res,
+                ComposeRecipeErrorDtoSchema.parse({
+                    type: "error",
+                    message:
+                        streamError instanceof Error
+                            ? streamError.message
+                            : "Unknown error",
+                })
+            );
             endSseStream(res);
         }
     } catch (error) {

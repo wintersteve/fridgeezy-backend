@@ -3,19 +3,25 @@ import {
     ComposeRecipeRequestDto,
     ComposeRecipeResultDto,
     ComposeRecipeProgressDto,
+    ComposeRecipeWithdrawnDto,
     GenerateRecipeResponseDto,
     GenerateSuggestionResponseSchema,
 } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { z } from "zod/v4";
 
-import { FOOD_ONLY_RULE } from "../../suggestions/services/constraint-rules";
+import {
+    ADAPTED_FOR_RULE,
+    BLACKLIST_RULE,
+    FOOD_ONLY_RULE,
+} from "../../suggestions/services/constraint-rules";
 import {
     DISH_GLOSS_RULE,
     DISH_NAME_ALT_RULE,
     DISH_NAME_RULE,
 } from "../../suggestions/services/naming-rules";
 import { persistOrReuseSuggestion } from "../../suggestions/services/persist-or-reuse-suggestion";
+import { createSuggestionBatch } from "../../suggestions/services/suggestion-batch";
 import {
     COMPONENT_RULE,
     DISH_FORM_RULE,
@@ -42,6 +48,8 @@ const ComposeRecipeSuggestionSchema = z.object({
     course: z.string(),
     ingredients: z.array(z.string().min(1)),
     tags: z.array(z.string()),
+    /** Blacklisted ingredients swapped out — see {@link BLACKLIST_RULE}. */
+    adaptedFor: z.array(z.string()).default([]),
 });
 
 type ComposeRecipeSuggestion = z.infer<typeof ComposeRecipeSuggestionSchema>;
@@ -56,6 +64,11 @@ const SYSTEM_PROMPT = `You are a recipe composition assistant. Generate compleme
 - Do NOT suggest recipes of excluded course types
 - If cuisine matching is requested, suggest recipes from the same cuisine
 - If difficulty matching is requested, suggest recipes of similar difficulty
+
+## Who is eating (CRITICAL)
+${BLACKLIST_RULE}
+  - A menu is one meal, so these apply to EVERY course, not only the ones that would obviously carry them. A dairy blacklist rules out the buttered side as well as the dessert.
+  - They are NOT satisfied by the base recipe already complying. The base was picked by the user; these courses are being chosen for them.
 
 ## Difficulty Levels
 - "easy": Beginner-friendly version of the dish, using simple techniques
@@ -84,6 +97,7 @@ Each recipe object must include:
 - ${DISH_TOTAL_TIME_RULE}
 - course (the course type)
 - ingredients (array of key ingredient strings)
+- ${ADAPTED_FOR_RULE}
 - ${TAGS_KEY_RULE}`;
 
 /**
@@ -124,6 +138,13 @@ const splitCourses = (
     return { base, allowed };
 };
 
+/**
+ * How many dishes a course wants. `courseCounts` when the caller said so,
+ * otherwise the flat `maxSuggestions` it replaced.
+ */
+const countFor = (course: string, request: ComposeRecipeRequestDto): number =>
+    request.courseCounts[course] ?? request.maxSuggestions;
+
 const buildUserPrompt = (
     baseRecipe: GenerateRecipeResponseDto & { imageUrl?: string },
     request: ComposeRecipeRequestDto,
@@ -161,13 +182,38 @@ const buildUserPrompt = (
         parts.push(`Difficulty: ${baseRecipe.difficulty}`);
     }
 
-    parts.push(`\nRequested Courses: ${allowedCourses.join(", ")}`);
+    // The blacklist is per-INGREDIENT and adapts the dish; the restrictions are
+    // absolute and change WHICH dish. Both are listed before the courses so the
+    // model reads them as constraints on the whole menu rather than as notes on
+    // the last course named.
+    if (request.blacklist.length > 0) {
+        parts.push(`Blacklist: ${request.blacklist.join(", ")}`);
+    }
+
+    if (request.dietaryRestrictions.length > 0) {
+        parts.push(
+            `Dietary Restrictions: ${request.dietaryRestrictions.join(", ")}`
+        );
+    }
+
+    // One line per course carrying its own count, rather than one global "N per
+    // course type". The caller's wants are per-course — two sides and one
+    // dessert — and a single number told the model to produce two of everything.
+    parts.push(
+        [
+            `\nRequested Courses:`,
+            ...allowedCourses.map(
+                (course) =>
+                    `- ${course}: ${countFor(course, request)} dish${
+                        countFor(course, request) > 1 ? "es" : ""
+                    }`
+            ),
+        ].join("\n")
+    );
 
     if (baseCourses.length > 0) {
         parts.push(`Excluded Courses: ${baseCourses.join(", ")}`);
     }
-
-    parts.push(`Max Suggestions: ${request.maxSuggestions} per course type`);
 
     if (request.exclude.length > 0) {
         parts.push(
@@ -193,7 +239,9 @@ export async function* generateComposeRecipes(
     baseRecipe: GenerateRecipeResponseDto & { imageUrl?: string },
     request: ComposeRecipeRequestDto,
     provider?: LlmProvider
-): AsyncGenerator<ComposeRecipeResultDto | ComposeRecipeProgressDto> {
+): AsyncGenerator<
+    ComposeRecipeResultDto | ComposeRecipeProgressDto | ComposeRecipeWithdrawnDto
+> {
     // Fetch metadata to get course tags from database
     const metadata = await fetchRecipeMetadata();
     const courseTagNames = metadata.tags
@@ -226,6 +274,18 @@ export async function* generateComposeRecipes(
         request.exclude.map((name) => name.toLowerCase().trim())
     );
 
+    /** Is this name one the caller has already been offered? */
+    const isExcluded = (...names: (string | null | undefined)[]) =>
+        names.some((name) => !!name && excluded.has(name.toLowerCase().trim()));
+
+    // Coordinates dedup between the courses of THIS request. Without it the two
+    // sides of one menu could resolve to the same dish: the loop awaits
+    // sequentially, so by the time the second runs the first is already in the
+    // database and the DB layers *reuse* it — yielding a second result with an
+    // identical id rather than dropping it. The batch catches that in memory,
+    // one step earlier, and returns `dropped/duplicate` instead.
+    const batch = createSuggestionBatch();
+
     const stream = generateStream({
         model: { openai: "gpt-4.1" },
         label: "recipe.compose",
@@ -243,11 +303,13 @@ export async function* generateComposeRecipes(
         // The prompt asks for these to be avoided; enforce it too, so a model
         // that ignores the instruction can't hand a client back the dish it
         // explicitly asked to move on from.
-        if (
-            excluded.has(suggestion.name.toLowerCase().trim()) ||
-            (suggestion.name_alt &&
-                excluded.has(suggestion.name_alt.toLowerCase().trim()))
-        ) {
+        if (isExcluded(suggestion.name, suggestion.name_alt)) {
+            yield {
+                type: "withdrawn",
+                courseType: suggestion.course,
+                name: suggestion.name,
+                reason: "excluded",
+            };
             continue;
         }
 
@@ -274,7 +336,9 @@ export async function* generateComposeRecipes(
         // `persistOrReuseSuggestion` already does the whole thing: recipes by
         // exact name then signature similarity, suggestions by exact name then
         // the calibrated band with LLM adjudication, plus the authenticity gate.
-        const outcome = await persistOrReuseSuggestion(suggestion, {
+        const outcome = await persistOrReuseSuggestion(
+            suggestion,
+            {
             // The cuisine tag the model gave this dish, matched against the
             // actual cuisine vocabulary — the same way `buildUserPrompt` above
             // resolves the BASE recipe's cuisine, and for the same reason.
@@ -294,29 +358,58 @@ export async function* generateComposeRecipes(
             // rather than being caught. That is the right trade: `cuisine` is an
             // optional hint, and no hint beats a wrong one. `matchTags` still
             // creates the tag during persistence, so the next call sees it.
-            cuisine: suggestion.tags.find((tag) =>
-                cuisineTagNames.some(
-                    (cuisine) => tag.toLowerCase() === cuisine.toLowerCase()
-                )
-            ),
-        });
+                cuisine: suggestion.tags.find((tag) =>
+                    cuisineTagNames.some(
+                        (cuisine) => tag.toLowerCase() === cuisine.toLowerCase()
+                    )
+                ),
+            },
+            { batch }
+        );
 
         if (outcome.kind === "dropped") {
             console.warn(
                 `[Compose] Dropped "${suggestion.name}" (${outcome.reason})`
             );
+            yield {
+                type: "withdrawn",
+                courseType: suggestion.course,
+                name: suggestion.name,
+                reason: outcome.reason,
+            };
             continue;
         }
 
         if (outcome.kind === "existing_recipe") {
             const recipe = outcome.recipe;
+
+            // The review can rename a dish and dedup can resolve it onto a
+            // catalogue row under a name the caller has already seen — neither of
+            // which the pre-flight check above could know. Re-testing the FINAL
+            // name is what makes `exclude` mean "do not show me this again"
+            // rather than "do not generate this string".
+            if (isExcluded(recipe.name, recipe.nameEn)) {
+                yield {
+                    type: "withdrawn",
+                    courseType: suggestion.course,
+                    name: recipe.name,
+                    reason: "excluded",
+                };
+                continue;
+            }
+
             yield {
                 type: "result",
                 source: "existing",
+                // The slot ASKED for, not the slot this catalogue row happens to
+                // be tagged with — those disagree often, and the caller is
+                // filling a menu, not reading the row's own taxonomy.
+                courseType: suggestion.course,
                 id: recipe.id,
                 name: recipe.name,
                 nameEn: recipe.nameEn,
                 description: recipe.description,
+                shortDescription: recipe.shortDescription,
                 difficulty: recipe.difficulty,
                 totalTimeMinutes: recipe.totalTimeMinutes,
                 ingredients: recipe.ingredients,
@@ -327,9 +420,21 @@ export async function* generateComposeRecipes(
         }
 
         const reused = outcome.suggestion;
+
+        if (isExcluded(reused.name, reused.nameEn)) {
+            yield {
+                type: "withdrawn",
+                courseType: suggestion.course,
+                name: reused.name,
+                reason: "excluded",
+            };
+            continue;
+        }
+
         yield {
             type: "result",
             source: "suggestion",
+            courseType: suggestion.course,
             id: reused.id,
             name: reused.name,
             nameEn: reused.nameEn,

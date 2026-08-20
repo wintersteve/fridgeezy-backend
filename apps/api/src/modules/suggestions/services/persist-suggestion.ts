@@ -1,6 +1,6 @@
 import { failure, PersistenceError, Result } from "@fridgeezy/domain";
 import { generateEmbedding } from "@fridgeezy/openai";
-import { GenerateSuggestionResponseDto } from "@fridgeezy/schemas";
+import { GenerateSuggestionResponseDto, SuggestionTagDto } from "@fridgeezy/schemas";
 import { SuggestionsRepository, supabaseAdmin } from "@fridgeezy/supabase";
 
 import { matchIngredients, IngredientMatch } from "./match-ingredients";
@@ -8,22 +8,21 @@ import { matchTags, TagInput, TagMatch } from "./match-tags";
 import { buildSuggestionSignature } from "./suggestion-signature";
 
 /**
- * Reads the display names for a set of ids as a lookup.
+ * Reads the display names for a set of ingredient ids as a lookup.
  *
  * Matching returns ids plus whatever the model called each thing; the catalog's
  * own name is not carried through (the alias branch never has it to hand), so
  * it is read back here in one query rather than threaded through every match
  * site.
  */
-async function lookupNames(
-    table: "ingredients" | "tags",
+async function lookupIngredientNames(
     ids: string[]
 ): Promise<Map<string, string>> {
     const unique = [...new Set(ids)];
     if (unique.length === 0) return new Map();
 
     const { data, error } = await supabaseAdmin
-        .from(table)
+        .from("ingredients")
         .select("id, name")
         .in("id", unique);
 
@@ -32,12 +31,48 @@ async function lookupNames(
         // suggestion is already persisted by this point and must not be lost
         // over a cosmetic lookup.
         console.warn(
-            `[Suggestions] Could not read ${table} names: ${error.message}`
+            `[Suggestions] Could not read ingredient names: ${error.message}`
         );
         return new Map();
     }
 
     return new Map((data ?? []).map((row) => [row.id, row.name]));
+}
+
+/**
+ * The same lookup for tags, which additionally carries `type`.
+ *
+ * Type is what the card's "CUISINE · KIND" eyebrow is built from, and it cannot
+ * be inferred from the match: `matchTags` resolves a name onto a row and only
+ * that row knows whether it is a cuisine, a dish form or a dietary label. This
+ * is the streaming half of the pair — `fetchEnrichedSuggestion` reads the same
+ * three columns for every other path into a card, and the two must agree or a
+ * dish describes itself differently depending on how it was reached.
+ */
+async function lookupTags(
+    ids: string[]
+): Promise<Map<string, { name: string; type: PersistedTag["type"] }>> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return new Map();
+
+    const { data, error } = await supabaseAdmin
+        .from("tags")
+        .select("id, name, type")
+        .in("id", unique);
+
+    if (error) {
+        console.warn(
+            `[Suggestions] Could not read tag names: ${error.message}`
+        );
+        return new Map();
+    }
+
+    return new Map(
+        (data ?? []).map((row) => [
+            row.id,
+            { name: row.name, type: row.type ?? undefined },
+        ])
+    );
 }
 
 export interface PersistSuggestionContext {
@@ -72,6 +107,14 @@ export interface PersistedIngredient {
 export interface PersistedTag {
     id: string;
     name: string;
+    /**
+     * Which facet this tag is — cuisine, dish form, course, component, dietary.
+     *
+     * Optional only because the lookup that fills it is non-fatal (see
+     * {@link lookupTags}); every real row has one. A card missing it draws no
+     * eyebrow, exactly as one whose dish carries no cuisine tag does.
+     */
+    type?: SuggestionTagDto["type"];
 }
 
 export interface PersistedSuggestion {
@@ -221,15 +264,9 @@ export async function persistSuggestion(
         // disagreed with the promote path — fetchEnrichedSuggestion joins
         // `ingredients`/`tags` and returns their names — so the same suggestion
         // reported different ingredients depending on which endpoint was called.
-        const [ingredientNames, tagNames] = await Promise.all([
-            lookupNames(
-                "ingredients",
-                ingredientMatches.map((m) => m.ingredientId)
-            ),
-            lookupNames(
-                "tags",
-                tagMatches.map((m) => m.tagId)
-            ),
+        const [ingredientNames, tagRows] = await Promise.all([
+            lookupIngredientNames(ingredientMatches.map((m) => m.ingredientId)),
+            lookupTags(tagMatches.map((m) => m.tagId)),
         ]);
 
         return {
@@ -244,7 +281,8 @@ export async function persistSuggestion(
                 })),
                 tags: tagMatches.map((m) => ({
                     id: m.tagId,
-                    name: tagNames.get(m.tagId) ?? m.originalName,
+                    name: tagRows.get(m.tagId)?.name ?? m.originalName,
+                    type: tagRows.get(m.tagId)?.type,
                 })),
             },
         };

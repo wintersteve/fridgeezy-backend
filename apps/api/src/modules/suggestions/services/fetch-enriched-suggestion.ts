@@ -31,7 +31,8 @@ export async function fetchEnrichedSuggestion(
                 recipe_suggestion_tags(
                     tags(
                         id,
-                        name
+                        name,
+                        type
                     )
                 )
             `)
@@ -64,10 +65,16 @@ export async function fetchEnrichedSuggestion(
                     name: rel.ingredients.name,
                 }))
                 .filter((ing: any) => ing.id && ing.name), // Filter out any null ingredients
+            // `type` rides along so a streamed card can draw the same
+            // "CUISINE · KIND" eyebrow the recipe card draws — the client picks
+            // the cuisine and dish-form tags out by type, never by name. Not
+            // filtered on: a tag with no type is still a tag, it just cannot be
+            // promoted into the eyebrow.
             tags: data.recipe_suggestion_tags
                 .map((rel: any) => ({
                     id: rel.tags.id,
                     name: rel.tags.name,
+                    type: rel.tags.type ?? undefined,
                 }))
                 .filter((tag: any) => tag.id && tag.name), // Filter out any null tags
         };

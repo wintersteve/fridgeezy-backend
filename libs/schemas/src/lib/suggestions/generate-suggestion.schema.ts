@@ -117,11 +117,26 @@ export const SuggestionIngredientSchema = z.object({
 });
 
 /**
- * Tag with ID and name
+ * Tag with ID, name and type.
+ *
+ * `type` is what lets a card draw the same "CUISINE · KIND" eyebrow the recipe
+ * card draws — the client singles the cuisine and dish-form tags out by type
+ * rather than by name-matching. `find_recipes` has returned it on both its
+ * recipe and its suggestion rows since `20260812000001`, so without it here a
+ * streamed suggestion was the ONE card in the feed that could not draw one.
+ *
+ * Tolerated rather than required: it is read straight off `tags.type`, so the
+ * only way it can fail to parse is a new `tag_type` value the enum here has not
+ * been taught. That costs an eyebrow; a hard failure would cost the whole
+ * frame, and with it the card.
  */
 export const SuggestionTagSchema = z.object({
     id: z.string(),
     name: z.string(),
+    type: z
+        .enum(["dietary", "component", "course", "cuisine", "dish_form"])
+        .optional()
+        .catch(undefined),
 });
 
 /**
@@ -259,3 +274,5 @@ export type GenerateSuggestionResponseDto = z.infer<
 export type EnrichedSuggestionResponseDto = z.infer<
     typeof EnrichedSuggestionResponseSchema
 >;
+
+export type SuggestionTagDto = z.infer<typeof SuggestionTagSchema>;

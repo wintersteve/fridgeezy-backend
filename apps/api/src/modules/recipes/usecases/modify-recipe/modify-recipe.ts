@@ -11,6 +11,7 @@ import {
 import { createStreamHandler } from "@fridgeezy/streaming-server";
 import { RecipesRepository } from "@fridgeezy/supabase";
 
+import { recordPrompt } from "../../../prompts/services";
 import {
     buildModifySystemPrompt,
     callerMayReadRecipe,
@@ -66,6 +67,14 @@ export const modifyRecipe = createStreamHandler({
         // `derive-variant-label.ts`. Fire-and-forget; it cannot fail this
         // request.
         recordTasteSignal(req, "modification", label);
+
+        // The same input, kept the other way round. `recordTasteSignal` stores
+        // the canonicalised LABEL so repeats collapse onto one countable row;
+        // this stores the sentence AS TYPED, which is the thing canonicalisation
+        // throws away and the only thing a history list can show. Neither is
+        // derivable from the other, so both writes happen from here. Also
+        // fire-and-forget.
+        recordPrompt(req, "recipe_modify", body.instruction, { recipeId: body.id });
 
         // 2. Fetch metadata for the prompt
         const metadata = await fetchRecipeMetadata();

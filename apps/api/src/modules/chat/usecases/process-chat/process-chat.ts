@@ -1,6 +1,7 @@
 import { ChatRequestSchema, type ToolCall } from "@fridgeezy/schemas";
 import type { Request, Response } from "express";
 
+import { recordPrompt } from "../../../prompts/services";
 import type {
     PartialRecipeSuggestion,
     RecipeSuggestionItem,
@@ -63,6 +64,21 @@ export async function processChat(req: Request, res: Response): Promise<void> {
         // Parse and validate request
         const body = await parseJsonBody(req);
         const request = ChatRequestSchema.parse(body);
+
+        // Record the turn the user just typed. Only the LAST user message: the
+        // client re-sends the whole transcript every turn, so recording the
+        // array would rewrite the entire conversation into history on each
+        // request. Fire-and-forget — it never delays the first token and cannot
+        // fail this request.
+        const latestPrompt = request.messages
+            .filter((message) => message.role === "user")
+            .at(-1)?.content;
+
+        if (latestPrompt) {
+            recordPrompt(req, "chat", latestPrompt, {
+                conversationId: request.conversationId,
+            });
+        }
 
         // Initialize SSE stream
         initSseStream(res);

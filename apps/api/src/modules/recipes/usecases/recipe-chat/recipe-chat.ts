@@ -8,6 +8,7 @@ import {
     parseJsonBody,
     writeSseEvent,
 } from "../../../chat/services";
+import { recordPrompt } from "../../../prompts/services";
 import { callerMayReadRecipe, fetchRecipe } from "../../services";
 
 /** The classification sentinel the model emits for modification requests. */
@@ -132,6 +133,26 @@ export async function recipeChat(req: Request, res: Response): Promise<void> {
             });
             endSseStream(res);
             return;
+        }
+
+        // Record the turn the user just typed, now that the recipe is known to
+        // be readable by them — a prompt recorded before that check would let a
+        // caller attach history to a recipe they were then refused, and read its
+        // name back out of the history list.
+        //
+        // Only the LAST user message. The client re-sends the whole transcript
+        // on every turn, so recording the array would rewrite the entire
+        // conversation into history on each request. Cook-mode questions land
+        // here too — same endpoint, same surface, deliberately not split out.
+        const latestPrompt = request.messages
+            .filter((message) => message.role === "user")
+            .at(-1)?.content;
+
+        if (latestPrompt) {
+            recordPrompt(req, "recipe_chat", latestPrompt, {
+                recipeId,
+                conversationId: request.conversationId,
+            });
         }
 
         // Own the system message — drop any the client sent and prepend ours.

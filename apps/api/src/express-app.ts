@@ -8,7 +8,12 @@ export function createExpressApp() {
     app.use(
         cors({
             origin: "*",
-            methods: ["GET", "POST", "OPTIONS"],
+            // DELETE is here for `/rest/prompts` — forgetting a slice of your own
+            // prompt history. Like `Authorization` below, its absence is
+            // invisible from the app (React Native's fetch does not preflight)
+            // and fails only for a browser caller, so it has to be listed on the
+            // way in rather than discovered later.
+            methods: ["GET", "POST", "DELETE", "OPTIONS"],
             // Authorization must be listed or a browser preflight strips it and
             // every request arrives looking unauthenticated. React Native's fetch
             // does not preflight, so this is invisible from the app and only bites

@@ -11,3 +11,4 @@ export * from "./lib/recipes";
 export * from "./lib/chat";
 export * from "./lib/substitutes";
 export * from "./lib/speech";
+export * from "./lib/prompts";

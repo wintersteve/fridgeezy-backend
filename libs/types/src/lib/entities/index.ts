@@ -16,6 +16,7 @@ export * from './menus';
 export * from './profile-blacklisted-ingredients';
 export * from './profile-dietary-preferences';
 export * from './profile-entitlements';
+export * from './profile-prompts';
 export * from './profile-recipe-interactions';
 export * from './profile-settings';
 export * from './profile-taste-signals';

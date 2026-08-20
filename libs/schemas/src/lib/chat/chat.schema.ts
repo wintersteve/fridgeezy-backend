@@ -69,6 +69,22 @@ export const ChatRequestSchema = z.object({
      * the text are two places for it to be wrong.
      */
     focusedStep: z.number().int().positive().optional(),
+    /**
+     * The thread this turn belongs to, so the prompts recorded from it can be
+     * grouped back into a conversation (`profile_prompts.conversation_id`).
+     *
+     * Client-generated and opaque to the server, which only ever sees one turn
+     * and has no way to tell a follow-up from the start of something new — the
+     * transcript is re-sent whole on every request, so even "are these the same
+     * messages" cannot distinguish a new thread that begins by quoting an old
+     * one.
+     *
+     * **Optional, and history still works without it.** A turn arriving with no
+     * thread key is recorded as a loose prompt rather than dropped, which is
+     * what keeps this a backward-compatible addition: the client shipping today
+     * does not send it, and its prompts are worth keeping anyway.
+     */
+    conversationId: z.uuid().optional(),
 });
 
 // Export types

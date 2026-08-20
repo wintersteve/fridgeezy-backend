@@ -540,6 +540,10 @@ mount path anyway; the nesting only made every import inside it `../../../`.
 | `GET /rest/recipes/:recipeId/share` | `modules/recipes` — **open** |
 | `POST /rest/substitutes/generate` | `modules/substitutes` |
 | `POST /rest/chat` | `modules/chat` |
+| `GET /rest/prompts` | `modules/prompts` |
+| `POST /rest/prompts` | `modules/prompts` |
+| `DELETE /rest/prompts` | `modules/prompts` |
+| `DELETE /rest/prompts/:id` | `modules/prompts` |
 | `POST /rest/billing/revenuecat` | `modules/billing` — **open** |
 | `GET /rest/health` | direct — **open** |
 
@@ -1093,6 +1097,68 @@ measured against, and nothing will fail to tell you.
 statement about what a weeknight allows, not a fitted value — there is no
 distribution to fit it to — so it is safe to move by hand and no `calibrate*`
 target has any say. Do not add one.
+
+### Prompt history: what the cook actually typed
+
+`profile_prompts` (`20260822000004`) is the log of every free-text prompt, one
+row per turn, capped at the newest 200 per profile by `record_prompt` itself.
+Until it landed, all of it lived on ONE PHONE — the client's
+`CHAT_HISTORY_STORE` (zustand + AsyncStorage, uncapped), a route query string,
+and a background-job id — so nothing survived a reinstall or followed anyone to
+a second device.
+
+**The write is server-side, on the three routes that carry prose.** `POST /chat`,
+`POST /recipes/:id/chat` and `POST /recipes/modify` each call `recordPrompt`
+(`modules/prompts/services`) as the turn passes: fire-and-forget through
+`trackBackgroundTask`, never throwing, never sitting between the user and their
+first token — the identical contract `recordTasteSignal` has, for the identical
+reason. Only the LAST user message is recorded, because the client re-sends the
+whole transcript every turn and recording the array would rewrite the entire
+conversation on each request.
+
+`POST /rest/prompts` exists for prompts those three never see, and **posting a
+turn one of them already carried writes the row twice.** Prefer the automatic
+path; it is the one a client cannot forget, and forgetting is exactly what
+happened to the recipe-scoped Ask sheet, whose prompts were never written
+anywhere at all.
+
+Three things worth knowing before touching it:
+
+- **This and `profile_taste_signals` are complements written from the same call
+  sites, and neither derives from the other.** `recordTasteSignal` stores the
+  canonicalised LABEL (`vegetarian`) so repeats collapse onto one countable row;
+  this stores the sentence AS TYPED ("can you make this one vegetarian for
+  Ana?"), which is precisely what canonicalisation throws away. A history list
+  can only be built from the second, and a threshold can only be crossed by the
+  first.
+- **`recipe_id` is NOT NULL exactly when the surface is recipe-scoped**, held by
+  `profile_prompts_recipe_scope_check` rather than by four call sites
+  remembering — the same construction `recipes`' "imported implies owned" check
+  uses. It CASCADES: a swept recipe takes its prompts with it, so a history row
+  always resolves to a dish that still exists. The alternative, `set null`,
+  keeps the sentence and hands the UI an unopenable orphan.
+- **`created_at` defaults to `clock_timestamp()`, not the `now()` every other
+  table here uses**, and the deviation is load-bearing. `now()` is transaction
+  time, so a batch writer hands the retention prune a block of ties to break on
+  a random v4 uuid and it evicts an arbitrary subset instead of the oldest —
+  measured at 250 rows in one transaction. Production writes one row per
+  request, so it is not a live bug; it is a guarantee made by construction
+  rather than by every future writer using its own transaction.
+
+RLS mirrors `profile_taste_signals` exactly — **select and delete for the owner,
+insert and update for nobody**, with `record_prompt` left SECURITY INVOKER so
+the missing insert policy is what actually gates it. A client that can insert
+here can forge the record of what a person asked. The client may therefore read
+and delete its own history straight through PostgREST, which is cheaper than the
+REST route and is the one to prefer for a plain list; the endpoints exist for
+callers holding an API token and no Supabase session, and so read, write and
+delete share one set of filters.
+
+`ChatRequestSchema.conversationId` is optional and client-generated — the server
+sees one turn and cannot tell a follow-up from a new thread that opens by
+quoting an old one. A turn arriving without it is recorded as a loose prompt
+rather than dropped, which is what keeps the field a backward-compatible
+addition.
 
 ### What a dish is called
 

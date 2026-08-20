@@ -563,6 +563,58 @@ export type Database = {
         }
         Relationships: []
       }
+      profile_prompts: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          id: string
+          profile_id: string
+          prompt: string
+          recipe_id: string | null
+          surface: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          profile_id: string
+          prompt: string
+          recipe_id?: string | null
+          surface: string
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          profile_id?: string
+          prompt?: string
+          recipe_id?: string | null
+          surface?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_prompts_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_prompts_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "profile_prompts_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profile_recipe_interactions: {
         Row: {
           created_at: string
@@ -1594,7 +1646,11 @@ export type Database = {
       }
       menu_courses_resolved: { Args: { p_menu_id: string }; Returns: Json }
       menu_is_publishable: {
-        Args: { p_course_count: number; p_owner_profile_id: string }
+        Args: {
+          p_course_count: number
+          p_menu_id: string
+          p_owner_profile_id: string
+        }
         Returns: boolean
       }
       menu_is_visible: {
@@ -1745,6 +1801,30 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "menus"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      record_prompt: {
+        Args: {
+          p_conversation_id?: string
+          p_profile_id: string
+          p_prompt: string
+          p_recipe_id?: string
+          p_surface: string
+        }
+        Returns: {
+          conversation_id: string | null
+          created_at: string
+          id: string
+          profile_id: string
+          prompt: string
+          recipe_id: string | null
+          surface: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profile_prompts"
           isOneToOne: true
           isSetofReturn: false
         }

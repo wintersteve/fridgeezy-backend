@@ -4,6 +4,7 @@ import { requireSupabaseUser } from "../middleware/require-auth";
 import { BillingPublicRoutes, BillingRoutes } from "../modules/billing";
 import { ChatRoutes } from "../modules/chat";
 import { IngredientsRoutes } from "../modules/ingredients";
+import { PromptsRoutes } from "../modules/prompts";
 import { RecipesPublicRoutes, RecipesRoutes } from "../modules/recipes";
 import { SpeechRoutes } from "../modules/speech";
 import { SubstitutesRoutes } from "../modules/substitutes";
@@ -43,6 +44,7 @@ const MOUNTS: Mount[] = [
     { prefix: "/substitutes", router: SubstitutesRoutes },
     { prefix: "/chat", router: ChatRoutes },
     { prefix: "/speech", router: SpeechRoutes },
+    { prefix: "/prompts", router: PromptsRoutes },
     { prefix: "/billing", router: BillingRoutes, publicRouter: BillingPublicRoutes },
 ];
 

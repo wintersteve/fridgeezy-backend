@@ -144,8 +144,15 @@ export async function findCatalogueRecipes(options: {
     }
 }
 
-/** `find_recipes` hands ingredients/tags back as jsonb arrays of {id, name}. */
-function toNamedRows(value: unknown): Array<{ id: string; name: string }> {
+/**
+ * `find_recipes` hands ingredients/tags back as jsonb arrays of {id, name}.
+ *
+ * Exported for `fetch-menu-pairings`, which decodes the identical shape out of
+ * `menu_pairings_for_recipe` — the two RPCs build those aggregates with the same
+ * `jsonb_build_object('id', …, 'name', …)`, so they get the same decoder rather
+ * than a second one that could drift.
+ */
+export function toNamedRows(value: unknown): Array<{ id: string; name: string }> {
     if (!Array.isArray(value)) return [];
 
     return value.flatMap((entry) => {

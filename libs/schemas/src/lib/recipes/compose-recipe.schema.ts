@@ -214,6 +214,38 @@ export type ComposeRecipeWithdrawnDto = z.infer<
 >;
 
 /**
+ * What to call the whole meal.
+ *
+ * Emitted once, before the courses, and it exists because `menus.name` had
+ * nowhere better to come from: the client defaulted it to the main course's
+ * name, so a saved meal was titled "Coq au Vin" above a course row also called
+ * "Coq au Vin". `toReaderHref` in the client already carried a comment
+ * admitting it "names one dish rather than the dinner".
+ *
+ * Free, which is why it is here rather than in a second call: the composition
+ * prompt already knows the base dish, its cuisine and every slot being filled,
+ * so the title is one more line of the JSONL it was already streaming.
+ *
+ * OPTIONAL BY CONSTRUCTION. It is a nicety on an expensive stream, so nothing
+ * downstream may depend on it arriving — the generator drops a title it cannot
+ * clean rather than failing the frame, and every consumer falls back to the main
+ * course's name. A menu composed before this shipped has no title frame at all
+ * and must keep working.
+ */
+export const ComposeRecipeMenuDtoSchema = z.object({
+    type: z.literal("menu"),
+    /**
+     * Deliberately only `min(1)`. Length and shape are enforced UPSTREAM, in the
+     * generator, because this schema is `parse`d inside the streaming loop where
+     * a throw is caught as a stream failure — a rambling title would abort a
+     * paid composition that had otherwise succeeded. Sanitise, never reject.
+     */
+    title: z.string().min(1).describe("Name for the whole meal"),
+});
+
+export type ComposeRecipeMenuDto = z.infer<typeof ComposeRecipeMenuDtoSchema>;
+
+/**
  * A stream that gave up.
  *
  * The route has always written this frame on a mid-stream throw, and it was
@@ -233,5 +265,6 @@ export type ComposeRecipeErrorDto = z.infer<typeof ComposeRecipeErrorDtoSchema>;
 export type ComposeRecipeFrameDto =
     | ComposeRecipeResultDto
     | ComposeRecipeProgressDto
+    | ComposeRecipeMenuDto
     | ComposeRecipeWithdrawnDto
     | ComposeRecipeErrorDto;

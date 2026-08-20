@@ -216,6 +216,13 @@
                     "cwd": "apps/database"
                 }
             },
+            "check-menu-visibility": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/check-menu-visibility.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "classify-ingredient-diet": {
                 "executor": "nx:run-commands",
                 "options": {

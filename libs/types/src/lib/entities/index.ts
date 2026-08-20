@@ -29,6 +29,7 @@ export * from './recipe-suggestions';
 export * from './recipe-tags';
 export * from './recipe-variants';
 export * from './recipes';
+export * from './saved-menus';
 export * from './shopping-lists';
 export * from './tag-aliases';
 export * from './tags';

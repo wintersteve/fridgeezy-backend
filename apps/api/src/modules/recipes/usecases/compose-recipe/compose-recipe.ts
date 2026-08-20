@@ -1,5 +1,6 @@
 import {
     ComposeRecipeErrorDtoSchema,
+    ComposeRecipeMenuDtoSchema,
     ComposeRecipeRequestSchema,
     ComposeRecipeResultDtoSchema,
     ComposeRecipeProgressDtoSchema,
@@ -101,6 +102,14 @@ export async function composeRecipe(
                 } else if (item.type === "withdrawn") {
                     const validated =
                         ComposeRecipeWithdrawnDtoSchema.parse(item);
+                    writeSseEvent(res, validated);
+                } else if (item.type === "menu") {
+                    // Shape is already guaranteed by `cleanMenuTitle` upstream,
+                    // which drops anything it cannot clean — this parse is the
+                    // same belt-and-braces every other frame gets, not the
+                    // enforcement. A throw here would be caught below as a
+                    // stream failure and lose the whole composition.
+                    const validated = ComposeRecipeMenuDtoSchema.parse(item);
                     writeSseEvent(res, validated);
                 }
             }

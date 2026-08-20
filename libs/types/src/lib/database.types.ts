@@ -355,6 +355,7 @@ export type Database = {
           created_at: string
           description: string | null
           difficulty: Database["public"]["Enums"]["difficulty_type"] | null
+          dish_key: string
           id: string
           image: string | null
           is_recipe: boolean
@@ -368,6 +369,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
+          dish_key: string
           id?: string
           image?: string | null
           is_recipe?: boolean
@@ -381,6 +383,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
+          dish_key?: string
           id?: string
           image?: string | null
           is_recipe?: boolean
@@ -401,33 +404,42 @@ export type Database = {
       }
       menus: {
         Row: {
+          course_count: number
           created_at: string
+          dish_signature: string[]
           id: string
           main_recipe_id: string
           name: string
-          profile_id: string
+          owner_profile_id: string | null
+          saved_count: number
           updated_at: string
         }
         Insert: {
+          course_count?: number
           created_at?: string
+          dish_signature: string[]
           id?: string
           main_recipe_id: string
           name: string
-          profile_id: string
+          owner_profile_id?: string | null
+          saved_count?: number
           updated_at?: string
         }
         Update: {
+          course_count?: number
           created_at?: string
+          dish_signature?: string[]
           id?: string
           main_recipe_id?: string
           name?: string
-          profile_id?: string
+          owner_profile_id?: string | null
+          saved_count?: number
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "menus_profile_id_fkey"
-            columns: ["profile_id"]
+            foreignKeyName: "menus_owner_profile_id_fkey"
+            columns: ["owner_profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1245,10 +1257,57 @@ export type Database = {
           },
         ]
       }
+      saved_menus: {
+        Row: {
+          created_at: string
+          id: string
+          label: string | null
+          main_recipe_id: string
+          menu_id: string
+          profile_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          main_recipe_id: string
+          menu_id: string
+          profile_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          main_recipe_id?: string
+          menu_id?: string
+          profile_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_menus_menu_id_fkey"
+            columns: ["menu_id"]
+            isOneToOne: false
+            referencedRelation: "menus"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_menus_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shopping_lists: {
         Row: {
           created_at: string
           id: string
+          menu_main_recipe_id: string | null
+          menu_title: string | null
           name: string | null
           profile_id: string
           recipe_id: string
@@ -1257,6 +1316,8 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          menu_main_recipe_id?: string | null
+          menu_title?: string | null
           name?: string | null
           profile_id: string
           recipe_id: string
@@ -1265,6 +1326,8 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          menu_main_recipe_id?: string | null
+          menu_title?: string | null
           name?: string | null
           profile_id?: string
           recipe_id?: string
@@ -1460,6 +1523,15 @@ export type Database = {
         Args: { p_recipe_id: string }
         Returns: boolean
       }
+      community_menus_for_recipe: {
+        Args: { p_limit?: number; p_recipe_id: string }
+        Returns: {
+          courses: Json
+          menu_id: string
+          menu_title: string
+          saved_count: number
+        }[]
+      }
       current_profile_id: { Args: never; Returns: string }
       delete_orphan_generated_recipes: { Args: never; Returns: number }
       difficulty_preference_rank: {
@@ -1493,6 +1565,72 @@ export type Database = {
       }
       has_user: { Args: { email: string }; Returns: boolean }
       ingredient_canonical_id: { Args: { input_text: string }; Returns: string }
+      menu_by_id: {
+        Args: { p_menu_id: string }
+        Returns: {
+          courses: Json
+          is_saved: boolean
+          main_name: string
+          main_recipe_id: string
+          menu_id: string
+          menu_name: string
+          saved_count: number
+        }[]
+      }
+      menu_course_input: {
+        Args: { p_courses: Json }
+        Returns: {
+          course_position: number
+          course_type: string
+          created_by: string
+          description: string
+          difficulty: Database["public"]["Enums"]["difficulty_type"]
+          dish_key: string
+          image: string
+          is_recipe: boolean
+          name: string
+          recipe_id: string
+        }[]
+      }
+      menu_courses_resolved: { Args: { p_menu_id: string }; Returns: Json }
+      menu_is_publishable: {
+        Args: { p_course_count: number; p_owner_profile_id: string }
+        Returns: boolean
+      }
+      menu_is_visible: {
+        Args: { p_owner_profile_id: string }
+        Returns: boolean
+      }
+      menu_pairings_for_recipe: {
+        Args: {
+          p_blacklist?: string[]
+          p_course_types: string[]
+          p_dietary?: string[]
+          p_difficulty?: string
+          p_exclude_keys?: string[]
+          p_exclude_names?: string[]
+          p_per_course?: number
+          p_recipe_id: string
+        }
+        Returns: {
+          course_type: string
+          description: string
+          difficulty: string
+          dish_id: string
+          dish_key: string
+          image: string
+          ingredients: Json
+          is_recipe: boolean
+          menu_ids: string[]
+          name: string
+          name_en: string
+          pair_rank: number
+          pair_saves: number
+          short_description: string
+          tags: Json
+          total_time_minutes: number
+        }[]
+      }
       merge_ingredient: {
         Args: { p_from: string; p_into: string }
         Returns: undefined
@@ -1502,6 +1640,17 @@ export type Database = {
         Returns: undefined
       }
       minutes_from_time_text: { Args: { p_value: string }; Returns: number }
+      my_saved_menus: {
+        Args: never
+        Returns: {
+          courses: Json
+          main_recipe_id: string
+          menu_id: string
+          menu_name: string
+          saved_at: string
+          saved_count: number
+        }[]
+      }
       normalize_to_canonical_id: {
         Args: { input_text: string }
         Returns: string
@@ -1569,7 +1718,37 @@ export type Database = {
         }
         Returns: string
       }
+      recent_community_menus: {
+        Args: { p_limit?: number }
+        Returns: {
+          courses: Json
+          main_name: string
+          main_recipe_id: string
+          menu_id: string
+          menu_title: string
+        }[]
+      }
       recipe_is_visible: { Args: { p_created_by: string }; Returns: boolean }
+      record_menu: {
+        Args: { p_courses: Json; p_main_recipe_id: string; p_name: string }
+        Returns: {
+          course_count: number
+          created_at: string
+          dish_signature: string[]
+          id: string
+          main_recipe_id: string
+          name: string
+          owner_profile_id: string | null
+          saved_count: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "menus"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       record_taste_signal: {
         Args: { p_kind: string; p_profile_id: string; p_value: string }
         Returns: undefined
@@ -1588,6 +1767,26 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "recipe_variants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      save_menu: {
+        Args: { p_courses: Json; p_main_recipe_id: string; p_name: string }
+        Returns: {
+          course_count: number
+          created_at: string
+          dish_signature: string[]
+          id: string
+          main_recipe_id: string
+          name: string
+          owner_profile_id: string | null
+          saved_count: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "menus"
           isOneToOne: true
           isSetofReturn: false
         }

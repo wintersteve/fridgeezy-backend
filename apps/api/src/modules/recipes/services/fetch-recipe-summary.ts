@@ -11,6 +11,19 @@ export interface RecipeSummary {
      */
     shortDescription?: string | null;
     /**
+     * The suggestion this recipe was promoted from, or null.
+     *
+     * Read by compose to compute a dish's identity the way `save_menu` does
+     * (`coalesce(source_suggestion_id, id)`), so a retrieved pairing and a
+     * generated dish that dedup resolved onto the same row are recognised as
+     * one dish rather than filling two slots with it.
+     *
+     * NULL does not mean "generated from nothing": `promote` deliberately leaves
+     * it unset for an ADAPTED variant, because that row is one caller's
+     * adaptation rather than the catalogue recipe the suggestion became.
+     */
+    sourceSuggestionId?: string | null;
+    /**
      * Hero image. Without it a chat suggestion card falls back to its "NEW"
      * panel, which makes a recipe the catalogue already has look identical to a
      * dish that was just invented.
@@ -70,6 +83,7 @@ export async function fetchRecipeSummary(
             total_time_minutes,
             origin,
             created_by,
+            source_suggestion_id,
             recipe_ingredients (
                 ingredient:ingredients (
                     id,
@@ -102,6 +116,7 @@ export async function fetchRecipeSummary(
         totalTimeMinutes: recipe.total_time_minutes ?? null,
         origin: recipe.origin ?? null,
         createdBy: recipe.created_by ?? null,
+        sourceSuggestionId: recipe.source_suggestion_id ?? null,
         ingredients: recipe.recipe_ingredients.map((ri) => ({
             id: ri.ingredient.id,
             name: ri.ingredient.name,

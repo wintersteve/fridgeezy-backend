@@ -10,6 +10,7 @@ import {
     BLACKLIST_RULE,
     FOOD_ONLY_RULE,
 } from "./constraint-rules";
+import { DIFFICULTY_RULE } from "./difficulty-rules";
 import {
     DISH_GLOSS_RULE,
     DISH_NAME_ALT_RULE,
@@ -62,10 +63,7 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 ## Constraints
 ${BLACKLIST_RULE}
 
-## Difficulty Levels
-- "easy": The standard, most authentic version of the dish with all traditional techniques and essential ingredients.
-- "medium": An elevated but authentic version with refined techniques or premium ingredient variations.
-- "hard": A sophisticated, chef-level authentic interpretation featuring advanced techniques or upscale variations.
+${DIFFICULTY_RULE}
 
 ## Tagging Rules (CRITICAL)
 - ${COMPONENT_RULE}

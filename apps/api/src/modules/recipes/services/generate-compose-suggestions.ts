@@ -1,5 +1,7 @@
 import { generateStream, type LlmProvider } from "@fridgeezy/llm";
 import {
+    COMPONENT_DISH_COUNT,
+    COMPONENT_DISH_SLOT,
     ComposeRecipeMenuDto,
     ComposeRecipeModeDto,
     ComposeRecipeRequestDto,
@@ -17,6 +19,7 @@ import {
     BLACKLIST_RULE,
     FOOD_ONLY_RULE,
 } from "../../suggestions/services/constraint-rules";
+import { DIFFICULTY_RULE } from "../../suggestions/services/difficulty-rules";
 import {
     DISH_GLOSS_RULE,
     DISH_NAME_ALT_RULE,
@@ -180,10 +183,7 @@ ${BLACKLIST_RULE}
   }
   - They are NOT satisfied by the base recipe already complying. The base was picked by the user; these dishes are being chosen for them.
 
-## Difficulty Levels
-- "easy": Beginner-friendly version of the dish, using simple techniques
-- "medium": The standard authentic recipe with its usual techniques
-- "hard": Elevated or advanced version with more complex techniques
+${DIFFICULTY_RULE}
 
 ## Tagging Rules (CRITICAL)
 - ${COMPONENT_RULE}
@@ -191,7 +191,7 @@ ${BLACKLIST_RULE}
 - ${COURSE_RULE}
   - ${
       isComponent
-          ? "The dish's own course — a pasta is \"main\", a profiterole is \"dessert\". Return one dish per course slot the request asks for."
+          ? "The dish's OWN course — a pasta is \"main\", a profiterole is \"dessert\". You are not being asked for one dish per course: return the dishes that genuinely use this component, whatever courses they happen to fall into."
           : "For a composed course this is the course type being suggested."
   }
 - ${DISH_FORM_RULE}
@@ -330,11 +330,20 @@ const buildUserPrompt = (
     // One line per course carrying its own count, rather than one global "N per
     // course type". The caller's wants are per-course — two sides and one
     // dessert — and a single number told the model to produce two of everything.
+    if (isComponent) {
+        // One line, no slot names. The four-slot rendering below would put
+        // "- dish: 3 dishes" in front of the model, which reads as a course
+        // called "dish" and invites it to tag one.
+        const wanted = allowedCourses.reduce(
+            (total, course) => total + (remaining.get(course) ?? 0),
+            0
+        );
+
+        parts.push(`\nDishes wanted: ${wanted}`);
+    } else {
     parts.push(
         [
-            isComponent
-                ? `\nDishes wanted, by course:`
-                : `\nRequested Courses:`,
+            `\nRequested Courses:`,
             ...allowedCourses
                 // Only the slots retrieval could not fill. A slot asked for
                 // again would be generated, reviewed, embedded, persisted and
@@ -346,6 +355,7 @@ const buildUserPrompt = (
                 }),
         ].join("\n")
     );
+    }
 
     // Deliberately NOT folded into `exclude` below, which renders as "do NOT
     // suggest these or a variant of them". "The user rejected this" and "this is
@@ -443,12 +453,23 @@ export async function* generateComposeRecipes(
 
     // Validate that we have allowed courses. The same split is handed to
     // `buildUserPrompt` below rather than recomputed there.
-    // A component fills no slot, so nothing is subtracted from what was asked
-    // for. Not merely an optimisation: a row written before COURSE_RULE gained
-    // its exemption still carries a course tag it should never have had, and
-    // honouring it would remove the exact slot the user is asking to fill.
+    /**
+     * A component composition has exactly ONE slot, whatever the caller asked
+     * for, and the override is the point rather than a defensive nicety.
+     *
+     * Which course a dish falls into is a property of the component, not a
+     * choice: asked for a dessert made with Arrabbiata Sauce the model
+     * correctly returned nothing, having been told to return fewer rather than
+     * stretch — so the caller paid for a slot that could never be filled. A
+     * client that still sends four courses (a cached job, or one built before
+     * this shipped) gets the one honest slot instead of three empty ones.
+     *
+     * Nothing is subtracted from it either. A row written before COURSE_RULE
+     * gained its component exemption still carries a course tag it should never
+     * have had, and honouring it would withhold the only slot there is.
+     */
     const courses = isComponentSeed
-        ? { base: [] as string[], allowed: request.courseTypes }
+        ? { base: [] as string[], allowed: [COMPONENT_DISH_SLOT] }
         : splitCourses(baseRecipe, request, courseTagNames);
     const allowedCourses = courses.allowed;
 
@@ -538,9 +559,22 @@ export async function* generateComposeRecipes(
         // this change exists to stop — and would serve them back as courses.
         !isComponentSeed;
 
-    /** What each slot still wants once retrieval has had its turn. */
+    /**
+     * What each slot still wants once retrieval has had its turn.
+     *
+     * The component slot takes {@link COMPONENT_DISH_COUNT} unless the caller
+     * named a count for it — which the per-card re-roll does, asking for
+     * exactly one replacement. Reading `courseCounts` rather than ignoring it
+     * is what keeps a re-roll from returning three dishes for one card.
+     */
     const remaining = new Map(
-        allowedCourses.map((course) => [course, countFor(course, request)])
+        allowedCourses.map((course) => [
+            course,
+            isComponentSeed
+                ? (request.courseCounts[COMPONENT_DISH_SLOT] ??
+                  COMPONENT_DISH_COUNT)
+                : countFor(course, request),
+        ])
     );
 
     /**

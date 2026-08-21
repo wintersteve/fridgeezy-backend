@@ -12,6 +12,7 @@ import { SuggestionsRepository } from "@fridgeezy/supabase";
 
 import { trackBackgroundTask } from "../../../../background-tasks";
 import { fetchEnrichedSuggestion } from "../../../suggestions/services";
+import { DIFFICULTY_RULE } from "../../../suggestions/services/difficulty-rules";
 import {
     COMPONENT_RULE,
     COURSE_RULE,
@@ -87,10 +88,7 @@ ${INGREDIENT_CATEGORY_GUIDE}
 - ${DISH_FORM_RULE}
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free if the recipe qualifies)
 
-## Difficulty Levels
-- "easy": Beginner-friendly version of the dish, using simple techniques while keeping ingredients authentic.
-- "medium": The standard authentic recipe with its usual techniques.
-- "hard": Elevated or advanced version of the dish, which may include optional ingredients or more complex techniques.
+${DIFFICULTY_RULE}
 
 ${TEMPERATURE_RULES}
 

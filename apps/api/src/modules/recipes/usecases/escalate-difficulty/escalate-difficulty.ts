@@ -11,6 +11,7 @@ import {
 import { createStreamHandler } from "@fridgeezy/streaming-server";
 import { RecipesRepository } from "@fridgeezy/supabase";
 
+import { DIFFICULTY_RULE } from "../../../suggestions/services/difficulty-rules";
 import {
     callerMayReadRecipe,
     createRecipeStream,
@@ -53,21 +54,55 @@ const buildSystemPrompt = (
 - Maintain the same cuisine and dish identity
 - Use ONLY unit abbreviations and tags from the approved lists below
 
+${DIFFICULTY_RULE}
+
 ### What Should Change Based on Difficulty
 
-When INCREASING difficulty:
-- **Cooking Techniques**: Use more advanced techniques (e.g., "sauté and deglaze" vs "fry")
-- **Ingredients**: Add optional ingredients for depth (fresh herbs, specialty aromatics, garnishes)
-- **Instructions**: Include detailed technique explanations with precision (temperatures, timing), increase step granularity
-- **Time**: Increase prepTime and cookTime to reflect more complex preparation and techniques
-- **Nutrition**: Adjust nutritional values (kcal, carbs, protein, fat) based on added ingredients and cooking methods
+When INCREASING difficulty, the target level tells you HOW FAR to go — do not simply
+reach for longer sentences and fancier verbs. Rewriting "fry" as "sauté and deglaze"
+over the same method is not a harder recipe, it is the same recipe described
+differently, and it is the failure mode to avoid here.
 
-When DECREASING difficulty:
-- **Cooking Techniques**: Simplify techniques (e.g., "mix" vs "emulsify")
-- **Ingredients**: Remove optional/garnish ingredients while keeping core ingredients
+- **Make what the easier version buys.** This is the largest single lever and the
+  first one to reach for: stock, pasta, pastry, sauces, spice pastes, cures,
+  pickles, garnishes. A component made from scratch is real added skill; an
+  adjective is not.
+- **Cooking Techniques**: Use the technique the dish is genuinely made with at
+  this level — emulsifying rather than stirring, rendering and confiting rather
+  than roasting, resting and reducing rather than serving straight from the pan.
+- **Structure**: Break the method into its real components and say what can be
+  made ahead. A dish with three sub-preparations is written as three, not folded
+  into one long step.
+- **Precision**: Give exact temperatures, timings and visual/textural doneness
+  cues where they decide the outcome. Increase step granularity so each step does
+  one thing.
+- **Finishing**: Say how the dish is plated and garnished, when that is part of
+  making it at this level.
+- **Ingredients**: Add what those components and techniques genuinely require.
+  Never add an ingredient purely to look elaborate.
+- **Time**: Increase prepTime and cookTime to reflect the real added work.
+- **Nutrition**: Adjust nutritional values (kcal, carbs, protein, fat) based on
+  added ingredients and cooking methods
+
+When DECREASING difficulty, you are walking BACK TOWARDS the standard version of
+the dish — never below it. "easy" is the real dish cooked properly, so the floor
+is a recipe a competent home cook would recognise as the genuine article, not a
+shortcut version of it.
+
+- **Cooking Techniques**: Return to the techniques the dish is normally made
+  with (e.g. "mix" where the harder version emulsified), not to techniques that
+  would change what it is.
+- **Components**: Buy in what the harder version makes — stock, pastry, pasta,
+  paste — rather than dropping it. The dish keeps every part it had.
+- **Ingredients**: Remove garnishes and flourishes the harder version added.
+  Core ingredients stay, and so does anything the standard version has.
 - **Instructions**: Combine steps where possible, use simpler language, reduce precision requirements
 - **Time**: Decrease prepTime and cookTime to reflect simpler preparation
 - **Nutrition**: Adjust nutritional values (kcal, carbs, protein, fat) based on removed ingredients and simpler methods
+
+In BOTH directions the dish stays the same dish. A defining ingredient is never
+removed to make something simpler, and never buried under additions to make it
+harder — see the core constraints above.
 
 ### Output Rules
 - For each instruction step, include an "ingredients" array listing the ingredient names used in that specific step
@@ -173,11 +208,6 @@ IMPORTANT CONSTRAINTS:
 - Modify techniques, optional ingredients, and instruction complexity to match ${targetDifficulty} difficulty`;
 };
 
-// Existing image URL + source recipe, carried from the handler into the persist
-// step at the tail of the stream.
-let existingImageUrl: string | undefined;
-let sourceRecipeId: string | undefined;
-
 export const escalateDifficulty = createStreamHandler({
     requestSchema: EscalateDifficultyRequestSchema,
     responseSchema: [
@@ -203,9 +233,24 @@ export const escalateDifficulty = createStreamHandler({
             throw new Error(`Recipe not found: ${body.id}`);
         }
 
-        // Store the existing image URL to reuse it (avoid regenerating)
-        existingImageUrl = (existingRecipe as any).imageUrl;
-        sourceRecipeId = body.id;
+        // Reuse the existing image rather than regenerating one, and remember
+        // which recipe we escalated FROM so the tail of the stream can resolve
+        // the family to persist into.
+        //
+        // Both are `const`s in this handler's closure, and that is load-bearing
+        // rather than stylistic: they used to be module-level `let`s assigned
+        // here and read below, in `streamWithPersist`, after an await-heavy
+        // model stream. Two escalations in flight in one process — a warm
+        // Lambda container, or the local server with two tabs open — each
+        // overwrote the other's values before either reached its persist. The
+        // visible symptom would be a recipe saved with another dish's image;
+        // the silent one is `baseRecipeId` resolved from the wrong source,
+        // which files the variant under the wrong family and cannot be
+        // detected afterwards from the row itself.
+        const existingImageUrl: string | undefined = (
+            existingRecipe as { imageUrl?: string }
+        ).imageUrl;
+        const sourceRecipeId: string = body.id;
 
         // 2. Validate difficulty transition
         if (existingRecipe.difficulty === body.difficulty) {
@@ -305,21 +350,24 @@ export const escalateDifficulty = createStreamHandler({
             // re-parenting afterwards leaves a second base recipe under the
             // base's name in the table for the width of that gap, which the
             // partial unique index rejects outright.
+            //
+            // No `if (sourceRecipeId)` guard any more: it is `body.id`, which
+            // the request schema requires, and the truthiness test only ever
+            // read as meaningful while this was a module-level `let` that a
+            // concurrent request could leave unset.
             let baseRecipeId: string | null = null;
 
-            if (sourceRecipeId) {
-                const base = await new RecipesRepository().resolveVariantBase(
-                    sourceRecipeId
-                );
+            const base = await new RecipesRepository().resolveVariantBase(
+                sourceRecipeId
+            );
 
-                if (base.success) {
-                    baseRecipeId = base.value;
-                } else {
-                    console.error(
-                        "Failed to resolve the escalated recipe's base:",
-                        base.error.message
-                    );
-                }
+            if (base.success) {
+                baseRecipeId = base.value;
+            } else {
+                console.error(
+                    "Failed to resolve the escalated recipe's base:",
+                    base.error.message
+                );
             }
 
             // Reuse existing image URL instead of generating a new one

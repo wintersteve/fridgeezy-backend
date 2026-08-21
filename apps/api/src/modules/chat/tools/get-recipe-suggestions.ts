@@ -66,7 +66,7 @@ export const RecipeSuggestionInputSchema = z.object({
         .enum(["easy", "medium", "hard"])
         .optional()
         .describe(
-            "How involved the dish should be. Set this ONLY when the user actually signals it: 'something quick', 'simple', 'easy', 'weeknight', 'no fuss' -> 'easy'; 'a bit special', 'impressive' -> 'medium'; 'a project', 'restaurant-level', 'go all out' -> 'hard'. OMIT it whenever they say nothing about effort — the user's own saved skill level is then applied, and setting this on a hunch overrides their preference."
+            "How much SKILL the dish should ask of the cook. The scale starts at the real dish and climbs: 'easy' is the standard version cooked properly, 'medium' is a chef-level interpretation, 'hard' is what a Michelin-starred kitchen would send out. Set it ONLY when the user signals SKILL: 'nothing fancy', 'the usual way', 'straightforward' -> 'easy'; 'a bit special', 'impress someone', 'restaurant-level' -> 'medium'; 'go all out', 'a project', 'showstopper', 'Michelin' -> 'hard'. 'Something quick', 'weeknight' and 'no time' are about TIME, not skill — they must NOT set this field. OMIT it whenever they say nothing about skill: the user's own saved level is then applied, and setting this on a hunch overrides their preference."
         ),
     dietaryRestrictions: z
         .array(z.string())

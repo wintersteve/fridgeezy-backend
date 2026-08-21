@@ -32,6 +32,7 @@ import {
 } from "../../../recipes/services/create-recipe-image";
 import { persistRecipeWithIngredientIds } from "../../../recipes/services/persist-recipe";
 import { fetchEnrichedSuggestion } from "../../services";
+import { DIFFICULTY_RULE } from "../../services/difficulty-rules";
 import { COMPONENT_RULE, COURSE_RULE, DISH_FORM_RULE } from "../../services/tagging-rules";
 
 /**
@@ -78,10 +79,7 @@ ${INGREDIENT_CATEGORY_GUIDE}
 - ${DISH_FORM_RULE}
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free if the recipe qualifies)
 
-## Difficulty Levels
-- "easy": Beginner-friendly version of the dish, using simple techniques while keeping ingredients authentic.
-- "medium": The standard authentic recipe with its usual techniques.
-- "hard": Elevated or advanced version of the dish, which may include optional ingredients or more complex techniques.
+${DIFFICULTY_RULE}
 
 ${TEMPERATURE_RULES}
 

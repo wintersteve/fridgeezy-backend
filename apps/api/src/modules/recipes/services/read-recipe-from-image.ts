@@ -2,6 +2,7 @@ import { generateCompletion } from "@fridgeezy/llm";
 import type { ImportRejectionCode } from "@fridgeezy/schemas";
 import { z } from "zod/v4";
 
+import { DIFFICULTY_RULE } from "../../suggestions/services/difficulty-rules";
 import {
     COMPONENT_RULE,
     COURSE_RULE,
@@ -179,7 +180,9 @@ Fill it for every step that touches an ingredient, which is nearly all of them. 
 ## Servings, times, difficulty
 - "servings": as printed ("Serves 6" -> 6). Absent, use 4.
 - "prep_time_minutes" / "cook_time_minutes": as printed, in whole minutes. Absent, estimate from the method — a step that says "simmer for 40 minutes" is cook time you can read. Use 0 only when there is genuinely nothing to go on.
-- "difficulty": your own judgement of the method as written — "easy" for a handful of straightforward steps, "medium" for a standard recipe, "hard" for one with advanced technique, tight timing, or many components.
+- "difficulty": your own judgement of the method AS WRITTEN ON THE PAGE, using the levels defined below. Judge the method you can see, not the dish's reputation.
+
+${DIFFICULTY_RULE}
 
 ## Nutrition
 Per serving, four integers. Cookbook pages rarely print these: if they are not on the page, ESTIMATE them from the ingredient list and the yield. This is the one place you are asked to compute rather than read — do not return zeros.

@@ -52,6 +52,48 @@ export interface FetchMenuPairingsOptions {
 const DIFFICULTIES = new Set(["easy", "medium", "hard"]);
 
 /**
+ * Values already reported, so one unknown level costs one line rather than one
+ * per row per compose.
+ */
+const reportedUnknownDifficulties = new Set<string>();
+
+/**
+ * Narrow the function's `text` difficulty back to the enum, reporting anything
+ * it does not recognise.
+ *
+ * The fallback stays `"medium"` because the frame this feeds is validated
+ * against a `z.enum(["easy","medium","hard"])` in the wire schema — widening it
+ * to null is a client contract change, not a local fix.
+ *
+ * **The logging is the point.** This is the seam a new `difficulty_type` value
+ * arrives through: the enum widens in the database, the deployed API does not
+ * know the value yet, and every pairing at the new level would quietly report
+ * as `medium` — correct-looking output, wrong dish, nothing raised. A dish
+ * whose difficulty is genuinely absent is a different case and is not reported;
+ * only a value that IS set and IS unrecognised means the API is behind the
+ * schema.
+ */
+const narrowDifficulty = (value: unknown): "easy" | "medium" | "hard" => {
+    if (typeof value === "string" && DIFFICULTIES.has(value)) {
+        return value as "easy" | "medium" | "hard";
+    }
+
+    if (
+        typeof value === "string" &&
+        value !== "" &&
+        !reportedUnknownDifficulties.has(value)
+    ) {
+        reportedUnknownDifficulties.add(value);
+        console.error(
+            `[MenuPairings] unknown difficulty ${JSON.stringify(value)} — reporting it as "medium". ` +
+                `The database knows a difficulty_type this build does not; redeploy the API.`
+        );
+    }
+
+    return "medium";
+};
+
+/**
  * What people have already paired with this dish.
  *
  * The retrieval half of compose: before asking a model for an appetizer to go
@@ -129,9 +171,7 @@ export async function fetchMenuPairings(
             shortDescription: row.short_description ?? null,
             // The column is `text` on the way out because the two source tables
             // spell it with the same enum but the union widens it.
-            difficulty: (DIFFICULTIES.has(row.difficulty)
-                ? row.difficulty
-                : "medium") as "easy" | "medium" | "hard",
+            difficulty: narrowDifficulty(row.difficulty),
             totalTimeMinutes: row.total_time_minutes ?? null,
             image: row.image ?? null,
             ingredients: toNamedRows(row.ingredients),

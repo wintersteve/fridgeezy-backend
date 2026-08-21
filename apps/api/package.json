@@ -102,28 +102,32 @@
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "npx jiti src/evals/dedup-authenticity.eval.ts",
-                    "cwd": "apps/api"
+                    "cwd": "apps/api",
+                    "envFile": "apps/api/.env.dev"
                 }
             },
             "calibrate": {
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "npx jiti src/evals/calibrate-thresholds.eval.ts",
-                    "cwd": "apps/api"
+                    "cwd": "apps/api",
+                    "envFile": "apps/api/.env.dev"
                 }
             },
             "calibrate-ingredients": {
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "npx jiti src/evals/calibrate-ingredients.eval.ts",
-                    "cwd": "apps/api"
+                    "cwd": "apps/api",
+                    "envFile": "apps/api/.env.dev"
                 }
             },
             "calibrate-authenticity": {
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "npx jiti src/evals/calibrate-authenticity.eval.ts",
-                    "cwd": "apps/api"
+                    "cwd": "apps/api",
+                    "envFile": "apps/api/.env.dev"
                 }
             },
             "eval-model-migration": {
@@ -131,6 +135,7 @@
                 "options": {
                     "command": "npx jiti src/evals/model-migration/run.eval.ts",
                     "cwd": "apps/api",
+                    "envFile": "apps/api/.env.dev",
                     "forwardAllArgs": true
                 }
             },
@@ -160,6 +165,16 @@
                 "options": {
                     "command": "npx jiti src/evals/step-structure.eval.ts",
                     "cwd": "apps/api",
+                    "envFile": "apps/api/.env.dev",
+                    "forwardAllArgs": true
+                }
+            },
+            "eval-difficulty-ladder": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/difficulty-ladder.eval.ts",
+                    "cwd": "apps/api",
+                    "envFile": "apps/api/.env.dev",
                     "forwardAllArgs": true
                 }
             }

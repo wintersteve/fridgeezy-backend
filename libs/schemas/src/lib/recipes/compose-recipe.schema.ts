@@ -1,6 +1,48 @@
 import { z } from "zod/v4";
 
 /**
+ * The single pseudo-slot a component composition fills.
+ *
+ * A component has no course, and neither has the answer to "what dishes use
+ * it": which course a pasta or a profiterole falls into is an OUTPUT of the
+ * dish, not an input the cook can supply. Offering the four real slots asked
+ * them to guess, and a wrong guess bought a paid stream that came back empty —
+ * measured on Arrabbiata Sauce, where `side` and `dessert` correctly produced
+ * nothing, because a tomato-chili sauce belongs to neither.
+ *
+ * So the slot axis collapses to one. It is a REQUEST-side label and nothing
+ * more: the dish still persists with its own real course tag, so Penne
+ * all'Arrabbiata is a `main` in the catalogue while filling the `dish` slot
+ * here. Every consumer of a slot is generic over the string already — the
+ * per-card re-roll passes it through, `courseTitle` falls back to title case —
+ * which is why this is a constant rather than a second code path.
+ *
+ * NOT the retired `dish` component marker that `20260814000001` deleted. That
+ * was a TAG value asserting a recipe was a recipe; this is a slot name in a
+ * request, and the two never meet. The collision is in the English word only.
+ */
+export const COMPONENT_DISH_SLOT = "dish";
+
+/**
+ * How many dishes a component composition asks for.
+ *
+ * ONE, with the card's own refresh standing in for the rest. Compose is the
+ * only route in the product that charges per call, so generating three answers
+ * to a question the cook may have settled on the first one pays for two dishes
+ * nobody looks at — and a narrow component makes that worse rather than better:
+ * measured on Arrabbiata Sauce, a request for three returned one, because the
+ * authenticity gate refused the two the model had to reach for.
+ *
+ * Fixed rather than picked, either way. The menu picker earns its screen
+ * because the SHAPE of a meal is the cook's decision; "how many alternatives
+ * would you like" is not a question worth asking, in either direction.
+ *
+ * The re-roll path already sends its own count (`courseCounts` of 1 for the one
+ * card it is replacing), so this governs the OPENING request only.
+ */
+export const COMPONENT_DISH_COUNT = 1;
+
+/**
  * Request schema for composing complementary courses for a recipe.
  * Defines the contract for the compose recipe use-case.
  */

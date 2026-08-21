@@ -1,5 +1,6 @@
 import { generateStream } from "@fridgeezy/llm";
 import {
+    difficultyDirection,
     EscalateDifficultyRequestSchema,
     HeaderSchema,
     IngredientSchema,
@@ -25,18 +26,6 @@ import {
     STEP_DURATION_RULES,
 } from "../../services";
 import { persistRecipe } from "../../services/persist-recipe";
-
-/**
- * Ordering only, for reading a transition as a direction. Deliberately local
- * and not exported: the database has `difficulty_preference_rank` for ranking
- * rows in a feed, and a second exported ranking invites the two to drift into
- * disagreeing about what "harder" means.
- */
-const DIFFICULTY_RANK: Record<string, number> = {
-    easy: 0,
-    medium: 1,
-    hard: 2,
-};
 
 const buildSystemPrompt = (
     units: string,
@@ -263,14 +252,23 @@ export const escalateDifficulty = createStreamHandler({
         // says nothing on its own — a hard recipe simplified to medium and an
         // easy one pushed to medium are opposite preferences that both record
         // "medium". Which way they reach, repeatedly, is the durable fact.
-        recordTasteSignal(
-            req,
-            "difficulty",
-            DIFFICULTY_RANK[body.difficulty] >
-            DIFFICULTY_RANK[existingRecipe.difficulty]
-                ? "harder"
-                : "easier"
+        // `difficultyDirection` rather than a local rank map. The comment that
+        // used to sit on that map argued a second ordering "invites the two to
+        // drift into disagreeing about what harder means" — which was right,
+        // and was an argument for ONE shared ordering rather than for a private
+        // third one. `DIFFICULTY_ORDER` in `@fridgeezy/schemas` is now that
+        // copy, and the client's family-collapse reads the same module.
+        //
+        // It returns undefined for equal or unrecognised levels; equal is
+        // already refused above, and an unrecognised one must record NOTHING
+        // rather than default to "easier" — a taste signal is only worth having
+        // if it is true.
+        const signal = difficultyDirection(
+            existingRecipe.difficulty,
+            body.difficulty
         );
+
+        if (signal) recordTasteSignal(req, "difficulty", signal);
 
         // 3. Fetch metadata
         const metadata = await fetchRecipeMetadata();

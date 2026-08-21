@@ -27,7 +27,7 @@ export const RecipeSuggestionInputSchema = z.object({
         .string()
         .optional()
         .describe(
-            "The plain name of the specific dish the user asked for, set ONLY when they named an identifiable dish: 'a thai green curry recipe please' -> 'Thai Green Curry'; 'how do I make pad thai?' -> 'Pad Thai'. OMIT it when they described what they want instead of naming it — a category, cuisine, mood or ingredient question ('an apple dessert', 'something Italian', 'what can I make with chicken'). Setting it restricts existing-recipe matches to exactly that dish, so a similar-but-different dish (a red curry for a green curry request) cannot be returned in its place; on a vague request it would wrongly block every good answer."
+            "The plain name of the thing the user actually named, set whenever they named one: 'a thai green curry recipe please' -> 'Thai Green Curry'; 'how do I make pad thai?' -> 'Pad Thai'; 'how do I make a perfect Bechamel' -> 'Bechamel'. A named BUILDING BLOCK counts — a sauce, dough, stock or pastry the user names ('Bechamel', 'Hollandaise', 'pizza dough') is a name to pin, not a reason to omit this; set `component` alongside it. OMIT it only when they described what they want instead of naming it — a category, cuisine, mood or ingredient question ('an apple dessert', 'something Italian', 'what can I make with chicken'). Setting it restricts existing-recipe matches to exactly that name, so a similar-but-different row (a red curry for a green curry request, Lasagne for a bechamel request) cannot be returned in its place; on a vague request it would wrongly block every good answer."
         ),
     matchThreshold: z
         .number()
@@ -54,7 +54,7 @@ export const RecipeSuggestionInputSchema = z.object({
         .enum(COMPONENT_TAGS)
         .optional()
         .describe(
-            "Set this whenever the user asks for a COMPONENT rather than a finished dish: 'what sauce goes with apple strudel' is component 'sauce', 'a marinade for chicken' is 'marinade'. Results are then restricted to recipes of that component type and anything generated is forced to be one, so the dish being accompanied cannot come back as the answer. Omit it for ordinary dish requests."
+            "Set this whenever the user asks for a COMPONENT rather than a finished dish, in either shape. NAMED OUTRIGHT: 'how do I make a perfect Bechamel' is component 'sauce', 'the best pizza dough' is 'dough', 'how do you make a roux' is 'roux' — set `dish` to the name as well. AS AN ACCOMPANIMENT: 'what sauce goes with apple strudel' is component 'sauce', 'a marinade for chicken' is 'marinade' — put the accompanied dish in `exclude`. Results are then restricted to recipes carrying that component tag and anything generated is forced to be one, which is the ONLY thing that stops a dish built on the component being returned instead of it: similarity alone always scores a bechamel query highest against Lasagne. Omit it for ordinary dish requests."
         ),
     exclude: z
         .array(z.string())

@@ -515,11 +515,18 @@ export async function searchRecipeSuggestions(
                 // Streaming caller (chat): generate ONE suggestion and stream
                 // its fields out — title first, then description, etc. — sharing
                 // a tempId so the enriched item below upgrades the same card.
+                //
+                // `dish` before `query`: the generator reads its "Ingredients"
+                // line as a dish name when it looks like one, and the pinned
+                // name IS that name with the question stripped off ("Béchamel"
+                // rather than "how do I make a perfect Béchamel"). When no dish
+                // was named the raw query is all there is, and it is the concept
+                // query that line was written for.
                 const tempId = randomUUID();
 
                 const outcome = await streamSingleSuggestion(
                     {
-                        ingredients: [query],
+                        ingredients: [dish ?? query],
                         component,
                         dietaryRestrictions,
                         blacklist,
@@ -590,7 +597,7 @@ export async function searchRecipeSuggestions(
                 // Non-streaming caller: keep the multi-suggestion JSONL generator.
                 let generatedCount = 0;
                 const stream = generateSuggestionsStream({
-                    ingredients: [query],
+                    ingredients: [dish ?? query],
                     component,
                     dietaryRestrictions,
                     blacklist,

@@ -11,10 +11,28 @@ import {
 import { recordPrompt } from "../../../prompts/services";
 import { callerMayReadRecipe, fetchRecipe } from "../../services";
 
-/** The classification sentinel the model emits for modification requests. */
-const MODIFY_SENTINEL = /^\s*MODIFY:/i;
-// Enough characters to tell "MODIFY:" apart from the start of a normal answer.
-const DECISION_MIN_CHARS = 7;
+/**
+ * The classification sentinels, and the intent each one proposes.
+ *
+ * Two, not one, and the second is a bug fix rather than a new capability. The
+ * prompt has always listed "change the difficulty" as a modification, but
+ * `modify-recipe` pins `difficulty` to the source recipe's in both its prompt
+ * and its stream `initialState` — so "make this easier" wrote a variant
+ * labelled "Easier" at *exactly the same difficulty*, and never reached
+ * `escalate-difficulty`, which is the endpoint that actually re-pitches a dish.
+ *
+ * They are matched as one alternation so the buffered decision below stays a
+ * single test: the opening tokens are held back only until we can tell any
+ * sentinel from the start of an ordinary answer.
+ */
+const SENTINEL = /^\s*(MODIFY|DIFFICULTY):/i;
+
+/** The three rungs `escalate-difficulty` writes. Anything else is not one. */
+const DIFFICULTIES = ["easy", "medium", "hard"] as const;
+
+// Enough characters to tell "DIFFICULTY:" — the longer of the two — apart from
+// the start of a normal answer.
+const DECISION_MIN_CHARS = 11;
 
 /**
  * System prompt scoping the chat to one recipe and defining the modify
@@ -33,12 +51,25 @@ const buildRecipeChatPrompt = (
         "SERVINGS — never a modification:",
         `This recipe is written for ${recipe.servings} servings, and the screen the user came from has a servings control that rescales every amount live. If they ask for a different number of servings, or to halve or double it, tell them to use that control — do NOT restate the ingredient list at the new size, and do NOT treat it as a modification.`,
         "",
-        "MODIFICATION REQUESTS — read carefully:",
-        "If the user asks you to CHANGE this recipe into a new version — substitute/add/remove ingredients, adapt it for a diet, change the difficulty, or any alteration that produces a modified recipe — do NOT answer, explain, or list ingredients. Reply with EXACTLY one line and nothing else:",
+        "REQUESTS TO CHANGE THE RECIPE — read carefully:",
+        "If the user asks you to CHANGE this recipe into a new version, do NOT answer, explain, or list ingredients. Reply with EXACTLY one line and nothing else, choosing the line that matches what they asked for:",
+        "",
         "MODIFY: <a short imperative instruction capturing the change>",
-        "Examples: 'can you make it dairy free?' -> 'MODIFY: make it dairy-free'; 'swap the cream for coconut milk' -> 'MODIFY: swap the cream for coconut milk'.",
-        "A serving-count change is NOT one of these. 'make this for 8' and 'halve it' are answered normally, per the rule above.",
-        "For ANY other message — questions about the existing recipe, tips, techniques, storage, pairings, whether something is possible — answer normally and NEVER output the word MODIFY.",
+        "  — for ingredient and diet changes: substitute/add/remove ingredients, adapt it for a diet, change the flavour or technique.",
+        "  Examples: 'can you make it dairy free?' -> 'MODIFY: make it dairy-free'; 'swap the cream for coconut milk' -> 'MODIFY: swap the cream for coconut milk'.",
+        "",
+        `DIFFICULTY: <one of ${DIFFICULTIES.join(" | ")}>`,
+        "  — for requests about how HARD the recipe is: simpler, easier, quicker to execute, more advanced, more elaborate, restaurant-level, more of a challenge. Output ONLY the target level, nothing else on the line.",
+        `  This recipe is currently ${recipe.difficulty ?? "medium"}. Map the request to the level they want: 'make it easier'/'simpler' -> the level below, 'make it harder'/'more advanced'/'michelin-level' -> the level above. If they name a level directly, use that one.`,
+        `  If they ask for the level it is ALREADY at (${recipe.difficulty ?? "medium"}), do not output this line — say so normally instead.`,
+        "",
+        "These two are exclusive: a request is one or the other, never both. A change to the INGREDIENTS is MODIFY even when it also makes the dish simpler; DIFFICULTY is only for a request about the level of skill or effort itself.",
+        "A serving-count change is NEITHER. 'make this for 8' and 'halve it' are answered normally, per the rule above.",
+        "",
+        "SUBSTITUTION QUESTIONS ARE NOT REQUESTS:",
+        "'what can I use instead of buttermilk?', 'is there a substitute for saffron?', 'can I use margarine?' are QUESTIONS. Answer them in prose with the best alternatives and what they cost in flavour or texture. Only a request to actually REWRITE the recipe around a swap ('swap the cream for coconut milk', 'make it with margarine instead') is a MODIFY.",
+        "",
+        "For ANY other message — questions about the existing recipe, tips, techniques, storage, pairings, whether something is possible — answer normally and NEVER output MODIFY or DIFFICULTY.",
         "",
         "--- RECIPE ---",
         `Name: ${recipe.name}`,
@@ -102,9 +133,74 @@ const buildRecipeChatPrompt = (
 };
 
 /**
+ * Turn a buffered sentinel line into the `proposal` frame the client renders.
+ *
+ * ## It PROPOSES; it does not command
+ *
+ * The event used to be called `modify`, and the client acted on it the instant
+ * it arrived: the turn was suppressed and the reader was moved to a screen
+ * watching a paid rewrite of the dish they were reading. That is too much to
+ * hang on a classifier — "could this be vegan?" is a question and "is there a
+ * vegan version?" is a different question again, and both classify the same way
+ * often enough to matter. The frame now describes what the model THINKS was
+ * asked for, and the client draws it as an offer in the conversation. A wrong
+ * proposal costs a glance; a wrong action cost a generation.
+ *
+ * ## The legacy `modify` frame
+ *
+ * Still emitted for the modify intent, and only for it. A client built before
+ * this change knows `modify` and not `proposal`, and TestFlight builds are
+ * pointed at this deployment — dropping it would take the feature out of every
+ * installed copy the moment this ships. Newer clients handle `proposal` and
+ * ignore `modify`. Delete this once no build older than 2026-08-20 is in the
+ * wild.
+ */
+function emitProposal(res: Response, buffer: string): void {
+    const line = buffer.trim();
+
+    if (/^\s*DIFFICULTY:/i.test(line)) {
+        const value = line
+            .replace(/^\s*DIFFICULTY:\s*/i, "")
+            .trim()
+            .toLowerCase();
+
+        const difficulty = DIFFICULTIES.find((level) => level === value);
+
+        // Not one of the three rungs. Nothing is emitted, so the turn reaches
+        // the client with neither content nor a proposal — which it already
+        // treats as a dead-end turn and offers to retry. Guessing a level from
+        // a line the model got wrong is the one outcome worth avoiding: it
+        // would propose rewriting the dish at a difficulty nobody asked for.
+        if (!difficulty) {
+            console.warn(`Unparseable DIFFICULTY sentinel: ${line}`);
+            return;
+        }
+
+        writeSseEvent(res, {
+            type: "proposal",
+            data: { intent: "difficulty", difficulty },
+        });
+        return;
+    }
+
+    const instruction = line.replace(/^\s*MODIFY:\s*/i, "").trim();
+
+    if (!instruction) return;
+
+    writeSseEvent(res, {
+        type: "proposal",
+        data: { intent: "modify", instruction },
+    });
+
+    // Compatibility only — see above.
+    writeSseEvent(res, { type: "modify", data: { instruction } });
+}
+
+/**
  * Recipe-scoped chat. Streams a text answer for questions, or — when the model
- * classifies the turn as a modification request — emits a single `modify` event
- * carrying the extracted instruction (the client then runs the modify flow).
+ * classifies the turn as a request to change the recipe — emits a single
+ * `proposal` event describing what it thinks was asked for, which the client
+ * draws as an offer in the conversation rather than acting on.
  */
 export async function recipeChat(req: Request, res: Response): Promise<void> {
     try {
@@ -170,16 +266,16 @@ export async function recipeChat(req: Request, res: Response): Promise<void> {
             temperature: request.temperature,
         });
 
-        // Buffer the opening tokens until we can tell a modification (the
-        // `MODIFY:` sentinel) from a normal answer, then either stream content or
-        // hold back for the modify event.
+        // Buffer the opening tokens until we can tell a change request (either
+        // sentinel) from a normal answer, then either stream content or hold
+        // back for the proposal event.
         let buffer = "";
         let decided = false;
-        let isModify = false;
+        let isProposal = false;
 
         for await (const event of stream) {
             if (event.type === "chunk") {
-                if (isModify) {
+                if (isProposal) {
                     buffer += event.delta;
                 } else if (decided) {
                     writeSseEvent(res, {
@@ -191,8 +287,8 @@ export async function recipeChat(req: Request, res: Response): Promise<void> {
                     const seen = buffer.trimStart();
                     if (seen.length >= DECISION_MIN_CHARS || buffer.includes("\n")) {
                         decided = true;
-                        isModify = MODIFY_SENTINEL.test(buffer);
-                        if (!isModify) {
+                        isProposal = SENTINEL.test(buffer);
+                        if (!isProposal) {
                             writeSseEvent(res, {
                                 type: "content",
                                 data: { delta: buffer },
@@ -208,14 +304,8 @@ export async function recipeChat(req: Request, res: Response): Promise<void> {
                 });
                 break;
             } else if (event.type === "done") {
-                if (isModify) {
-                    const instruction = buffer
-                        .replace(/^\s*MODIFY:\s*/i, "")
-                        .trim();
-                    writeSseEvent(res, {
-                        type: "modify",
-                        data: { instruction },
-                    });
+                if (isProposal) {
+                    emitProposal(res, buffer);
                 } else if (buffer) {
                     // A short answer that never crossed the decision threshold.
                     writeSseEvent(res, {

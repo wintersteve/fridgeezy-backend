@@ -1,9 +1,7 @@
-import { borrowMenuTitle } from "./borrow-menu-title";
-import { compileBlacklist } from "./blacklist";
-import { fetchMenuPairings, type MenuPairing } from "./fetch-menu-pairings";
 import { generateStream, type LlmProvider } from "@fridgeezy/llm";
 import {
     ComposeRecipeMenuDto,
+    ComposeRecipeModeDto,
     ComposeRecipeRequestDto,
     ComposeRecipeResultDto,
     ComposeRecipeProgressDto,
@@ -28,11 +26,16 @@ import { persistOrReuseSuggestion } from "../../suggestions/services/persist-or-
 import { createSuggestionBatch } from "../../suggestions/services/suggestion-batch";
 import {
     COMPONENT_RULE,
+    COURSE_IS_A_DISH_RULE,
+    COURSE_RULE,
     DISH_FORM_RULE,
     TAGS_KEY_RULE,
 } from "../../suggestions/services/tagging-rules";
 import { DISH_TOTAL_TIME_RULE } from "../../suggestions/services/timing-rules";
 
+import { compileBlacklist } from "./blacklist";
+import { borrowMenuTitle } from "./borrow-menu-title";
+import { fetchMenuPairings, type MenuPairing } from "./fetch-menu-pairings";
 import { fetchRecipeMetadata } from "./fetch-recipe-metadata";
 
 /**
@@ -130,21 +133,52 @@ const ComposeRecipeSuggestionSchema = z.object({
 
 type ComposeRecipeSuggestion = z.infer<typeof ComposeRecipeSuggestionSchema>;
 
-const SYSTEM_PROMPT = `You are a recipe composition assistant. Generate complementary courses for a given base recipe.
+/**
+ * Which question this stream is answering — see `ComposeRecipeModeDtoSchema`.
+ *
+ * `menu` composes the other courses of a meal around a finished dish.
+ * `component_dishes` inverts it: the seed is a building block, so the answer is
+ * the real dishes that USE it. The two share every rule about authenticity,
+ * naming, tagging, times and who is eating, and differ only in what is being
+ * asked for and whether the result is a meal — which is why this is one prompt
+ * with two branches rather than two prompts that would drift.
+ */
+export type ComposeMode = "menu" | "component_dishes";
+
+const buildSystemPrompt = (mode: ComposeMode): string => {
+    const isComponent = mode === "component_dishes";
+
+    return `You are a recipe composition assistant. ${
+        isComponent
+            ? "The user is looking at a COMPONENT — a building block such as a sauce, dough or marinade, not something anyone sits down and eats. Name the real dishes that USE it."
+            : "Generate complementary courses for a given base recipe."
+    }
 
 ## Rules
-- Suggest authentic, real-world recipes that complement the base recipe
-- Each recipe MUST be a real dish (not invented, must be authentic), named by the rule under "Output Format" below
+${
+    isComponent
+        ? `- Every dish you return must be a real, authentic dish that genuinely USES this component, or that it is traditionally served with. The component is an INGREDIENT of the dish or an accompaniment to it — never the dish itself.
+- "Arrabbiata Sauce" gives you "Penne all'Arrabbiata", not "Spicy Tomato Sauce". A chimichurri gives you "Grilled Skirt Steak with Chimichurri". A choux pastry gives you "Profiteroles".
+- NEVER return the component itself, a renamed version of it, a variation on it, or another component. If you cannot name a real dish built on this one, return FEWER dishes rather than reaching for another sauce.
+- The dish must be well known enough to be asked for by name — the same bar every other suggestion is held to.`
+        : `- Suggest authentic, real-world recipes that complement the base recipe
+- Each recipe MUST be a real dish (not invented, must be authentic), named by the rule under "Output Format" below`
+}
 - ${FOOD_ONLY_RULE}
   - This applies to PAIRINGS too. A wine or cocktail that would go well with the base recipe is still a drink, and a menu course here is always something eaten.
+- ${COURSE_IS_A_DISH_RULE}
 - Do NOT suggest recipes of excluded course types
 - If cuisine matching is requested, suggest recipes from the same cuisine
 - If difficulty matching is requested, suggest recipes of similar difficulty
 
 ## Who is eating (CRITICAL)
 ${BLACKLIST_RULE}
-  - A menu is one meal, so these apply to EVERY course, not only the ones that would obviously carry them. A dairy blacklist rules out the buttered side as well as the dessert.
-  - They are NOT satisfied by the base recipe already complying. The base was picked by the user; these courses are being chosen for them.
+  - ${
+      isComponent
+          ? "These apply to EVERY dish you return, and they are NOT satisfied by the component already complying. A dairy blacklist rules out the dish served in cream even though the sauce beside it carries none."
+          : "A menu is one meal, so these apply to EVERY course, not only the ones that would obviously carry them. A dairy blacklist rules out the buttered side as well as the dessert."
+  }
+  - They are NOT satisfied by the base recipe already complying. The base was picked by the user; these dishes are being chosen for them.
 
 ## Difficulty Levels
 - "easy": Beginner-friendly version of the dish, using simple techniques
@@ -154,7 +188,12 @@ ${BLACKLIST_RULE}
 ## Tagging Rules (CRITICAL)
 - ${COMPONENT_RULE}
 - 1 OR 2 cuisine tags per recipe. One for almost every dish — its actual origin. Add a SECOND only when the dish genuinely belongs to two traditions at once (Tex-Mex is american + mexican, Nikkei is japanese + peruvian). Never add a second merely to be broader — the region and continent a cuisine belongs to are already known, so "italian" must NOT also carry "mediterranean" or "european".
-- EXACTLY 1 course tag per recipe: the course type being suggested. The ONLY valid course tags are: appetizer, dessert, main, side. Never omit it, and never invent another (not "starter", "dinner", "entree" or "main course") — a starter is "appetizer".
+- ${COURSE_RULE}
+  - ${
+      isComponent
+          ? "The dish's own course — a pasta is \"main\", a profiterole is \"dessert\". Return one dish per course slot the request asks for."
+          : "For a composed course this is the course type being suggested."
+  }
 - ${DISH_FORM_RULE}
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free)
 
@@ -164,11 +203,11 @@ ${BLACKLIST_RULE}
 
 ## Output Format
 Output one JSON object per line (JSONL format). No markdown, no code blocks, no extra text.
-
-The FIRST line names the meal as a whole:
-- ${MENU_TITLE_RULE}
-
-Every line after it is one recipe, and must include:
+${
+    isComponent
+        ? "\nThese dishes are NOT a menu — they are separate answers to one question — so do NOT emit a menu_title line.\n\nEach line is one recipe, and must include:"
+        : `\nThe FIRST line names the meal as a whole:\n- ${MENU_TITLE_RULE}\n\nEvery line after it is one recipe, and must include:`
+}
 - ${DISH_NAME_RULE}
 - ${DISH_NAME_ALT_RULE}
 - ${DISH_GLOSS_RULE}
@@ -178,6 +217,7 @@ Every line after it is one recipe, and must include:
 - ingredients (array of key ingredient strings)
 - ${ADAPTED_FOR_RULE}
 - ${TAGS_KEY_RULE}`;
+};
 
 /**
  * Which course slots the base recipe already fills, and which of the requested
@@ -232,8 +272,12 @@ const buildUserPrompt = (
     /** What is still to be generated, per slot, after retrieval filled what it could. */
     remaining: Map<string, number>,
     /** What retrieval already put on the plate. */
-    retrieved: Array<{ courseType: string; name: string }>
+    retrieved: Array<{ courseType: string; name: string }>,
+    mode: ComposeMode,
+    /** The component tag the seed carries, in `component_dishes` mode. */
+    seedComponent: string | null
 ): string => {
+    const isComponent = mode === "component_dishes";
     const baseCourses = courses.base;
     const allowedCourses = courses.allowed;
 
@@ -249,7 +293,11 @@ const buildUserPrompt = (
     );
 
     const parts = [
-        `Base Recipe: ${baseRecipe.name}`,
+        // Named as what it IS. Calling a sauce a "Base Recipe" is what invited
+        // the model to build a dinner around it in the first place.
+        isComponent
+            ? `Component: ${baseRecipe.name}${seedComponent ? ` (a ${seedComponent})` : ""}`
+            : `Base Recipe: ${baseRecipe.name}`,
         `Description: ${baseRecipe.description}`,
         `Key Ingredients: ${baseRecipe.ingredients
             .slice(0, 5)
@@ -284,7 +332,9 @@ const buildUserPrompt = (
     // dessert — and a single number told the model to produce two of everything.
     parts.push(
         [
-            `\nRequested Courses:`,
+            isComponent
+                ? `\nDishes wanted, by course:`
+                : `\nRequested Courses:`,
             ...allowedCourses
                 // Only the slots retrieval could not fill. A slot asked for
                 // again would be generated, reviewed, embedded, persisted and
@@ -324,7 +374,11 @@ const buildUserPrompt = (
         );
     }
 
-    parts.push(`\nGenerate authentic complementary dishes.`);
+    parts.push(
+        isComponent
+            ? `\nName authentic, well-known dishes that use ${baseRecipe.name}.`
+            : `\nGenerate authentic complementary dishes.`
+    );
 
     return parts.join("\n");
 };
@@ -346,6 +400,7 @@ export async function* generateComposeRecipes(
     | ComposeRecipeResultDto
     | ComposeRecipeProgressDto
     | ComposeRecipeMenuDto
+    | ComposeRecipeModeDto
     | ComposeRecipeWithdrawnDto
 > {
     // Fetch metadata to get course tags from database
@@ -356,10 +411,45 @@ export async function* generateComposeRecipes(
     const cuisineTagNames = metadata.tags
         .filter((tag) => tag.type === "cuisine")
         .map((tag) => tag.name);
+    const componentTagNames = metadata.tags
+        .filter((tag) => tag.type === "component")
+        .map((tag) => tag.name);
+
+    /**
+     * The component tag the seed carries, or null for an ordinary dish.
+     *
+     * This is the branch, and it is a FACT about the row rather than an
+     * inference. It used to be decided by the seed's course tag, which for a
+     * building block is whatever the generator happened to pick — measured
+     * 2026-08-20, `Arrabbiata Sauce` said `main` and `Ajvar` said `side`. That
+     * value then removed the corresponding slot from the offer, so composing
+     * around the arrabbiata could suggest anything EXCEPT the pasta it goes on,
+     * while the ajvar looked correct purely by luck. See {@link COURSE_RULE}.
+     *
+     * Read from the DB vocabulary rather than a hardcoded list, the same way the
+     * course and cuisine lookups beside it are, so a component tag added to the
+     * catalogue is understood here without a deploy.
+     */
+    const seedComponent =
+        baseRecipe.tags.find((tag) =>
+            componentTagNames.some(
+                (component) => tag.toLowerCase() === component.toLowerCase()
+            )
+        ) ?? null;
+
+    const mode: ComposeMode =
+        seedComponent === null ? "menu" : "component_dishes";
+    const isComponentSeed = mode === "component_dishes";
 
     // Validate that we have allowed courses. The same split is handed to
     // `buildUserPrompt` below rather than recomputed there.
-    const courses = splitCourses(baseRecipe, request, courseTagNames);
+    // A component fills no slot, so nothing is subtracted from what was asked
+    // for. Not merely an optimisation: a row written before COURSE_RULE gained
+    // its exemption still carries a course tag it should never have had, and
+    // honouring it would remove the exact slot the user is asking to fill.
+    const courses = isComponentSeed
+        ? { base: [] as string[], allowed: request.courseTypes }
+        : splitCourses(baseRecipe, request, courseTagNames);
     const allowedCourses = courses.allowed;
 
     if (allowedCourses.length === 0) {
@@ -367,6 +457,13 @@ export async function* generateComposeRecipes(
             "All requested course types are already present in base recipe"
         );
     }
+
+    // FIRST, before the title and before any course. A client that files a
+    // `component_dishes` stream as a menu writes a `menus` row whose
+    // `main_recipe_id` is a sauce — the row that then poisons retrieval for
+    // everybody else, since `menu_pairings_for_recipe` is deterministic, free
+    // and ranked by saves, so it outranks generation.
+    yield { type: "mode", mode, component: seedComponent };
 
     // Yield initial progress
     yield {
@@ -434,7 +531,12 @@ export async function* generateComposeRecipes(
      * DELETED once this has run a week (see CLAUDE.md on feature flags).
      */
     const retrievalEnabled =
-        (process.env.COMPOSE_RETRIEVAL ?? "on").toLowerCase() !== "off";
+        (process.env.COMPOSE_RETRIEVAL ?? "on").toLowerCase() !== "off" &&
+        // `menu_pairings_for_recipe` answers "what have people put on a PLATE
+        // with this", ranked by saves. Asked about a component it returns
+        // exactly the menus that should never have been composed — the ones
+        // this change exists to stop — and would serve them back as courses.
+        !isComponentSeed;
 
     /** What each slot still wants once retrieval has had its turn. */
     const remaining = new Map(
@@ -514,7 +616,7 @@ export async function* generateComposeRecipes(
     // The title, when there is no LLM call to produce one. Emitted BEFORE the
     // courses so the client draws its heading and its cards in one pass, the
     // same order the generated path produces them in.
-    if (shortfall === 0 && retrieved.length > 0) {
+    if (!isComponentSeed && shortfall === 0 && retrieved.length > 0) {
         const borrowed = await borrowMenuTitle(
             retrieved.map((pairing) => pairing.menuIds),
             retrieved.length + 1
@@ -592,15 +694,17 @@ export async function* generateComposeRecipes(
 
     const stream = generateStream({
         model: { openai: "gpt-4.1" },
-        label: "recipe.compose",
-        system: SYSTEM_PROMPT,
+        label: isComponentSeed ? "recipe.compose.component" : "recipe.compose",
+        system: buildSystemPrompt(mode),
         user: buildUserPrompt(
             baseRecipe,
             request,
             courses,
             cuisineTagNames,
             remaining,
-            retrieved
+            retrieved,
+            mode,
+            seedComponent
         ),
         provider,
     });
@@ -620,7 +724,11 @@ export async function* generateComposeRecipes(
                 (parsed as z.infer<typeof ComposeMenuTitleSchema>).menu_title
             );
 
-            if (title && !titled) {
+            // Suppressed rather than merely unasked-for. The rule is only in
+            // the menu-mode prompt, but a model that volunteers a title anyway
+            // must not be able to hand the client the one thing that makes a
+            // list of dishes look like a saveable meal.
+            if (title && !titled && !isComponentSeed) {
                 titled = true;
                 yield { type: "menu", title };
             }
@@ -657,6 +765,39 @@ export async function* generateComposeRecipes(
             console.warn(
                 `[Compose] Dropped "${suggestion.name}" — ${courseType} is already filled`
             );
+            continue;
+        }
+
+        // A building block offered as a course. {@link COURSE_IS_A_DISH_RULE}
+        // asks the model not to, and this is the half that enforces it — the
+        // generator is the thing being policed, so it cannot also be the gate.
+        // The same division of labour `FOOD_ONLY_RULE` has with the
+        // authenticity gate's `not_food`, and for the same reason: nothing else
+        // catches this. `FOOD_ONLY_RULE` screens DRINKS, and the gate judges
+        // attestation, under which Béchamel is `well_known` at high confidence
+        // because it is.
+        //
+        // Dropped BEFORE `persistOrReuseSuggestion`, where the saving is (the
+        // review alone is roughly three quarters of a batch's tokens) and,
+        // more importantly, before it can be persisted and reach the shared
+        // menu corpus. A withdrawal IS emitted, unlike the drops above: the
+        // slot really is short, and nothing else is on its way to fill it.
+        const offeredComponent = suggestion.tags.find((tag) =>
+            componentTagNames.some(
+                (component) => tag.toLowerCase() === component.toLowerCase()
+            )
+        );
+
+        if (offeredComponent) {
+            console.warn(
+                `[Compose] Dropped "${suggestion.name}" — a ${offeredComponent} is not a ${courseType}`
+            );
+            yield {
+                type: "withdrawn",
+                courseType,
+                name: suggestion.name,
+                reason: "not_a_dish",
+            };
             continue;
         }
 

@@ -203,6 +203,15 @@ export const ComposeRecipeWithdrawnDtoSchema = z.object({
         "excluded",
         "duplicate",
         "not_food",
+        /**
+         * A building block offered as a course — a sauce for the "side" slot.
+         *
+         * Its own member rather than `invalid` because the client's wording is
+         * the whole reason this enum is closed, and these read nothing alike:
+         * "that one turned out not to be a real dish" is wrong for a béchamel,
+         * which is a perfectly real thing that is simply not a course.
+         */
+        "not_a_dish",
         "unauthentic",
         "persist_failed",
         "invalid",
@@ -212,6 +221,44 @@ export const ComposeRecipeWithdrawnDtoSchema = z.object({
 export type ComposeRecipeWithdrawnDto = z.infer<
     typeof ComposeRecipeWithdrawnDtoSchema
 >;
+
+/**
+ * Which QUESTION this composition is answering.
+ *
+ * Emitted FIRST on every stream, before the title and before any course, and it
+ * exists because compose now serves two different questions off one endpoint:
+ *
+ * - `menu` — the seed is a finished dish, so the answer is the other courses of
+ *   a meal built around it. Everything downstream applies: a title, a saveable
+ *   menu, a recorded combination.
+ * - `component_dishes` — the seed is a BUILDING BLOCK (a sauce, a dough, a
+ *   marinade), so "what courses go around this" has no answer. The question
+ *   inverts: what real dishes USE it or are served with it.
+ *
+ * The second is deliberately NOT a menu, and a client must not file it as one.
+ * A menu whose `main_recipe_id` is a sauce is the exact row that poisons
+ * `menu_pairings_for_recipe` — retrieval is deterministic, free and ranked by
+ * saves, so it outranks generation and serves that mistake to the next person.
+ * The server refuses to record one; this frame is what stops the client offering
+ * to.
+ *
+ * ALWAYS emitted, including for `menu`, so the client has one place to branch
+ * and an ABSENT frame means exactly one thing: an older server. Treat absence as
+ * `menu`, which is what every stream was before this shipped.
+ */
+export const ComposeRecipeModeDtoSchema = z.object({
+    type: z.literal("mode"),
+    mode: z.enum(["menu", "component_dishes"]),
+    /**
+     * The component tag the seed carries ("sauce", "dough"), for the heading —
+     * null in `menu` mode. It is the tag NAME rather than a boolean because the
+     * client says "Dishes that use this sauce", and "component" is not a word to
+     * put in front of a cook.
+     */
+    component: z.string().nullable().optional(),
+});
+
+export type ComposeRecipeModeDto = z.infer<typeof ComposeRecipeModeDtoSchema>;
 
 /**
  * What to call the whole meal.
@@ -265,6 +312,7 @@ export type ComposeRecipeErrorDto = z.infer<typeof ComposeRecipeErrorDtoSchema>;
 export type ComposeRecipeFrameDto =
     | ComposeRecipeResultDto
     | ComposeRecipeProgressDto
+    | ComposeRecipeModeDto
     | ComposeRecipeMenuDto
     | ComposeRecipeWithdrawnDto
     | ComposeRecipeErrorDto;

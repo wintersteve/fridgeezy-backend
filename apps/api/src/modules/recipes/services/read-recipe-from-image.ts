@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 import {
     COMPONENT_RULE,
+    COURSE_RULE,
     DISH_FORM_RULE,
 } from "../../suggestions/services/tagging-rules";
 
@@ -207,7 +208,7 @@ ${tags}
 ### Tagging rules
 - ${COMPONENT_RULE}
 - 1 OR 2 cuisine tags. One for almost every dish — its actual origin, as specific as the approved list allows. A second ONLY when the dish genuinely belongs to two traditions at once (Tex-Mex is american + mexican). Never add one merely to be broader: "italian" must NOT also carry "mediterranean" or "european".
-- EXACTLY 1 course tag per recipe. The ONLY valid course tags are: appetizer, dessert, main, side. Pick exactly one of those four. Never omit it, and never invent another (not "dinner", "lunch", "breakfast", "entree" or "main course").
+- ${COURSE_RULE}
 - ${DISH_FORM_RULE}
 - Include every dietary tag the INGREDIENT LIST supports (vegan, gluten_free, dairy_free...). Read the list, do not go by the dish's reputation.
 

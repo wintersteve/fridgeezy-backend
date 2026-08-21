@@ -1,6 +1,7 @@
 import {
     ComposeRecipeErrorDtoSchema,
     ComposeRecipeMenuDtoSchema,
+    ComposeRecipeModeDtoSchema,
     ComposeRecipeRequestSchema,
     ComposeRecipeResultDtoSchema,
     ComposeRecipeProgressDtoSchema,
@@ -98,6 +99,13 @@ export async function composeRecipe(
                 } else if (item.type === "progress") {
                     const validated =
                         ComposeRecipeProgressDtoSchema.parse(item);
+                    writeSseEvent(res, validated);
+                } else if (item.type === "mode") {
+                    // First frame of every stream. It tells the client whether
+                    // this is a menu at all — a `component_dishes` stream must
+                    // not be filed as one, because a `menus` row whose main is
+                    // a sauce is what poisons compose retrieval for everybody.
+                    const validated = ComposeRecipeModeDtoSchema.parse(item);
                     writeSseEvent(res, validated);
                 } else if (item.type === "withdrawn") {
                     const validated =

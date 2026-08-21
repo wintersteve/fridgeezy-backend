@@ -33,7 +33,9 @@ import { persistOrReuseSuggestion } from "./persist-or-reuse-suggestion";
 import { createSuggestionBatch, type SuggestionBatch } from "./suggestion-batch";
 import type { SuggestionOutcome } from "./suggestion-outcome";
 import {
+    COMPONENT_FILTER_RULE,
     COMPONENT_RULE,
+    COURSE_RULE,
     DISH_FORM_FILTER_RULE,
     DISH_FORM_RULE,
     TAGS_KEY_RULE,
@@ -98,6 +100,7 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 - Include ALL essential ingredients that define the dish. Never omit core ingredients that make the recipe authentic.
 - EVERY DISH YOU RETURN MUST BE A DIFFERENT DISH. Never return a dish alongside a qualified version of itself ("Arancini" and "Arancini di Riso al Ragù"), a dish alongside its own base ("Haemul Pajeon" and "Pajeon"), or the same dish under two names ("Som Tam" and "Green Papaya Salad"). If a request only really supports one of them, pick the best one — fill the other slot with a genuinely different dish if you have one, and drop the slot if you do not.
   - A qualifier naming a DIFFERENT PREPARATION is not this case, and both dishes may be returned: "Arancini al Burro" is filled with béchamel, ham and provolone, which makes it a distinct Sicilian variety rather than a longer name for the ragù-filled original. THE TEST IS THE INGREDIENTS, not the length of the name — if the qualifier changes what is inside the dish, they are two dishes; if it only restates what is already there, they are one.
+- ${COMPONENT_FILTER_RULE}
 - ${DISH_FORM_FILTER_RULE}
 - ${FOOD_ONLY_RULE}
 - When the request is ONLY for drinks and there is no food dish to offer, output exactly one line and nothing else: {"rejected":"not_food"}. Say it explicitly rather than returning nothing — silence and "I found nothing this time" are indistinguishable downstream, and the user is told the wrong one.
@@ -115,7 +118,7 @@ ${BLACKLIST_RULE}
 ## Tagging Rules (CRITICAL)
 - ${COMPONENT_RULE}
 - 1 OR 2 cuisine tags per recipe. One for almost every dish — its actual origin, as specific as you can be ("sichuan" rather than "chinese" for a Sichuanese dish). Add a SECOND only when the dish genuinely belongs to two traditions at once: Tex-Mex is american + mexican, Nikkei is japanese + peruvian, banh mi is vietnamese + french. Never add a second merely to be broader — the region and continent a cuisine belongs to are already known, so "italian" must NOT also carry "mediterranean" or "european".
-- EXACTLY 1 course tag per recipe. The ONLY valid course tags are: appetizer, dessert, main, side. Pick exactly one of those four — a main dish is "main", a starter is "appetizer", an accompaniment is "side". Never omit it, and never invent another (not "dinner", "lunch", "breakfast", "entree" or "main course").
+- ${COURSE_RULE}
 - ${DISH_FORM_RULE}
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free if the recipe qualifies)
 

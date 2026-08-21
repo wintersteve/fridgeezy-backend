@@ -32,7 +32,7 @@ import {
 } from "../../../recipes/services/create-recipe-image";
 import { persistRecipeWithIngredientIds } from "../../../recipes/services/persist-recipe";
 import { fetchEnrichedSuggestion } from "../../services";
-import { COMPONENT_RULE, DISH_FORM_RULE } from "../../services/tagging-rules";
+import { COMPONENT_RULE, COURSE_RULE, DISH_FORM_RULE } from "../../services/tagging-rules";
 
 /**
  * Build system prompt with explicit ingredient constraints.
@@ -74,7 +74,7 @@ ${INGREDIENT_CATEGORY_GUIDE}
 ## Tagging Rules
 - ${COMPONENT_RULE}
 - 1 OR 2 cuisine tags per recipe. One for almost every dish — its actual origin, as specific as the approved list allows. Add a SECOND only when the dish genuinely belongs to two traditions at once (Tex-Mex is american + mexican, Nikkei is japanese + peruvian). Never add a second merely to be broader — the region and continent a cuisine belongs to are already known, so "italian" must NOT also carry "mediterranean" or "european".
-- EXACTLY 1 course tag per recipe. The ONLY valid course tags are: appetizer, dessert, main, side. Pick exactly one of those four — a main dish is "main", a starter is "appetizer", an accompaniment is "side". Never omit it, and never invent another (not "dinner", "lunch", "breakfast", "entree" or "main course").
+- ${COURSE_RULE}
 - ${DISH_FORM_RULE}
 - Include ALL applicable dietary tags (e.g., vegan, gluten_free, dairy_free if the recipe qualifies)
 

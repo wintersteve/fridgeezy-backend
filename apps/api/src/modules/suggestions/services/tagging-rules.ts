@@ -91,3 +91,83 @@ export const DISH_FORM_FILTER_RULE = `When a "Dish Form" filter is given, EVERY 
  * or the more tentative of the two loses.
  */
 export const TAGS_KEY_RULE = `tags (array of strings carrying the component, cuisine, course, dietary and — when the dish has one — dish form tags)`;
+
+/**
+ * Which slot in a meal this fills — and the one kind of recipe that fills none.
+ *
+ * Shared by all six generators for the reason {@link DISH_FORM_RULE} gives, and
+ * this rule is the case that proves it: it existed as SIX copies, four of them
+ * byte-identical, one compose-specific, and one — `stream-single-suggestion` —
+ * degenerated to "EXACTLY 1 course tag (the most accurate course type)", naming
+ * neither the vocabulary nor the prohibition on inventing a fifth. That is the
+ * drift {@link DISH_FORM_RULE}'s note describes, caught in the act.
+ *
+ * ## The exemption is the point
+ *
+ * `course` is the only tag facet with no way to say "not applicable", and it is
+ * exactly the facet a building block needs one for. Form, component and the
+ * dietary claims are all absent-by-default because absence is the honest answer;
+ * course was mandatory because composition needs the four slots to be exclusive
+ * AND total — which is true of a DISH and meaningless for a béchamel.
+ *
+ * So the model picked one anyway. Measured 2026-08-20: the catalogue held two
+ * sauces, `Arrabbiata Sauce` tagged `main` and `Ajvar` tagged `side`. Neither
+ * value is a fact about the dish, and both were load-bearing — `splitCourses`
+ * subtracts the seed's courses from what the user asked for, so composing a menu
+ * around Arrabbiata Sauce removed `main` from the offer and made the pasta it
+ * goes on the ONE slot compose could not suggest. Ajvar took the opposite branch
+ * of the same bug and looked correct, by luck.
+ *
+ * A component now carries no course, which is what lets `composeMode` in
+ * `generate-compose-suggestions` branch on a fact instead of on a coin flip.
+ *
+ * Note what does NOT change: nothing structural ever required a course tag.
+ * `menu_courses.course_type` is NOT NULL, but that is a property of a menu SLOT,
+ * not of the dish filling it — and a component is never a slot.
+ */
+export const COURSE_RULE = `EXACTLY 1 course tag for a finished dish. The ONLY valid course tags are: appetizer, dessert, main, side. Pick exactly one of those four — a main dish is "main", a starter is "appetizer", an accompaniment is "side" — and never invent another (not "dinner", "lunch", "breakfast", "entree" or "main course"). THE ONE EXCEPTION: a recipe that carries a component tag is a building block, not a course, so OMIT the course tag entirely for it. A béchamel is served in no slot; the lasagne built on it is the "main".`;
+
+/**
+ * What a `Component` line in the user's filter block MEANS.
+ *
+ * The exact sibling of {@link DISH_FORM_FILTER_RULE}, and it went missing for the
+ * same reason that one was written: the filter reached the model as a bare
+ * `Component: sauce` line in the user turn, with no rule anywhere in the system
+ * prompt saying what to do about it — while {@link COMPONENT_RULE}, read
+ * alongside it, leans DELIBERATELY toward omitting the tag.
+ *
+ * That combination reopens the accumulation loop verbatim. Chat asks for a sauce,
+ * the model returns real sauces, they persist with no component tag, and
+ * `search-recipe-suggestions`' `isWantedComponent` filter cannot see them — so
+ * the next sauce question finds an empty catalogue and pays for generation again.
+ * Forever. The cards look right; only the bill grows.
+ *
+ * The hedge in {@link COMPONENT_RULE} stays exactly as it is. The two are not in
+ * conflict: absent a filter, omission is right and a spurious component tag is
+ * the worse error. WITH a filter, the user has asked for a building block, so the
+ * tag is no longer a guess about what the dish is — it is the answer.
+ */
+export const COMPONENT_FILTER_RULE = `When a "Component" filter is given, EVERY recipe you return must BE that component and must carry it as its component tag. "Component: sauce" means suggest sauces — not dishes that contain a sauce, and not the dish the sauce is served on. Omit the course tag for these, as the course rule above requires. If there are not enough well-known components of that kind left for this request, return FEWER rather than answering with a finished dish.`;
+
+/**
+ * A composed course has to be something you sit down and eat.
+ *
+ * Compose's system prompt carries {@link COMPONENT_RULE}, which PERMITS a
+ * component tag on what it generates, and nothing anywhere told it not to fill a
+ * course slot with one. `FOOD_ONLY_RULE` does not cover this — it screens
+ * DRINKS — and neither does the authenticity gate, whose statuses judge
+ * attestation and eaten-vs-drunk: Béchamel is `well_known` at high confidence,
+ * because it is.
+ *
+ * So "side: Chimichurri" was a legal composed course, and an expensive one: paid
+ * for, reviewed, embedded, persisted, drawn as a card, and then written into the
+ * SHARED menu corpus, where `menu_pairings_for_recipe` serves it to the next
+ * person composing around anything it was paired with. Retrieval is deterministic
+ * and free, so it outranks generation — a bad row is durable and cheap to serve.
+ *
+ * This is the prompt half only. The generator is the thing being policed, so it
+ * cannot also be the gate; `generate-compose-suggestions` drops a component
+ * result with a `not_a_dish` withdrawal, the same division of labour
+ * `FOOD_ONLY_RULE` has with the gate's `not_food` status.
+ */
+export const COURSE_IS_A_DISH_RULE = `Every course you return must be a FINISHED DISH — something a person is served and eats. Never fill a course slot with a building block: no sauce, stock, gravy, roux, spice blend, paste, rub, marinade, dough, batter, pastry, vinaigrette, dressing, custard, caramel, pickle, jam, compote, syrup, glaze or icing on its own. "Chimichurri" is not a side; "Grilled Skirt Steak with Chimichurri" is.`;

@@ -427,7 +427,8 @@ precedes `'_'`. Ingredients are **not** seeded by `db reset`; run
 
 Evals (`npx nx run @fridgeezy/api:<target>`): `eval`, `calibrate`,
 `calibrate-ingredients`, `calibrate-authenticity`, `eval-model-migration`,
-`eval-step-structure`, `check-streaming-conformance`, `check-batch-dedup`.
+`eval-step-structure`, `check-streaming-conformance`, `check-batch-dedup`,
+`check-slot-frames`.
 
 `eval-step-structure` takes `-- --only=baseline` to run just the shipped prompt
 instead of all five variants — a fifth of the spend, and the only variant that
@@ -443,13 +444,25 @@ infer it. The quality columns (dual-unit temperatures, °F, duration and
 temperature field coverage) held at 0/0/100%/100% across all nine — those are the
 stable signals.
 
-`check-batch-dedup` is the odd one out and the cheapest thing here: no database,
-no LLM, no API key, runs in milliseconds. It drives the intra-batch dedup
-coordinator through the interleavings the real stream produces — including four
-identical dishes settling in reverse arrival order — because what it protects is
-a **concurrency** property, and one that holds "usually" is what put `Haemul
-Pajeon` next to `Pajeon` in the first place. Run it after touching
+`check-batch-dedup` and `check-slot-frames` are the odd ones out and the
+cheapest things here: no database, no LLM, no API key, they run in milliseconds.
+Both protect **concurrency** properties, and a concurrency property that holds
+"usually" is indistinguishable from one that holds.
+
+`check-batch-dedup` drives the intra-batch dedup coordinator through the
+interleavings the real stream produces — including four identical dishes
+settling in reverse arrival order — because that is what put `Haemul Pajeon`
+next to `Pajeon` in the first place. Run it after touching
 `suggestion-batch.ts`.
+
+`check-slot-frames` drives the batch feed's slot accounting, which has to hold
+two things at once that pull apart: **slots are announced in whatever order the
+gate calls return** (they have been measured from 0.67s to 5.53s within one
+batch, and a count that waits on the slowest is wrong at the only moment anyone
+reads it) while **cards go out in generation order** (the client renders an
+ordered list). That is the whole reason `generate-suggestions-stream` is built
+around a queue rather than one loop. Run it after touching that file,
+`slot-ledger.ts` or `frame-queue.ts`.
 
 ### knip
 
@@ -1067,13 +1080,35 @@ and left alone on purpose. Don't "fix" one without the trigger next to it:
   check, because a pass that produced nothing has nothing to top up *from*.
   Chat's single-suggestion path shares the gate but not the frame: it drops the
   dish and lets the assistant explain itself in prose.
-- **A reused suggestion row is a card the feed may still have to withdraw.**
+- **A reused suggestion row is a card the feed must not draw twice.**
   Dedup resolving to an existing row is a success, and the single-suggestion
   endpoint returns it as-is. The batch feed must not: emitting it renders the
-  same dish twice under two `tempId`s with one `id`. `generate-suggestions-stream`
-  therefore suppresses a row this response already showed, or that the client
-  named in `request.exclude`. Keep that decision in the *caller* — reusing the
-  row is right, drawing it twice is not.
+  same dish twice under two `tempId`s with one `id`. The `SlotLedger`
+  (`slot-ledger.ts`) therefore refuses to count a row this response already
+  showed, or that the client named in `request.exclude`. Keep that decision in
+  the *caller* — reusing the row is right, drawing it twice is not.
+- **Nothing is announced until a card is certain**, and that is the whole shape
+  of this endpoint's frames. It sends `SuggestionSlotsSchema` — one anonymous
+  count for the batch, re-sent as it changes — plus the cards themselves. There
+  is no per-dish placeholder and no withdrawal.
+
+  It had both until 2026-08-21, and they put the pipeline on screen: a
+  placeholder went out the instant the model wrote a NAME, so four skeletons
+  appeared as the lines were parsed, two vanished as `obscure` verdicts landed
+  seconds later, and two more appeared when the top-up pass refilled the slots.
+  A slot is now counted at `onAdmit` (`persist-or-reuse-suggestion.ts`) — past
+  the gate, past every dedup layer, before the persist that takes seconds — so
+  it is a promise the batch can keep.
+
+  Two things about it are easy to undo. **`verified` is a latch**: it says the
+  first pass has been judged in full, which is what the client's searching
+  interstitial waits on before handing over to a list; a top-up raising the
+  count afterwards does not make it untrustworthy, and un-latching would drop a
+  batch that admitted nothing on its first pass back into the loading screen.
+  And **while a top-up is running the count is an AIM, not a tally**
+  (`ledger.aimFor`) — reporting the one card it holds would empty the list of
+  skeletons and leave it sitting there for the seconds that pass takes. The
+  top-up itself is still sized from `ledger.count`, which never counts the aim.
 - **`exclude` is the client's list, not the catalogue's.** `listCatalogDishes`
   reads both `recipes` and `recipe_suggestions`; `request.exclude` carries what
   the client has on screen from anywhere else, including earlier batches of the

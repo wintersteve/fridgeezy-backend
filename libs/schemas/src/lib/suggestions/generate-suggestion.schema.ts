@@ -167,35 +167,85 @@ export const EnrichedSuggestionResponseSchema = z.object({
 });
 
 /**
- * A dish has been generated and is being checked — hold a slot for it.
+ * How many cards this batch is going to show.
  *
- * `/suggestions/generate` sends each suggestion twice: this frame the instant
- * the model finishes writing its line, then {@link StreamedSuggestionSchema}
- * once the dish has passed the notability gate and been persisted.
+ * ONE frame for the whole batch, re-sent whenever the number changes — not one
+ * frame per dish. A slot is ANONYMOUS: it says "a card is coming", never which
+ * dish, so the client renders `slots - cards.length` skeletons after the cards
+ * it already has and nothing on screen is ever tied to a dish that might not
+ * survive.
  *
- * It carries NOTHING about the dish, deliberately, and that is the whole point.
- * Because it says nothing, nothing it says can turn out to be wrong — the
- * client draws one placeholder per dish genuinely in flight, and a dish that is
- * renamed, deduped away or rejected simply takes its placeholder with it.
+ * ## Why this replaced the per-dish placeholder
  *
- * It replaced a frame that carried the full card off the model's raw output.
- * That one was faster to something readable and wrong twice over: a third to a
- * half of dishes are renamed by the review, so cards visibly retitled
- * themselves; and dedup could resolve a dish to one already on screen, so cards
- * appeared and then vanished. Showing less, sooner, beat showing more, early.
+ * The frame this supersedes (`PendingSuggestionSchema`) was sent the instant
+ * the model wrote a dish's name — before the notability gate, before dedup — so
+ * a placeholder meant "the generator typed something", not "a card is coming".
+ * Every internal retry then leaked onto the screen: four placeholders appeared
+ * as the lines were parsed, two vanished when the gate dropped them as
+ * `obscure`, and two more appeared when the top-up pass refilled the slots. The
+ * user watched the pipeline work.
+ *
+ * A slot is only counted once its dish has cleared the gate AND every dedup
+ * layer — see `onAdmit` in `persist-or-reuse-suggestion.ts` — which is the
+ * earliest moment a card is certain. So the count grows and the skeletons fill
+ * in; it does not churn.
+ *
+ * ## `verified` is what the interstitial waits on
+ *
+ * `false` means dishes are still being judged, so this is a running total and a
+ * low number may only mean the first dish got through. `true` means the
+ * generator's first pass has been judged in full, and the count is now worth
+ * drawing.
+ *
+ * It is a LATCH: it flips false -> true once and never back, even though a
+ * top-up pass may raise `slots` afterwards. That is the distinction it exists
+ * to draw — "this count is trustworthy" is not "this count is final", and only
+ * the first is a question the loading screen can act on. Latching is what keeps
+ * a batch that admitted nothing on its first pass from dropping back into the
+ * interstitial when the top-up starts.
+ *
+ * The client holds its searching interstitial until the first `verified: true`
+ * (or a local timeout, for the occasional multi-second gate call), so it leaves
+ * the loading screen already knowing how many skeletons to draw.
+ *
+ * ## While a top-up is running, it is an AIM rather than a tally
+ *
+ * A pass that admits one dish of four leaves the batch three short, and the
+ * backend immediately asks the model for three more. Across that gap `slots`
+ * reports the four the batch is still working towards, not the one it holds —
+ * otherwise the client would drop its skeletons and sit on a one-card list for
+ * the seconds that pass takes. The final frame reports what was actually
+ * delivered, so a top-up that comes up short costs ONE downward correction at
+ * the end of the stream instead of a list that empties and refills.
+ *
+ * The other case it can decrease in: a dish is admitted just before it is
+ * persisted, so a hard persist failure leaves a slot with no card behind it and
+ * a lower `slots` gives it back. Both are single, late corrections, which is
+ * why this is not typed as monotonic — and both are a different thing from the
+ * churn the per-dish placeholder produced, where rows appeared and vanished
+ * throughout.
  */
-export const PendingSuggestionSchema = z.object({
-    /** Matches the `tempId` on the enriched (or withdrawn) frame for this dish. */
-    tempId: z.string(),
-    pending: z.literal(true),
+export const SuggestionSlotsSchema = z.object({
+    /**
+     * Cards this batch will deliver, including those already sent — or, while a
+     * top-up pass is running, the number it is still aiming for.
+     */
+    slots: z.number().int().nonnegative(),
+    /** The first pass has been judged in full, so this count is worth drawing. */
+    verified: z.boolean(),
 });
 
-export type PendingSuggestionDto = z.infer<typeof PendingSuggestionSchema>;
+export type SuggestionSlotsDto = z.infer<typeof SuggestionSlotsSchema>;
 
 /**
- * The persisted card, carrying the `tempId` of the provisional frame it
- * replaces. A client keying on `tempId` upgrades the card in place; one that
- * ignores it renders the dish twice.
+ * The persisted card. Fills one of the slots {@link SuggestionSlotsSchema}
+ * announced, and is the ONLY frame this endpoint sends that carries a dish.
+ *
+ * Cards arrive in generation order and each one is final — there is no earlier
+ * frame for it to correct, so a client appends by `tempId` rather than
+ * upgrading a placeholder in place. `tempId` is still carried because it is the
+ * stable React key for the row and the id under which a card can be reconciled
+ * if it is ever re-sent.
  *
  * Separate from {@link EnrichedSuggestionResponseSchema} so that type stays the
  * shape of a persisted suggestion everywhere else in the app, with no `tempId`
@@ -204,28 +254,12 @@ export type PendingSuggestionDto = z.infer<typeof PendingSuggestionSchema>;
 export const StreamedSuggestionSchema = EnrichedSuggestionResponseSchema.extend({
     tempId: z.string(),
     /**
-     * Repeated from the provisional frame so the card keeps its "adapted"
-     * marker when this frame replaces it. Not read back from the database —
+     * Carried on the card rather than read back from the database —
      * the row has no such column, deliberately (@see
      * GenerateSuggestionResponseSchema.adaptedFor).
      */
     adaptedFor: z.array(z.string()).optional(),
 });
-
-/**
- * Releases a pending slot that will never become a card.
- *
- * A dish can disappear after {@link PendingSuggestionSchema} has reserved its
- * place: the notability gate may reject it, or dedup may resolve it to
- * something the user already has. The placeholder is on screen by then, so
- * silence would leave it spinning forever.
- */
-export const WithdrawnSuggestionSchema = z.object({
-    tempId: z.string(),
-    withdrawn: z.literal(true),
-});
-
-export type WithdrawnSuggestionDto = z.infer<typeof WithdrawnSuggestionSchema>;
 
 /**
  * Terminal frame: the request itself is out of scope, so no card is coming.

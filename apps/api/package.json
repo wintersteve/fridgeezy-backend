@@ -153,6 +153,13 @@
                     "cwd": "apps/api"
                 }
             },
+            "check-slot-frames": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/slot-frames.check.ts",
+                    "cwd": "apps/api"
+                }
+            },
             "check-dietary-rename": {
                 "executor": "nx:run-commands",
                 "options": {

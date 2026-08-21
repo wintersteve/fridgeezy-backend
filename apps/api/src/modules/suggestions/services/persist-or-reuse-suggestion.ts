@@ -25,6 +25,20 @@ import { verifySuggestionAuthenticity } from "./verify-suggestion-authenticity";
 
 export type { SuggestionOutcome } from "./suggestion-outcome";
 
+/**
+ * The dish, at the moment it is certain to become a card.
+ *
+ * `id` is present only when dedup RESOLVED to a row that already exists; a dish
+ * about to be inserted has a name and nothing else yet, which is exactly why
+ * this is a separate signal rather than an early copy of the outcome.
+ */
+export interface SuggestionAdmission {
+    /** The final, canonical name — the review has already run by this point. */
+    name: string;
+    /** Set when this resolved to an existing row rather than a pending insert. */
+    id?: string;
+}
+
 export interface PersistOrReuseOptions {
     /**
      * Coordinates dedup between the suggestions of ONE request. Omitted by the
@@ -32,6 +46,23 @@ export interface PersistOrReuseOptions {
      */
     batch?: SuggestionBatch;
     suggestionsRepo?: SuggestionsRepository;
+    /**
+     * Fired the moment this dish is certain to become a card — after the
+     * notability gate and after EVERY dedup layer, but before the persist that
+     * takes seconds (ingredient matching, tag matching, dietary classification).
+     *
+     * That gap is the whole point. It is what lets the batch stream announce a
+     * slot the client can draw a skeleton for, knowing the skeleton will be
+     * filled rather than withdrawn — see `SuggestionSlotsSchema`. Announcing at
+     * the top of this function instead would put the model's raw output on
+     * screen, which is what the previous per-dish placeholder frame did and
+     * what made the feed churn.
+     *
+     * Called at most once. **A caller must still handle the outcome**: the one
+     * path that admits and then produces no card is a hard persist failure, and
+     * only the caller can retract the slot it drew.
+     */
+    onAdmit?: (admission: SuggestionAdmission) => void;
 }
 
 /**
@@ -91,7 +122,7 @@ export async function persistOrReuseSuggestion(
     request: Pick<GenerateSuggestionRequestDto, "cuisine">,
     options: PersistOrReuseOptions = {}
 ): Promise<SuggestionOutcome> {
-    const { batch, suggestionsRepo = new SuggestionsRepository() } = options;
+    const { batch, onAdmit, suggestionsRepo = new SuggestionsRepository() } = options;
     const slot = batch?.open();
     let settled = false;
 
@@ -127,6 +158,15 @@ export async function persistOrReuseSuggestion(
         );
 
         if (known) {
+            // Only the suggestion half is a card. An `existing_recipe` hit means
+            // the user already has the dish, and the batch feed drops it.
+            if (known.kind === "suggestion") {
+                onAdmit?.({
+                    name: known.suggestion.name,
+                    id: known.suggestion.id,
+                });
+            }
+
             return settle(known);
         }
 
@@ -235,6 +275,8 @@ export async function persistOrReuseSuggestion(
         // here and falls through to layer 3, where the signature decides.
         const exactMatch = await findSuggestionByName(dish.name, identityCuisine);
         if (exactMatch) {
+            onAdmit?.({ name: exactMatch.name, id: exactMatch.id });
+
             return settle({
                 kind: "suggestion",
                 suggestion: exactMatch,
@@ -299,6 +341,8 @@ export async function persistOrReuseSuggestion(
                     console.log(
                         `[Suggestions] Reusing "${existing.name}" for "${dish.name}" (score ${candidate.score.toFixed(3)}${autoMerge ? "" : ", adjudicated"})`
                     );
+                    onAdmit?.({ name: existing.name, id: existing.id });
+
                     return settle({
                         kind: "suggestion",
                         suggestion: existing,
@@ -307,6 +351,14 @@ export async function persistOrReuseSuggestion(
                 }
             }
         }
+
+        // ADMITTED. Every layer that could have removed this dish has passed on
+        // it, so a card is now certain barring an outright database failure.
+        // Announced BEFORE the persist rather than after because the persist is
+        // the slow half — ingredient matching, tag matching and dietary
+        // classification, seconds of it — and that is the window the client's
+        // skeleton is there to cover.
+        onAdmit?.({ name: dish.name });
 
         // Step 4: persist. The signature embedding is the one computed above —
         // built from the final name, so nothing has to be re-embedded.

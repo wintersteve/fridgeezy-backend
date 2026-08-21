@@ -1,9 +1,8 @@
 import {
     GenerateSuggestionRequestSchema,
-    PendingSuggestionSchema,
     RejectedSuggestionRequestSchema,
     StreamedSuggestionSchema,
-    WithdrawnSuggestionSchema,
+    SuggestionSlotsSchema,
 } from "@fridgeezy/schemas";
 import { createStreamHandler } from "@fridgeezy/streaming-server";
 
@@ -11,10 +10,15 @@ import { generateSuggestionsStream } from "../../services";
 
 export const generateSuggestion = createStreamHandler({
     requestSchema: GenerateSuggestionRequestSchema,
-    // Four frame shapes: a pending slot sent as soon as the model writes the
-    // dish, then the persisted card carrying the same tempId, a withdrawal for
-    // a slot that will never become one, and a terminal rejection for a request
-    // this catalog will never answer.
+    // Three frame shapes: how many cards this batch will show, re-sent as that
+    // number is learned; the cards themselves, in generation order; and a
+    // terminal rejection for a request this catalog will never answer.
+    //
+    // There is deliberately no per-dish placeholder and no withdrawal any more.
+    // Both existed because a slot used to be announced the moment the model
+    // wrote a name — before the notability gate, before dedup — so the client
+    // drew placeholders the backend then had to take back. Nothing is announced
+    // now until a card is certain; see `SuggestionSlotsSchema`.
     //
     // This list is DOCUMENTATION, not enforcement — it read the other way round
     // until 2026-08-06, which is worth knowing before trusting it.
@@ -24,9 +28,8 @@ export const generateSuggestion = createStreamHandler({
     // contradicts it is not caught. Changing a frame means reading the client,
     // not waiting for a type error.
     responseSchema: [
-        PendingSuggestionSchema,
+        SuggestionSlotsSchema,
         StreamedSuggestionSchema,
-        WithdrawnSuggestionSchema,
         RejectedSuggestionRequestSchema,
     ],
     handler: async ({ body }) => {

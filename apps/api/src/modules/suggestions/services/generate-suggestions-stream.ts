@@ -2,16 +2,14 @@ import { randomUUID } from "node:crypto";
 
 import { generateStream, type LlmProvider } from "@fridgeezy/llm";
 import {
-    PendingSuggestionDto,
     StreamedSuggestionDto,
     RejectedSuggestionRequestDto,
-    WithdrawnSuggestionDto,
+    SuggestionSlotsDto,
     GenerateSuggestionRequestDto,
     GenerateSuggestionResponseDto,
     GenerateSuggestionResponseSchema,
 } from "@fridgeezy/schemas";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
-import { canonicalizeName } from "@fridgeezy/toolkit";
 import { z } from "zod/v4";
 
 import { buildSuggestionsUserPrompt } from "./build-suggestions-user-prompt";
@@ -21,6 +19,7 @@ import {
     FOOD_ONLY_RULE,
 } from "./constraint-rules";
 import { DIFFICULTY_RULE } from "./difficulty-rules";
+import { createFrameQueue, createGate } from "./frame-queue";
 import {
     buildExistingDishesBlock,
     listCatalogDishes,
@@ -31,6 +30,7 @@ import {
     DISH_NAME_RULE,
 } from "./naming-rules";
 import { persistOrReuseSuggestion } from "./persist-or-reuse-suggestion";
+import { createSlotLedger, type SlotLedger } from "./slot-ledger";
 import { createSuggestionBatch, type SuggestionBatch } from "./suggestion-batch";
 import type { SuggestionOutcome } from "./suggestion-outcome";
 import {
@@ -145,17 +145,12 @@ export const SUGGESTIONS_SYSTEM_PROMPT = buildSuggestionsSystemPrompt(
     SUGGESTIONS_PER_BATCH
 );
 
-/**
- * Holds this dish's place in the list while it is checked.
- *
- * Carries no name, no description, nothing — see `PendingSuggestionSchema`. The
- * client draws a placeholder, and because the placeholder makes no claim, the
- * dish behind it is free to be renamed, deduped or rejected without anything on
- * screen having to contradict itself.
- */
-function pendingSlot(tempId: string): PendingSuggestionDto {
-    return { tempId, pending: true };
-}
+
+/** Everything this endpoint can put on the wire. */
+type SuggestionFrame =
+    | SuggestionSlotsDto
+    | StreamedSuggestionDto
+    | RejectedSuggestionRequestDto;
 
 /**
  * `provider` overrides `LLM_PROVIDER` for this call only, which is how the two
@@ -166,12 +161,7 @@ function pendingSlot(tempId: string): PendingSuggestionDto {
 export async function* generateSuggestionsStream(
     request: GenerateSuggestionRequestDto,
     provider?: LlmProvider
-): AsyncGenerator<
-    | PendingSuggestionDto
-    | StreamedSuggestionDto
-    | WithdrawnSuggestionDto
-    | RejectedSuggestionRequestDto
-> {
+): AsyncGenerator<SuggestionFrame> {
     const userPrompt = buildSuggestionsUserPrompt(request);
 
     // One coordinator for the WHOLE request, spanning both passes: a top-up dish
@@ -185,17 +175,7 @@ export async function* generateSuggestionsStream(
     const catalogNames = await listCatalogDishes(userPrompt);
     const clientExcluded = request.exclude ?? [];
 
-    // Canonical keys of dishes that must NOT produce a card, either because the
-    // client already shows them or because an earlier pass of THIS response did.
-    // Keyed the same way the database keys `canonical_id`, so "Tarte Tatin" and
-    // "tarte  tatin!" are one entry.
-    const suppressed = new Set(
-        clientExcluded.map(canonicalizeName).filter(Boolean) as string[]
-    );
-    /** Suggestion row ids this response has already sent a card for. */
-    const emittedIds = new Set<string>();
-    /** Names this response delivered, fed to the top-up pass as exclusions. */
-    const emittedNames: string[] = [];
+    const ledger = createSlotLedger(clientExcluded);
     /**
      * Set when a dish was dropped for being a drink.
      *
@@ -218,7 +198,7 @@ export async function* generateSuggestionsStream(
     let generatedLastPass = 0;
 
     for (let pass = 0; pass < MAX_PASSES; pass++) {
-        const shortfall = SUGGESTIONS_PER_BATCH - emittedNames.length;
+        const shortfall = SUGGESTIONS_PER_BATCH - ledger.count;
         if (shortfall <= 0) break;
 
         // The second pass only runs when dedup actually collapsed something, so
@@ -232,7 +212,7 @@ export async function* generateSuggestionsStream(
         const exclusions = buildExistingDishesBlock([
             ...catalogNames,
             ...clientExcluded,
-            ...emittedNames,
+            ...ledger.names,
         ]);
 
         yield* runGenerationPass({
@@ -241,9 +221,7 @@ export async function* generateSuggestionsStream(
             provider,
             request,
             batch,
-            suppressed,
-            emittedIds,
-            onDelivered: (name) => emittedNames.push(name),
+            ledger,
             onOutOfScope: () => {
                 outOfScope = true;
             },
@@ -256,7 +234,7 @@ export async function* generateSuggestionsStream(
         // slots that dedup collapsed — a case where asking again plausibly
         // returns something new. "Mojito" asked again returns a mojito, so a
         // second pass buys one more generation call plus another round of
-        // authenticity calls to withdraw the same cards. This is the one drop
+        // authenticity calls to drop the same dishes. This is the one drop
         // reason that must break the loop rather than drive it.
         //
         // Same for a pass that came back SHORT. It filled every slot it could
@@ -264,13 +242,28 @@ export async function* generateSuggestionsStream(
         // request — asking again cannot produce a dish it just declined to name
         // without going down the tail. Only a pass that delivered a full `count`
         // of lines and then lost some to dedup is worth refilling.
-        if (outOfScope || generatedLastPass < shortfall) break;
+        const saturated = outOfScope || generatedLastPass < shortfall;
+        const willTopUp =
+            !saturated &&
+            pass + 1 < MAX_PASSES &&
+            ledger.count < SUGGESTIONS_PER_BATCH;
+
+        // Now the pass can be reported. A top-up about to run means the batch is
+        // still working towards the full four, and saying "one card" here would
+        // empty the list of skeletons and leave it sitting on a single card for
+        // however long that pass takes.
+        ledger.aimFor(willTopUp ? SUGGESTIONS_PER_BATCH : null);
+
+        const answer = ledger.frame(true);
+        if (answer) yield answer;
+
+        if (saturated) break;
     }
 
     // Only when the request produced NOTHING. A request that yielded two real
     // dishes alongside a stray drink was satisfiable, and telling the user it
     // was rejected would contradict the cards already on their screen.
-    if (outOfScope && emittedNames.length === 0) {
+    if (outOfScope && ledger.count === 0) {
         console.log(
             "[Suggestions] Rejecting request — asked for drinks, which this catalog does not hold"
         );
@@ -284,37 +277,43 @@ interface GenerationPassOptions {
     provider?: LlmProvider;
     request: GenerateSuggestionRequestDto;
     batch: SuggestionBatch;
-    suppressed: Set<string>;
-    emittedIds: Set<string>;
-    onDelivered: (name: string) => void;
+    /** Request-scoped, so a top-up pass adds to the count rather than restarting it. */
+    ledger: SlotLedger;
     /** Called when a dish was dropped as a drink — see `outOfScope` above. */
     onOutOfScope: () => void;
     /** How many dish lines the model wrote — see `generatedLastPass` above. */
     onGenerated: (lines: number) => void;
 }
 
-
 /**
- * One model call: stream its JSONL lines, persist each concurrently, and yield
- * the frames.
+ * One model call: stream its JSONL lines, judge each concurrently, and yield the
+ * frames.
  *
- * Persist/dedup each suggestion CONCURRENTLY: the work starts as soon as its
- * JSONL line is parsed, rather than one at a time. Each suggestion's dedup +
- * authenticity + ingredient/tag matching is independent; the only shared writes
- * are new ingredient/tag rows, and their creates are conflict-safe (reuse the row
- * that wins a duplicate-key race). What the concurrency used to cost — siblings
- * being invisible to each other's dedup — is now handled in memory by the shared
- * {@link SuggestionBatch}, so it no longer has to be paid for in duplicate rows.
+ * Three things run at once and they cannot be collapsed into one loop, which is
+ * why this is built around a queue rather than around `yield` alone:
  *
- * Consumption and yielding are interleaved. An earlier version drained the model
- * stream completely before entering a second loop that yielded — so however
- * concurrent the persistence was, the first card could not reach the client until
- * the LAST suggestion had been generated. Measured, that put every card at ~9.9s
- * when the first was ready at ~7.8s.
+ * - **Lines are read** as the model writes them, each starting its own
+ *   `persistOrReuseSuggestion` immediately. Their dedup, authenticity and
+ *   ingredient matching are independent; the only shared writes are new
+ *   ingredient/tag rows, whose creates are conflict-safe. What the concurrency
+ *   used to cost — siblings being invisible to each other's dedup — is handled
+ *   in memory by the shared {@link SuggestionBatch}.
+ * - **Slots are announced out of order**, the instant each dish is admitted.
+ *   This is the part a single loop got wrong. Cards must go out in generation
+ *   order, so a loop that also owned the slot count could not report dish four's
+ *   admission until dish one's had landed — and one slow gate call (they range
+ *   from 0.7s to 5.5s) would hold the whole count back past the moment the
+ *   client stops showing its interstitial. Announcing admissions as they happen
+ *   is what makes the skeleton count right at the only moment it matters.
+ * - **Cards are emitted in generation order**, front of the queue first, so a
+ *   fast fourth dish never overtakes a slow first one. The client renders the
+ *   batch as an ordered list.
  *
- * Order is still generation order: `pending` is consumed from the front, so a
- * fast fourth suggestion never overtakes a slow first one. That matters because
- * the client renders the batch as an ordered list.
+ * Consumption and yielding stay interleaved, which an earlier version got wrong
+ * in the other direction: it drained the model stream completely before entering
+ * a second loop that yielded, so however concurrent the persistence was, the
+ * first card could not reach the client until the LAST dish had been generated.
+ * Measured, that put every card at ~9.9s when the first was ready at ~7.8s.
  */
 async function* runGenerationPass({
     count,
@@ -322,198 +321,189 @@ async function* runGenerationPass({
     provider,
     request,
     batch,
-    suppressed,
-    emittedIds,
-    onDelivered,
+    ledger,
     onOutOfScope,
     onGenerated,
-}: GenerationPassOptions): AsyncGenerator<
-    PendingSuggestionDto | StreamedSuggestionDto | WithdrawnSuggestionDto
-> {
-    const stream = generateStream({
-        model: { openai: "gpt-4.1" },
-        label: "suggestions.batch",
-        system: buildSuggestionsSystemPrompt(count),
-        user,
-        provider,
-    });
+}: GenerationPassOptions): AsyncGenerator<SuggestionFrame> {
+    const queue = createFrameQueue<SuggestionFrame>();
+
+    const push = (frame: SuggestionFrame | null) => {
+        if (frame) queue.push(frame);
+    };
 
     /**
-     * How many dish lines this pass produced.
+     * Turn one settled outcome into the frames it owes the client.
      *
-     * Separate from "how many survived". A pass that wrote four dishes and had
-     * all four collapsed by dedup SHOULD top up — that is what the second pass
-     * is for. A pass that wrote fewer than it was asked for is reporting that
-     * the well-known dishes for this request are exhausted, and topping that up
-     * only pushes it into the tail.
+     * Most outcomes owe nothing. A dish dropped by the gate or collapsed by
+     * dedup never held a slot, so there is nothing on screen to correct — which
+     * is the whole point of admitting late.
      */
-    let generatedLines = 0;
-
-    const pending: Promise<{
-        outcome: SuggestionOutcome;
-        tempId: string;
-        /** Per-request, so it can only come from the frame the model wrote. */
-        adaptedFor?: string[];
-    }>[] = [];
-    // Two line shapes, and the order matters: `processJsonlStream` reports the
-    // index of the FIRST schema that matched, so the rejection line is second
-    // and stays unambiguous — a dish never validates against it.
-    const source = processJsonlStream(stream, [
-        GenerateSuggestionResponseSchema,
-        GeneratorRejectionSchema,
-    ]);
-    let done = false;
-
-    const emit = function* (
+    const framesFor = (
         outcome: SuggestionOutcome,
         tempId: string,
         adaptedFor?: string[]
-    ): Generator<StreamedSuggestionDto | WithdrawnSuggestionDto> {
-        // Every dish has a placeholder on screen from the moment it was
-        // generated, so every drop has one to take away. No conditional.
-        const withdraw = function* (): Generator<WithdrawnSuggestionDto> {
-            yield { tempId, withdrawn: true };
-        };
-
+    ): SuggestionFrame[] => {
         // A dish the user already has as a recipe is not surfaced: this endpoint
         // returns suggestion cards, and re-offering something already in the
         // catalog is exactly the duplication being guarded against. The prompt
         // exclusion above makes this a rare fallback.
-        //
-        // Withdrawn rather than silently skipped when a card was already sent —
-        // saying nothing would leave a card on screen that never resolves and
-        // cannot be opened.
         if (outcome.kind === "existing_recipe") {
             console.log(
-                `[Suggestions] Withdrawing "${outcome.recipe.name}" — already in the catalog as a recipe`
+                `[Suggestions] Skipping "${outcome.recipe.name}" — already in the catalog as a recipe`
             );
-            yield* withdraw();
-            return;
+            return [];
         }
 
-        // Same for a dish the authenticity gate rejected, and for one the batch
-        // coordinator collapsed into an earlier sibling.
-        //
-        // A drink is reported upward as well, because it is the one reason that
-        // says something about the REQUEST rather than about this dish. The
-        // caller uses that to stop topping up and to send the terminal frame —
-        // and it must still happen when nothing was drawn, since the gate now
-        // rejects the drink before any card exists.
         if (outcome.kind === "dropped") {
+            // A drink is reported upward, because it is the one reason that says
+            // something about the REQUEST rather than about this dish. The
+            // caller uses it to stop topping up and to send the terminal frame.
             if (outcome.reason === "not_food") onOutOfScope();
-            yield* withdraw();
-            return;
+
+            // `persist_failed` is the only drop that can follow an admission —
+            // every other one happens before the dish is certain. Give the slot
+            // back so the client stops holding a skeleton for it.
+            if (ledger.isAdmitted(tempId)) {
+                ledger.retract(tempId);
+
+                const frame = ledger.frame();
+                return frame ? [frame] : [];
+            }
+
+            return [];
         }
 
-        // Dedup resolving to an EXISTING suggestion row is a success, not a
-        // duplicate — unless this response already showed that row, or the
-        // client says it is already on screen. Then emitting it renders the same
-        // dish a second time under a different tempId, with an identical `id`
-        // the client has no reason to reconcile.
-        //
-        // This is the visible half of the duplicate-card bug: the database
-        // dedup was working, and its result was being drawn as a new card
-        // anyway.
-        const { id, name } = outcome.suggestion;
-        const key = canonicalizeName(name);
+        // Admitted or suppressed was decided when the ledger saw this dish. A
+        // miss here means it was already on screen and was never counted.
+        if (!ledger.isAdmitted(tempId)) return [];
 
-        if (emittedIds.has(id) || (key && suppressed.has(key))) {
-            console.log(
-                `[Suggestions] Withdrawing "${name}" — already shown in this feed`
-            );
-            yield* withdraw();
-            return;
-        }
+        ledger.deliver(tempId, outcome.suggestion.id);
 
-        emittedIds.add(id);
-        if (key) suppressed.add(key);
-        onDelivered(name);
-
-        // Carries the same tempId as the provisional card, which is how the
-        // client replaces it rather than appending a second one.
-        //
-        // `adaptedFor` rides along from the model's frame rather than the
-        // persisted row: the row is shared by dedup, the adaptation is not.
-        yield { ...outcome.suggestion, tempId, adaptedFor };
+        return [{ ...outcome.suggestion, tempId, adaptedFor }];
     };
 
-    while (!done || pending.length > 0) {
-        if (!done) {
-            const next = await source.next();
+    const produce = async () => {
+        const stream = generateStream({
+            model: { openai: "gpt-4.1" },
+            label: "suggestions.batch",
+            system: buildSuggestionsSystemPrompt(count),
+            user,
+            provider,
+        });
 
-            if (next.done) {
-                done = true;
-            } else if (next.value.schemaIndex === REJECTION_LINE) {
-                // The generator declined the request rather than producing a
-                // dish. Reported through the same channel the gate uses, so the
-                // caller has one thing to react to. Neither draws a card any
-                // more — the gate's version used to arrive after four had been
-                // drawn and withdrawn — so now they differ only in cost: this
-                // one is caught for free, the gate's costs a review call each.
-                console.log(
-                    "[Suggestions] Generator declined the request — asked for drinks"
-                );
-                onOutOfScope();
-            } else {
-                generatedLines++;
-                const suggestion = next.value.parsed as GenerateSuggestionResponseDto;
-                const tempId = randomUUID();
+        // Two line shapes, and the order matters: `processJsonlStream` reports
+        // the index of the FIRST schema that matched, so the rejection line is
+        // second and stays unambiguous — a dish never validates against it.
+        const source = processJsonlStream(stream, [
+            GenerateSuggestionResponseSchema,
+            GeneratorRejectionSchema,
+        ]);
 
-                pending.push(
-                    persistOrReuseSuggestion(suggestion, request, { batch }).then(
-                        (outcome) => ({
+        /**
+         * How many dish lines this pass produced.
+         *
+         * Separate from "how many survived". A pass that wrote four dishes and
+         * had all four collapsed by dedup SHOULD top up — that is what the
+         * second pass is for. A pass that wrote fewer than it was asked for is
+         * reporting that the well-known dishes for this request are exhausted,
+         * and topping that up only pushes it into the tail.
+         */
+        let generatedLines = 0;
+        let linesDone = false;
+
+        const judged: Promise<{
+            outcome: SuggestionOutcome;
+            tempId: string;
+            /** Per-request, so it can only come from the frame the model wrote. */
+            adaptedFor?: string[];
+        }>[] = [];
+        const arrivals = createGate();
+
+        const readLines = async () => {
+            try {
+                for (;;) {
+                    const next = await source.next();
+                    if (next.done) break;
+
+                    if (next.value.schemaIndex === REJECTION_LINE) {
+                        // The generator declined the request rather than
+                        // producing a dish. Reported through the same channel
+                        // the gate uses, so the caller has one thing to react
+                        // to. Neither draws a card — this one is caught for
+                        // free, the gate's costs a review call each.
+                        console.log(
+                            "[Suggestions] Generator declined the request — asked for drinks"
+                        );
+                        onOutOfScope();
+                        continue;
+                    }
+
+                    generatedLines++;
+
+                    const suggestion = next.value
+                        .parsed as GenerateSuggestionResponseDto;
+                    const tempId = randomUUID();
+
+                    judged.push(
+                        persistOrReuseSuggestion(suggestion, request, {
+                            batch,
+                            onAdmit: (admission) => {
+                                ledger.admit(tempId, admission);
+                                push(ledger.frame());
+                            },
+                        }).then((outcome) => ({
                             outcome,
                             tempId,
                             adaptedFor: suggestion.adaptedFor,
-                        })
-                    )
-                );
+                        }))
+                    );
 
-                // Reserve this dish's place the instant the model names it, and
-                // say nothing about it. The client draws a placeholder, so the
-                // list shows exactly as many pending slots as there are dishes
-                // in flight — not a guessed batch size — and the dish behind it
-                // stays free to be renamed by the review or removed by dedup
-                // without anything on screen having to change its mind.
-                yield pendingSlot(tempId);
+                    arrivals.open();
+                }
+            } finally {
+                linesDone = true;
+                arrivals.open();
             }
-        }
+        };
 
-        // Drain everything already settled before reading more from the model,
-        // so a card is never held back behind a line still being generated.
-        //
-        // Order is still generation order: `pending` is consumed from the front,
-        // so a fast fourth suggestion never overtakes a slow first one. That
-        // matters because the client renders the batch as an ordered list.
-        while (
-            pending.length > 0 &&
-            (done || (await isSettled(pending[0])))
-        ) {
-            const settled = await pending.shift();
+        const emitCards = async () => {
+            for (let i = 0; ; i++) {
+                // No `await` between the test and the wait, so a line arriving
+                // in between cannot be missed.
+                while (i >= judged.length) {
+                    if (linesDone) return;
+                    await arrivals.next();
+                }
 
-            if (settled) {
-                yield* emit(
+                const settled = await judged[i];
+
+                for (const frame of framesFor(
                     settled.outcome,
                     settled.tempId,
                     settled.adaptedFor
-                );
+                )) {
+                    push(frame);
+                }
             }
-        }
-    }
+        };
 
-    onGenerated(generatedLines);
-}
+        // `emitCards` returns once it has consumed every line `readLines`
+        // produced, so this resolving means every dish of this pass has been
+        // judged. The `verified` frame that says so is sent by the CALLER, not
+        // here: whether a top-up pass follows is its decision, and that decides
+        // whether the count it reports is the batch's answer or just its
+        // progress so far.
+        await Promise.all([readLines(), emitCards()]);
 
-/**
- * Whether a promise has already resolved, without waiting on it.
- *
- * Used to decide "is the next card ready *now*" while the model is still
- * producing lines. `Promise.race` against an already-resolved sentinel settles
- * in one microtask, so this never delays reading the next line.
- */
-async function isSettled(promise: Promise<unknown>): Promise<boolean> {
-    const pendingMarker = Symbol("pending");
+        onGenerated(generatedLines);
+    };
 
-    return (await Promise.race([promise, Promise.resolve(pendingMarker)])) !==
-        pendingMarker;
+    const producer = produce().finally(() => queue.close());
+
+    yield* queue.drain();
+
+    // Surface a failure that happened while the queue was being drained. The
+    // drain itself ends cleanly on `close()`, so without this a model or
+    // database error would look like an empty batch.
+    await producer;
 }

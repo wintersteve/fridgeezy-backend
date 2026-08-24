@@ -223,6 +223,13 @@
                     "cwd": "apps/database"
                 }
             },
+            "check-substitution-recording": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/check-substitution-recording.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "check-ingredient-identity": {
                 "executor": "nx:run-commands",
                 "options": {

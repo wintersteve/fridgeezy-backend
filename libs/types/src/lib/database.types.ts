@@ -258,7 +258,7 @@ export type Database = {
         }
         Insert: {
           alias: string
-          alias_canonical_id?: string
+          alias_canonical_id: string
           created_at?: string
           id?: string
           ingredient_id: string
@@ -274,6 +274,138 @@ export type Database = {
           {
             foreignKeyName: "ingredient_aliases_ingredient_id_fkey"
             columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "ingredient_aliases_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "ingredient_aliases_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "ingredient_aliases_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "ingredient_aliases_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ingredient_merge_reviews: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          evidence: Json
+          id: string
+          ingredient_a: string
+          ingredient_b: string
+          note: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          evidence?: Json
+          id?: string
+          ingredient_a: string
+          ingredient_b: string
+          note?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          evidence?: Json
+          id?: string
+          ingredient_a?: string
+          ingredient_b?: string
+          note?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingredient_merge_reviews_ingredient_a_fkey"
+            columns: ["ingredient_a"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "ingredient_merge_reviews_ingredient_a_fkey"
+            columns: ["ingredient_a"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "ingredient_merge_reviews_ingredient_a_fkey"
+            columns: ["ingredient_a"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "ingredient_merge_reviews_ingredient_a_fkey"
+            columns: ["ingredient_a"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "ingredient_merge_reviews_ingredient_a_fkey"
+            columns: ["ingredient_a"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingredient_merge_reviews_ingredient_b_fkey"
+            columns: ["ingredient_b"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "ingredient_merge_reviews_ingredient_b_fkey"
+            columns: ["ingredient_b"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "ingredient_merge_reviews_ingredient_b_fkey"
+            columns: ["ingredient_b"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "ingredient_merge_reviews_ingredient_b_fkey"
+            columns: ["ingredient_b"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "ingredient_merge_reviews_ingredient_b_fkey"
+            columns: ["ingredient_b"]
             isOneToOne: false
             referencedRelation: "ingredients"
             referencedColumns: ["id"]
@@ -356,53 +488,33 @@ export type Database = {
             foreignKeyName: "ingredients_parent_id_fkey"
             columns: ["parent_id"]
             isOneToOne: false
-            referencedRelation: "ingredients"
-            referencedColumns: ["id"]
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
           },
-        ]
-      }
-      ingredient_merge_reviews: {
-        Row: {
-          created_at: string
-          decided_at: string | null
-          evidence: Json
-          id: string
-          ingredient_a: string
-          ingredient_b: string
-          note: string | null
-          status: string
-        }
-        Insert: {
-          created_at?: string
-          decided_at?: string | null
-          evidence?: Json
-          id?: string
-          ingredient_a: string
-          ingredient_b: string
-          note?: string | null
-          status?: string
-        }
-        Update: {
-          created_at?: string
-          decided_at?: string | null
-          evidence?: Json
-          id?: string
-          ingredient_a?: string
-          ingredient_b?: string
-          note?: string | null
-          status?: string
-        }
-        Relationships: [
           {
-            foreignKeyName: "ingredient_merge_reviews_ingredient_a_fkey"
-            columns: ["ingredient_a"]
+            foreignKeyName: "ingredients_parent_id_fkey"
+            columns: ["parent_id"]
             isOneToOne: false
-            referencedRelation: "ingredients"
-            referencedColumns: ["id"]
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
           },
           {
-            foreignKeyName: "ingredient_merge_reviews_ingredient_b_fkey"
-            columns: ["ingredient_b"]
+            foreignKeyName: "ingredients_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "ingredients_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "ingredients_parent_id_fkey"
+            columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "ingredients"
             referencedColumns: ["id"]
@@ -530,6 +642,34 @@ export type Database = {
             foreignKeyName: "profile_blacklisted_ingredients_ingredient_id_fkey"
             columns: ["ingredient_id"]
             isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "profile_blacklisted_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "profile_blacklisted_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "profile_blacklisted_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "profile_blacklisted_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
             referencedRelation: "ingredients"
             referencedColumns: ["id"]
           },
@@ -622,6 +762,156 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      profile_ingredient_substitutions: {
+        Row: {
+          created_at: string
+          cuisine: string | null
+          dish_form: string | null
+          id: string
+          profile_id: string
+          ratio: string | null
+          recipe_id: string
+          recipe_ingredient_id: string
+          replaced_canonical_id: string
+          replaced_ingredient_id: string
+          substitute_canonical_id: string
+          substitute_ingredient_id: string | null
+          substitute_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          cuisine?: string | null
+          dish_form?: string | null
+          id?: string
+          profile_id: string
+          ratio?: string | null
+          recipe_id: string
+          recipe_ingredient_id: string
+          replaced_canonical_id: string
+          replaced_ingredient_id: string
+          substitute_canonical_id: string
+          substitute_ingredient_id?: string | null
+          substitute_name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          cuisine?: string | null
+          dish_form?: string | null
+          id?: string
+          profile_id?: string
+          ratio?: string | null
+          recipe_id?: string
+          recipe_ingredient_id?: string
+          replaced_canonical_id?: string
+          replaced_ingredient_id?: string
+          substitute_canonical_id?: string
+          substitute_ingredient_id?: string | null
+          substitute_name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_ingredient_substitutions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_recipe_ingredient_id_fkey"
+            columns: ["recipe_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_replaced_ingredient_id_fkey"
+            columns: ["replaced_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_replaced_ingredient_id_fkey"
+            columns: ["replaced_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_replaced_ingredient_id_fkey"
+            columns: ["replaced_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_replaced_ingredient_id_fkey"
+            columns: ["replaced_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_replaced_ingredient_id_fkey"
+            columns: ["replaced_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_substitute_ingredient_id_fkey"
+            columns: ["substitute_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_substitute_ingredient_id_fkey"
+            columns: ["substitute_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_substitute_ingredient_id_fkey"
+            columns: ["substitute_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_substitute_ingredient_id_fkey"
+            columns: ["substitute_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "profile_ingredient_substitutions_substitute_ingredient_id_fkey"
+            columns: ["substitute_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profile_prompts: {
         Row: {
@@ -930,6 +1220,34 @@ export type Database = {
             foreignKeyName: "recipe_ingredients_ingredient_id_fkey"
             columns: ["ingredient_id"]
             isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "recipe_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "recipe_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "recipe_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "recipe_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
             referencedRelation: "ingredients"
             referencedColumns: ["id"]
           },
@@ -1043,6 +1361,34 @@ export type Database = {
           recipe_suggestion_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "recipe_suggestion_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "recipe_suggestion_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "recipe_suggestion_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "recipe_suggestion_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
           {
             foreignKeyName: "recipe_suggestion_ingredients_ingredient_id_fkey"
             columns: ["ingredient_id"]
@@ -1774,20 +2120,7 @@ export type Database = {
         Args: { p_from: string; p_into: string }
         Returns: undefined
       }
-      merge_ingredients_batch: {
-        Args: { p_pairs: Json }
-        Returns: Json
-      }
-      record_merge_review: {
-        Args: {
-          p_a: string
-          p_b: string
-          p_evidence?: Json
-          p_note?: string
-          p_status?: string
-        }
-        Returns: string
-      }
+      merge_ingredients_batch: { Args: { p_pairs: Json }; Returns: Json }
       merge_recipe: {
         Args: { p_from: string; p_into: string }
         Returns: undefined
@@ -1882,6 +2215,35 @@ export type Database = {
         }[]
       }
       recipe_is_visible: { Args: { p_created_by: string }; Returns: boolean }
+      record_ingredient_substitution: {
+        Args: {
+          p_ratio?: string
+          p_recipe_ingredient_id: string
+          p_substitute_name: string
+        }
+        Returns: {
+          created_at: string
+          cuisine: string | null
+          dish_form: string | null
+          id: string
+          profile_id: string
+          ratio: string | null
+          recipe_id: string
+          recipe_ingredient_id: string
+          replaced_canonical_id: string
+          replaced_ingredient_id: string
+          substitute_canonical_id: string
+          substitute_ingredient_id: string | null
+          substitute_name: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profile_ingredient_substitutions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       record_menu: {
         Args: { p_courses: Json; p_main_recipe_id: string; p_name: string }
         Returns: {
@@ -1901,6 +2263,16 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      record_merge_review: {
+        Args: {
+          p_a: string
+          p_b: string
+          p_evidence?: Json
+          p_note?: string
+          p_status?: string
+        }
+        Returns: string
       }
       record_prompt: {
         Args: {

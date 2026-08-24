@@ -192,6 +192,7 @@ const buildUserPrompt = ({
         .join("\n");
 
 export const promoteSuggestion = createStreamHandler({
+    route: "suggestions.promote",
     requestSchema: PromoteSuggestionRequestSchema,
     responseSchema: [
         HeaderSchema,

@@ -68,13 +68,35 @@ async function areSame(a: string, b: string): Promise<boolean> {
 }
 
 async function main() {
-    const { data: ingredients, error } = await supabaseAdmin
-        .from("ingredients")
-        .select("id, name, canonical_id, created_at")
-        .order("created_at", { ascending: true });
+    // PAGINATED, and it has to be. PostgREST caps an unbounded select at 1000
+    // rows and reports nothing about the truncation — so on a 1027-row
+    // catalogue this scanned 1000 and silently declared the last 27 clean.
+    // That is the same shape as the alias lookup this whole effort exists to
+    // fix: a check that reads as full coverage and is not, failing by omission
+    // rather than by error. `check-ingredient-identity` hit it first (its own
+    // comment records 67 rows dropped) and paginates for the same reason.
+    //
+    // Ordered by `created_at` THEN `id`: the cluster step keeps the oldest
+    // member as canonical, so the order is load-bearing, and `created_at`
+    // alone is not a total order — ties across a page boundary can repeat or
+    // skip a row.
+    const ingredients: Ing[] = [];
+    const pageSize = 500;
+    for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await supabaseAdmin
+            .from("ingredients")
+            .select("id, name, canonical_id, created_at")
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(offset, offset + pageSize - 1);
 
-    if (error) throw new Error(error.message);
-    if (!ingredients || ingredients.length === 0) {
+        if (error) throw new Error(error.message);
+        if (!data || data.length === 0) break;
+        ingredients.push(...(data as Ing[]));
+        if (data.length < pageSize) break;
+    }
+
+    if (ingredients.length === 0) {
         console.log("No ingredients found. Nothing to do!");
         return;
     }

@@ -60,17 +60,34 @@ interface Row {
 }
 
 async function unclassifiedIngredients(): Promise<Row[]> {
-    let query = supabaseAdmin.from("ingredients").select("id, name").order("name");
+    // PAGINATED: PostgREST truncates an unbounded select at 1000 rows and says
+    // nothing. On a 1027-row catalogue a DIET_RECLASSIFY run scanned 1000 and
+    // left the last 27 on their old verdict — and per CLAUDE.md an
+    // unclassified ingredient withdraws its dish from every dietary filter
+    // with nothing to report it, so the failure is silent by construction.
+    // `name` is uniquely constrained, so it is a total order and pages cannot
+    // repeat or skip.
+    const rowsAll: Row[] = [];
+    const pageSize = 500;
+    for (let offset = 0; ; offset += pageSize) {
+        let query = supabaseAdmin
+            .from("ingredients")
+            .select("id, name")
+            .order("name")
+            .range(offset, offset + pageSize - 1);
 
-    if (!RECLASSIFY) {
-        query = query.is("dietary_classified_at", null);
+        if (!RECLASSIFY) {
+            query = query.is("dietary_classified_at", null);
+        }
+
+        const { data, error } = await query;
+        if (error) throw new Error(`ingredients: ${error.message}`);
+        if (!data || data.length === 0) break;
+        rowsAll.push(...data);
+        if (data.length < pageSize) break;
     }
 
-    const { data, error } = await query;
-
-    if (error) throw new Error(`ingredients: ${error.message}`);
-
-    let rows = data ?? [];
+    let rows = rowsAll;
 
     if (ONLY.length > 0) {
         rows = rows.filter((row) => ONLY.includes(row.name.toLowerCase()));

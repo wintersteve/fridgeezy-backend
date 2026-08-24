@@ -198,6 +198,7 @@ IMPORTANT CONSTRAINTS:
 };
 
 export const escalateDifficulty = createStreamHandler({
+    route: "recipes.escalate",
     requestSchema: EscalateDifficultyRequestSchema,
     responseSchema: [
         HeaderSchema,

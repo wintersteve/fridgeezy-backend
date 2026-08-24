@@ -64,14 +64,19 @@ export async function resolveIngredientIds(
     }
 
     if (unresolved.length > 0) {
-        const byAlias = await repository.findByAliases(
-            unresolved.map((name) => name.toLowerCase())
+        // Keyed on the canonical form, like the persist path. The hand-rolled
+        // `.toLowerCase()` this replaces was a partial workaround for the same
+        // case-sensitivity defect and only covered names that differed by case
+        // alone — a plural ("Green Onions") or a punctuation variant still fell
+        // through, which here means silently dropping a search term.
+        const byAlias = await repository.findByAliasCanonicalIds(
+            unresolved.map((name) => ingredientCanonicalId(name))
         );
 
         if (byAlias.success) {
             for (const name of unresolved) {
-                const id = byAlias.value.get(name.toLowerCase());
-                if (id) ids.push(id);
+                const target = byAlias.value.get(ingredientCanonicalId(name));
+                if (target) ids.push(target.id);
             }
         }
     }

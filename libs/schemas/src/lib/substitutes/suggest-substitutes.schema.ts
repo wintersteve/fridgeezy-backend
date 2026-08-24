@@ -16,11 +16,32 @@ export const MissingIngredientSchema = z.object({
  * `recipeId` is used to look the recipe up for prompt context (its other
  * ingredients and its cuisine tag change what a good swap is); `recipeName` is
  * what the prompt falls back to when that lookup misses, so both are required.
+ *
+ * **`blacklist` and `dietaryRestrictions` bind the OUTPUT here, not the dish.**
+ * Everywhere else they steer what a generator *writes*: `BLACKLIST_RULE` swaps
+ * the offending ingredient or skips the dish outright, and a restriction sends
+ * the model off to pick a different dish entirely. This endpoint picks no dish
+ * and rewrites nothing — the recipe stays exactly as it is, and these two only
+ * say what may not be NAMED as a swap. A cook who wants the dish itself changed
+ * wants `/recipes/modify`, which is the same division
+ * {@link ImportRecipeRequestSchema} draws for the same reason.
+ *
+ * Both optional; absent means unconstrained. The prompt is told about them and
+ * is also not trusted with them — see the output filter in
+ * `generate-substitutes-stream.ts`.
  */
 export const SuggestSubstitutesRequestSchema = z.object({
     recipeId: z.string(),
     recipeName: z.string(),
     missingIngredients: z.array(MissingIngredientSchema),
+    blacklist: z
+        .array(z.string())
+        .optional()
+        .describe("Ingredient NAMES the cook will not eat, e.g. ['peanuts']"),
+    dietaryRestrictions: z
+        .array(z.string())
+        .optional()
+        .describe("Dietary tags to respect, e.g. ['vegan', 'gluten_free']"),
 });
 
 /**

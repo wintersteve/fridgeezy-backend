@@ -12,7 +12,11 @@ import {
 } from "@fridgeezy/toolkit";
 
 import { trackBackgroundTask } from "../../../background-tasks";
-import { classifyNewIngredients } from "../../ingredients/services";
+import {
+    classifyNewIngredientComponents,
+    classifyNewIngredients,
+    embedNewIngredients,
+} from "../../ingredients/services";
 import { resolveIdentityCuisine } from "../../suggestions/services/cuisine-identity";
 import { pickIdentityMatch } from "../../suggestions/services/pick-identity-match";
 
@@ -212,9 +216,27 @@ async function classifyRecipeIngredients(
         return;
     }
 
-    await classifyNewIngredients(
-        [...found.value.values()].map((ingredient) => ingredient.id)
-    );
+    const ids = [...found.value.values()].map((ingredient) => ingredient.id);
+
+    await Promise.all([
+        classifyNewIngredients(ids),
+        // See `classify-new-ingredient-components` — a separate call on purpose,
+        // and none of these can reject, so `all` is not hiding a failure.
+        classifyNewIngredientComponents(ids),
+        // The THIRD thing SQL cannot do for itself, and the one that was missed.
+        //
+        // `persist_recipe` inserts `(canonical_id, name, category_id)` and no
+        // embedding, because SQL cannot call OpenAI — so its rows are not
+        // merely duplicates, they are invisible to every future match attempt:
+        // `vectorSearch` can never return a null-embedding row, so the next
+        // recipe naming the same thing forks a second one beside it. This hook
+        // already existed to repair exactly this class of omission for dietary
+        // and component classification; it stopped one column short.
+        //
+        // Costs ONE batched OpenAI call, and only when the recipe actually
+        // invented something — see `embedNewIngredients`.
+        embedNewIngredients(ids),
+    ]);
 }
 
 export async function persistRecipe(

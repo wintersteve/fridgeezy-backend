@@ -9,6 +9,7 @@ import { createStreamHandler } from "@fridgeezy/streaming-server";
 import { generateSuggestionsStream } from "../../services";
 
 export const generateSuggestion = createStreamHandler({
+    route: "suggestions.generate",
     requestSchema: GenerateSuggestionRequestSchema,
     // Three frame shapes: how many cards this batch will show, re-sent as that
     // number is learned; the cards themselves, in generation order; and a

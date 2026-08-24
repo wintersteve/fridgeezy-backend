@@ -22,3 +22,11 @@ output "log_group_name" {
   description = "CloudWatch Logs group for the function."
   value       = aws_cloudwatch_log_group.api.name
 }
+
+output "alerts_topic_arn" {
+  description = <<-EOT
+    SNS topic the alarms publish to. Subscribe by hand — see the header in
+    alarms.tf for why Terraform deliberately does not manage subscriptions.
+  EOT
+  value       = aws_sns_topic.alerts.arn
+}

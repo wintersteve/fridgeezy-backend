@@ -152,6 +152,7 @@ function toRecipeDto(
  * into.
  */
 export const importRecipe = createStreamHandler({
+    route: "recipes.import",
     requestSchema: ImportRecipeRequestSchema,
     // An array, so the factory streams. Deliberately the SAME five schemas
     // `generate` and `modify` declare: the frames on the wire are the frames the

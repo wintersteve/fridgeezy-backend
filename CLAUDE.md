@@ -98,6 +98,22 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
   An empty property array is a real answer ("carries none of them") and is what
   lets a dish read as vegan — not the same as never having asked, which is why
   the timestamp is stored rather than inferred from the array being empty.
+- `classify-ingredient-component` — fills `ingredients.component_kind` /
+  `component_dish`, which is what puts "Make it yourself" under an ingredient
+  that is a dish in its own right (a béchamel, a pizza dough) and what the
+  "Used in" rail on a component's own page joins through. Dry run unless
+  `COMPONENT_APPLY=true`; `COMPONENT_ONLY=`, `COMPONENT_LIMIT=` and
+  `COMPONENT_RECLASSIFY=true` narrow or repeat it.
+
+  **Read the dry run before applying.** The prompt's whole design is to lean
+  toward `bought`, because a false `dish` — "make your own soy sauce" — is the
+  one failure a reader notices, and it discredits the marker everywhere it is
+  right. The cheap check is to look at what it called a dish.
+
+  Same two-path shape as the dietary classifier above: the API classifies each
+  ingredient on create (`classifyNewIngredientComponents`) and both sides share
+  one prompt, in `@fridgeezy/components`.
+
 - `generate-cuisine-cards` / `generate-cuisine-banners` — the two cuisine
   surfaces on the home feed, into the `cuisine_cards` (portrait card) and
   `cuisine_banners` (wide banner) buckets. Both key on the client's curated
@@ -1442,6 +1458,145 @@ imported recipe and tries to reach it as a guest AND as a second signed-in
 user, then asserts the opposite half too: that a catalogue-only menu genuinely
 does reach both. Run it after touching `save_menu`, either policy, or
 `menu_is_visible`.
+
+## The shape of a chat turn
+
+`processChat` used to be four model calls in a straight line — route,
+acknowledge, generate, summarise — with the recipe card written after the last
+of them. Rebuilt 2026-08-22 into three, with the card streaming out as it is
+written rather than at the end. Read `process-chat.ts`'s own header before
+changing it; the parts that bite:
+
+- **`ROUTING_MODEL` is not `request.model`.** The first call fills in search
+  arguments and produces nothing anyone reads, so it runs on a small model
+  (`CHAT_ROUTING_MODEL`, default `gpt-4.1-mini`) while the summary keeps the
+  client's. **Run `npx nx run @fridgeezy/api:eval-chat-routing` before changing
+  that default.** Every argument it fills in exists because of a past failure —
+  `dish` stops a green-curry request returning Thai Red Curry, `component` stops
+  a Béchamel request returning Lasagne, `exclude` stops a follow-up handing back
+  the card already on screen — and none of them fail loudly. They return a
+  plausible, wrong recipe.
+- **The acknowledgement call is gone.** `buildIntentLine` writes the opening
+  sentence from the routed arguments. The prompt now tells the model *not* to
+  write a preamble; that instruction is part of what the routing eval covers.
+- **No card frame is written while the prose is still moving.** A bubble is text
+  with a card under it, so a card emitted mid-summary gets pushed down the
+  screen for as long as the summary keeps streaming. Partials are collected in
+  `partialsByTempId` and the whole turn paints in step 7, after `await
+  summaryTask`: the unready card (generator fields, no id), then the ready one.
+  The unready flush is skipped when `toolResultsSettled` is already true, since
+  a skeleton for one frame is flicker rather than a phase. A dish that is then
+  refused gets a `withdrawn` frame — the same vocabulary the menu composer uses
+  for a course it will not fill.
+- **`summaryTask` must never reject.** The card is gated on it, so an
+  unhandled failure there would hold the card back forever; it catches and logs
+  instead. The prose is the least important half of the turn.
+- **The summary starts from `onDishReady`, before persistence.** That callback
+  fires when the generated dish validates and *before*
+  `persistOrReuseSuggestion` — the review, the signature embedding, two lookups
+  and a similarity search, all of which produce an *id* the summary does not
+  need. Both run concurrently and the turn ends when both finish.
+- **The tool-call/result pairing is exact.** A provider rejects an assistant
+  turn whose `tool_calls` are not all answered, so `summaryTurn` presents one
+  call with one synthesised result on the early path, and only the *answered*
+  calls on the other. Do not simplify it to "take the first result".
+- **The `while (continueLoop)` loop is gone**, and was already dead: every
+  branch set `continueLoop = false`, so it never ran twice. Multi-round tool use
+  would have to be built deliberately, not assumed.
+
+### Two tools, and the router picks
+
+`PLAN_MENU` answers a request for a MEAL — a menu, a dinner party, a feast —
+with one menu card, where `GET_RECIPE_SUGGESTIONS` answers a request for a dish
+with a recipe card. A menu turn emits a `menu` frame and no `suggestion` at all.
+
+- **It generates nothing.** It resolves the main through the same search (one
+  call, usually a catalogue hit) and names the courses. Composing costs a paid
+  stream per course and happens later, on the menu screen, behind a second tap.
+- **`main` is never one of the requested courses** — the main is what the menu
+  is built around. `MENU_COURSE_SLOTS` is the four-slot vocabulary minus the
+  seed, and the handler additionally subtracts every slot the resolved main
+  already fills, the same way the client's picker filters its rows and
+  `splitCourses` subtracts them server-side.
+- **`courses` is optional, and unset means ASK.** The prompt tells the model to
+  leave it out rather than guess: "a french menu with a side and dessert" fills
+  it in, "a french menu" does not, and the client then asks in the thread. A
+  plausible default looks helpful and removes the only moment at which the user
+  is asked, which is why `eval-chat-routing` asserts BOTH directions.
+- **The frame carries `availableCourses` as well as `courses`** — the closed
+  vocabulary minus whatever the main already fills. That is what the inquiry
+  offers when `courses` is empty.
+- **The summary has two prompts.** `MENU_SUMMARY_PROMPT` states what the menu
+  is; `MENU_INQUIRY_PROMPT` ends the turn on the question instead, and is told
+  not to recommend — the card underneath is how the user answers.
+- **`resultMenu` is a holder object, not a `let`.** It is written inside a
+  `.then` and read after it, and TypeScript keeps the narrowing from a `null`
+  initialiser across that boundary — every read of a plain variable would be
+  typed `never`.
+- **`main` carries either a `recipeId` or a `suggestionId`, never both.** The
+  compose flow is keyed on a real recipe, but a suggestion is still the dish the
+  user asked for — the client generates it on the way (`menu-compose`) rather
+  than sending them off to search for a dish it just named. Only `main: null`
+  falls back to the menu search screen seeded with `query`.
+- **The summary uses `MENU_SUMMARY_PROMPT`** and a menu turn never takes the
+  early-dish path — its summary is about the meal, and an early dish would have
+  the model write about one course as though it were the answer.
+- **The routing eval covers the boundary in both directions.** A dish that is a
+  whole meal ("a one-pot dinner") and an accompaniment ("what should I serve
+  with roast chicken?") both look like menus and are not.
+
+### Frames
+
+`intent`, `status`, `withdrawn` and `metrics` are new. **The client drops a
+frame whose name is not in `create-sse-client`'s `eventTypes` allowlist,
+silently** — that is how `proposal` was lost for a fortnight. Adding a frame
+here means adding the name there in the same change, and running the client's
+`npm run check:chat-frames`, which drives its reducer with this exact sequence.
+
+### Search
+
+`searchRecipeSuggestions` runs stage 1a (exact name) alone and then **1b, 1c and
+2 concurrently**. The early returns between them saved database time on the path
+that already had an answer while costing the sum of all three on a miss — which
+is the path that then spends ten seconds generating. 1a stays serial on purpose:
+one indexed lookup, decisive at `maxResults: 1`, and folding it in would make
+every named-dish request pay for an embedding it currently skips.
+
+`speculativeEmbedding` is started against the raw user message before routing
+returns, and stage 1b reuses it **only when the routed query canonicalises to
+the same string**. That is narrow deliberately: the routing prompt resolves
+pronouns, so "what sauce goes with it?" becomes an entirely different query, and
+reusing the vector there would search for the wrong thing on follow-ups only.
+`search.embedding_reused` against `search.embedding_computed` is the measurement
+that would justify widening it.
+
+### Timings
+
+`TurnTimer` writes one JSON line per turn as `type: "turn_timing"`, and the same
+summary rides back as a `metrics` frame. It records **spans, not checkpoints** —
+`at` plus `ms` — because the interesting property of this pipeline is what
+overlaps, and a list of elapsed-since-start marks cannot express that.
+
+    filter type = "turn_timing" | stats pct(spans.generate.ms, 95) by labels.outcome
+
+Every latency decision before this was made off a reading of the code.
+
+## Cold starts
+
+Measured on `/rest/health`, the cheapest route: **1.45s cold, 0.08s warm**. A
+cold chat turn pays more — the paginated SSM fetch in `load-secrets`, then the
+dynamic import of the whole module graph, before it starts waiting on a model.
+
+`infra/warmer.tf` keeps one execution environment alive with a scheduled
+EventBridge ping carrying a **synthetic Function URL event** (`lambda.ts` can
+only proxy that shape; a bare `{}` throws and would log an error every five
+minutes). The app also pings `/rest/health` on chat-screen focus, which is what
+covers the first message of a session.
+
+Neither helps concurrent callers — each simultaneous request gets its own cold
+environment. `lambda_provisioned_concurrency` is the lever for that, off by
+default because it bills by the GB-second whether or not anyone calls. Turn it
+on when the timing logs show cold starts surviving the warmer.
 
 ## Menus are shared; saving one is a reference
 

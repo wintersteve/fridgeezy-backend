@@ -170,6 +170,42 @@ export async function persistOrReuseSuggestion(
             return settle(known);
         }
 
+        // The signature embedding, started NOW and finished later.
+        //
+        // It depends on the FINAL name, which is why it used to sit after the
+        // review — and the review is a model call. But a rename is the exception
+        // rather than the rule (measured at roughly a third of cards), so on two
+        // dishes in three the vector computed from the generated name is exactly
+        // the vector wanted, and waiting for the review to confirm that spends a
+        // round trip proving nothing changed.
+        //
+        // Started here, compared by SIGNATURE rather than by name below: two
+        // different names can still produce the same signature string, and it is
+        // the string that decides whether this vector is reusable.
+        //
+        // `.catch` is attached immediately and deliberately. Every path out of
+        // the review below can return without ever awaiting this, and a rejected
+        // promise nobody awaits is an unhandled rejection that takes the process
+        // with it on some Node configurations. Resolving to null instead makes
+        // "the speculative one failed" an ordinary case for the code that reads
+        // it, which is the same shape `SpeculativeEmbedding` uses upstream.
+        const speculativeSignature = buildSuggestionSignature({
+            name: suggestion.name,
+            tags: suggestion.tags,
+            ingredients: suggestion.ingredients,
+        });
+
+        const speculativeEmbedding: Promise<number[] | null> = generateEmbedding(
+            speculativeSignature
+        ).catch((error: unknown) => {
+            console.warn(
+                "[Suggestions] Speculative signature embedding failed; falling back",
+                error
+            );
+
+            return null;
+        });
+
         // Step 1: is this a real dish, and what is it actually called? Keeps
         // inventions and hallucinations out of the discovery catalog, and gives
         // every layer below one stable name to key on.
@@ -205,13 +241,21 @@ export async function persistOrReuseSuggestion(
         // compared with this same vector, so the same dish under different names
         // merges (Som Tam ≡ Green Papaya Salad) while genuine variations stay
         // apart on their differing ingredients.
-        const signatureEmbedding = await generateEmbedding(
-            buildSuggestionSignature({
-                name: dish.name,
-                tags: dish.tags,
-                ingredients: dish.ingredients,
-            })
-        );
+        //
+        // "Once" still holds in the common case, and now costs no wait: the
+        // speculative vector started above is reused whenever the review left
+        // the signature alone. A rename falls back to a fresh embedding, which is
+        // exactly what used to happen every time.
+        const signature = buildSuggestionSignature({
+            name: dish.name,
+            tags: dish.tags,
+            ingredients: dish.ingredients,
+        });
+
+        const signatureEmbedding =
+            (signature === speculativeSignature
+                ? await speculativeEmbedding
+                : null) ?? (await generateEmbedding(signature));
 
         const describe = describeSuggestion(
             dish.name,

@@ -167,6 +167,14 @@
                     "cwd": "apps/api"
                 }
             },
+            "eval-chat-intent": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/chat-intent.eval.ts",
+                    "cwd": "apps/api",
+                    "envFile": "apps/api/.env.dev"
+                }
+            },
             "eval-step-structure": {
                 "executor": "nx:run-commands",
                 "options": {
@@ -184,11 +192,20 @@
                     "envFile": "apps/api/.env.dev",
                     "forwardAllArgs": true
                 }
+            },
+            "eval-chat-routing": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/chat-routing.eval.ts",
+                    "cwd": "apps/api",
+                    "envFile": "apps/api/.env.dev"
+                }
             }
         }
     },
     "dependencies": {
         "@aws-sdk/client-ssm": "^3.1104.0",
+        "@fridgeezy/components": "0.0.1",
         "@fridgeezy/dietary": "0.0.1",
         "@fridgeezy/domain": "0.0.1",
         "@fridgeezy/genai": "0.0.1",

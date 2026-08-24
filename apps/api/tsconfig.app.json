@@ -34,6 +34,9 @@
             "path": "../../libs/domain/tsconfig.lib.json"
         },
         {
+            "path": "../../libs/components/tsconfig.lib.json"
+        },
+        {
             "path": "../../libs/dietary/tsconfig.lib.json"
         },
         {

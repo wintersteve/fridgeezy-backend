@@ -2,6 +2,7 @@ import { generateStream, type LlmProvider } from "@fridgeezy/llm";
 import {
     GenerateSuggestionRequestDto,
     GenerateSuggestionResponseSchema,
+    type GenerateSuggestionResponseDto,
 } from "@fridgeezy/schemas";
 
 import { buildSuggestionsUserPrompt } from "./build-suggestions-user-prompt";
@@ -100,6 +101,21 @@ export interface StreamSingleSuggestionOptions {
      * field known so far. Lets a caller reveal the card field-by-field.
      */
     onField?: (fields: PartialSuggestionFields) => void;
+    /**
+     * Called once, the instant the completed object validates and BEFORE
+     * `persistOrReuseSuggestion` runs.
+     *
+     * That boundary is the whole point. Persistence is the authenticity review,
+     * the signature embedding, a recipe lookup, a canonical lookup and a
+     * similarity search before anything is written — several seconds in which
+     * the dish is completely known and no caller is allowed to act on it. A
+     * caller that only needs the dish's WORDS can start here instead.
+     *
+     * It is not a commitment that this dish survives: the review can drop it and
+     * dedup can resolve it onto an existing row under another name. Anything
+     * built on this has to tolerate both outcomes.
+     */
+    onDishParsed?: (dish: GenerateSuggestionResponseDto) => void;
 }
 
 // `accumulateSuggestionReveals` lives in `suggestion-reveals.ts` so the
@@ -169,7 +185,7 @@ export async function streamSingleSuggestion(
     request: GenerateSuggestionRequestDto,
     options: StreamSingleSuggestionOptions = {}
 ): Promise<SuggestionOutcome> {
-    const { provider, onField } = options;
+    const { provider, onField, onDishParsed } = options;
 
     const stream = generateStream({
         model: { openai: "gpt-4.1" },
@@ -218,6 +234,17 @@ export async function streamSingleSuggestion(
             validated.error.message
         );
         return { kind: "dropped", reason: "invalid" };
+    }
+
+    // Announced before persistence, not after — see `onDishParsed`. Guarded so a
+    // throwing listener cannot take down a generation that has already been paid
+    // for; this is a notification, and a notification must not own the outcome.
+    if (onDishParsed) {
+        try {
+            onDishParsed(validated.data);
+        } catch (error) {
+            console.warn("[StreamSingleSuggestion] onDishParsed threw:", error);
+        }
     }
 
     return persistOrReuseSuggestion(validated.data, request);

@@ -150,6 +150,7 @@ Use ONLY these ingredients: ${ingredientNames.join(", ")}
 Servings: ${servings}`;
 
 export const generateRecipe = createStreamHandler({
+    route: "recipes.generate",
     requestSchema: GenerateRecipeRequestSchema,
     responseSchema: [
         HeaderSchema,

@@ -135,12 +135,31 @@ if (!target) {
     process.exit(1);
 }
 
-let query = supabaseAdmin.from(target.table as never).select(target.select);
-if (!all) query = query.is(target.column, null);
+// PAGINATED, and this is the one where it matters most.
+//
+// PostgREST truncates an unbounded select at 1000 rows and reports nothing.
+// `--all` is the mode CLAUDE.md prescribes after changing a text builder —
+// precisely when EVERY row must be rebuilt, because a stored vector built by
+// old code stays comparable to a query vector built by new code and degrades
+// similarity silently instead of erroring. A truncated `--all` therefore
+// produces exactly the split corpus the flag exists to prevent, and the run
+// reports success. On the current catalogue that is 1000 of 1027 ingredients.
+const rows: Array<Record<string, unknown>> = [];
+const pageSize = 500;
+for (let offset = 0; ; offset += pageSize) {
+    let query = supabaseAdmin
+        .from(target.table as never)
+        .select(target.select)
+        .order("id")
+        .range(offset, offset + pageSize - 1);
+    if (!all) query = query.is(target.column, null);
 
-const { data: rows, error } = await query;
-
-if (error) throw new Error(`Failed to read ${target.table}: ${error.message}`);
+    const { data, error } = await query;
+    if (error) throw new Error(`Failed to read ${target.table}: ${error.message}`);
+    if (!data || data.length === 0) break;
+    rows.push(...(data as Array<Record<string, unknown>>));
+    if (data.length < pageSize) break;
+}
 
 if (!rows?.length) {
     console.log(

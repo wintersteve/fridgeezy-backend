@@ -17,6 +17,7 @@ import { createStreamHandler } from "@fridgeezy/streaming-server";
  * different bytes, so a content hash would never hit.
  */
 export const interpretCommand = createStreamHandler({
+    route: "speech.interpret",
     requestSchema: InterpretCommandRequestSchema,
     responseSchema: InterpretCommandResponseSchema,
     // Base64 audio arrives as one large body, the same reason

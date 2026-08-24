@@ -44,6 +44,9 @@
         },
         {
             "path": "./libs/dietary"
+        },
+        {
+            "path": "./libs/components"
         }
     ]
 }

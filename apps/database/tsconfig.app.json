@@ -16,10 +16,13 @@
             "path": "../../libs/openai/tsconfig.lib.json"
         },
         {
+            "path": "../../libs/dietary/tsconfig.lib.json"
+        },
+        {
             "path": "../../libs/types/tsconfig.lib.json"
         },
         {
-            "path": "../../libs/dietary/tsconfig.lib.json"
+            "path": "../../libs/components/tsconfig.lib.json"
         },
         {
             "path": "../../libs/toolkit/tsconfig.lib.json"

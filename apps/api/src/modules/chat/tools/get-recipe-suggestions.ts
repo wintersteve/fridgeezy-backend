@@ -7,11 +7,19 @@ import {
 } from "../../recipes/services/search-recipe-suggestions";
 
 /**
- * Optional per-call context threaded through the chat tool-execution path so
- * the tool can stream partial suggestions out as it generates them.
+ * Optional per-call context threaded through the chat tool-execution path.
+ *
+ * Everything here is a live callback or promise the SERVICE consumes — as
+ * opposed to the three argument layers in `handleToolCalls`, which carry values
+ * the model could plausibly have written. Anything put there instead of here
+ * ends up in the search input, where nothing reads it and nothing complains.
  */
 export interface RecipeSuggestionToolContext {
     onPartialSuggestion?: SearchRecipeSuggestionsOptions["onPartialSuggestion"];
+    onDishReady?: SearchRecipeSuggestionsOptions["onDishReady"];
+    onStage?: SearchRecipeSuggestionsOptions["onStage"];
+    onMetric?: SearchRecipeSuggestionsOptions["onMetric"];
+    speculativeEmbedding?: SearchRecipeSuggestionsOptions["speculativeEmbedding"];
 }
 
 /**
@@ -134,6 +142,10 @@ export async function getRecipeSuggestionsHandler(
 ): Promise<{ content: Array<{ type: "text"; text: string }> }> {
     const result = await searchRecipeSuggestions(input, {
         onPartialSuggestion: context.onPartialSuggestion,
+        onDishReady: context.onDishReady,
+        onStage: context.onStage,
+        onMetric: context.onMetric,
+        speculativeEmbedding: context.speculativeEmbedding,
     });
 
     return {

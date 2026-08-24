@@ -65,6 +65,7 @@ const VARIANT_LABEL = "Your usual";
  * structurally rather than by a flag someone can forget.
  */
 export const personaliseRecipe = createStreamHandler({
+    route: "recipes.personalise",
     requestSchema: PersonaliseRecipeRequestSchema,
     responseSchema: [
         HeaderSchema,

@@ -7,6 +7,7 @@ import { createStreamHandler } from "@fridgeezy/streaming-server";
 import { getOrSynthesizeSpeech } from "../../services";
 
 export const synthesizeSpeech = createStreamHandler({
+    route: "speech.synthesize",
     requestSchema: SynthesizeSpeechRequestSchema,
     responseSchema: SynthesizeSpeechResponseSchema,
     handler: async ({ body }) => {

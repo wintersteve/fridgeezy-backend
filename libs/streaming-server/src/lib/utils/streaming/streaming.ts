@@ -6,7 +6,17 @@ import { SSE_HEADERS } from "../../constants";
 
 /**
  * Initialize Server-Sent Events (SSE) stream.
- * Sets appropriate headers and flushes them immediately.
+ *
+ * Headers are flushed AND a comment line is written, because the two do
+ * different jobs. `flushHeaders` hands the head to Node; the comment puts a
+ * body byte on the wire, which is what actually travels through Lambda's
+ * RESPONSE_STREAM framing and fires the client's `open`. Headers alone can sit
+ * in a buffer waiting for a body, and on these routes the next body byte is
+ * whatever the first model call produces — seconds later.
+ *
+ * A comment (`: ...`) is deliberately not a frame: every conforming parser
+ * discards it without dispatching to a listener, so no client has to learn
+ * about it.
  */
 export function initSseStream(
     res: ServerResponse,
@@ -14,6 +24,7 @@ export function initSseStream(
 ): void {
     res.writeHead(200, { ...corsHeaders, ...SSE_HEADERS });
     res.flushHeaders();
+    res.write(": open\n\n");
 }
 
 /**

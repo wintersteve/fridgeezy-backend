@@ -69,6 +69,7 @@ const toDisplayName = (raw: string): string =>
         .join(" ");
 
 export const extractIngredients = createStreamHandler({
+    route: "ingredients.extract",
     requestSchema: RequestSchema,
     responseSchema: ExtractIngredientsResponseSchema,
     useBufferedParser: true, // Use buffered parser for large base64 images

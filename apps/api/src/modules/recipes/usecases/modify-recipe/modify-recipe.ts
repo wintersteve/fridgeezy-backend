@@ -27,6 +27,7 @@ import {
 import { persistRecipe } from "../../services/persist-recipe";
 
 export const modifyRecipe = createStreamHandler({
+    route: "recipes.modify",
     requestSchema: ModifyRecipeRequestSchema,
     responseSchema: [
         HeaderSchema,

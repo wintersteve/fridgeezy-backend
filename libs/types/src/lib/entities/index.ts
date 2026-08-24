@@ -35,6 +35,7 @@ export * from './shopping-lists';
 export * from './tag-aliases';
 export * from './tags';
 export * from './units';
+export * from './component-kind';
 export * from './dietary-property';
 export * from './difficulty-type';
 export * from './recipe-interaction-type';

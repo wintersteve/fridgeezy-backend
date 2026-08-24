@@ -17,6 +17,12 @@ resource "aws_lambda_function" "api" {
   memory_size = var.lambda_memory_size
   timeout     = var.lambda_timeout
 
+  # Only when provisioned concurrency is actually in use. Lambda cannot provision
+  # $LATEST, so the alias in warmer.tf needs a published version to point at —
+  # and publishing a version on every apply for a function that has no alias
+  # would just accumulate immutable copies of the artifact for nothing.
+  publish = var.lambda_provisioned_concurrency != null
+
   reserved_concurrent_executions = var.lambda_reserved_concurrency
 
   environment {

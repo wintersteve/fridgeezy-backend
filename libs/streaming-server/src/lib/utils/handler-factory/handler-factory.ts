@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 import { buildCorsHeaders, handleCorsPrelight, type CorsConfig } from "../cors";
 import { handleError } from "../error-handler";
+import { stripQuery } from "../log-request-error";
 import { parseJsonBody } from "../parse-json-body";
 import { parseJsonBodyBuffered } from "../parse-json-body-buffered";
 import { initSseStream, writeSseEvent, endSseStream } from "../streaming";
@@ -65,6 +66,15 @@ export interface StreamHandlerConfig<
 
     /** Use buffered parser for large payloads like images (default: false) */
     useBufferedParser?: boolean;
+
+    /**
+     * Stable dotted feature name for the log line, e.g. `recipes.generate`.
+     *
+     * Optional, and falls back to the request path. Worth setting because a
+     * mounted Express router hands this factory only its sub-path, so
+     * `/generate` alone does not say whether recipes or suggestions went down.
+     */
+    route?: string;
 }
 
 /**
@@ -193,7 +203,17 @@ export function createStreamHandler<
                 }
             }
         } catch (error) {
-            handleError(error, res, { corsHeaders, isStreaming });
+            handleError(error, res, {
+                corsHeaders,
+                isStreaming,
+                route: config.route,
+                method: req.method,
+                // `req.url` is the path as routed to this handler, which for a
+                // mounted Express router is the sub-path rather than the full
+                // one. Good enough to name the feature, and the query string is
+                // stripped because it may carry a recipe id.
+                path: stripQuery(req.url),
+            });
         }
     };
 }

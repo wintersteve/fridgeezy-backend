@@ -251,18 +251,21 @@ export type Database = {
       ingredient_aliases: {
         Row: {
           alias: string
+          alias_canonical_id: string
           created_at: string
           id: string
           ingredient_id: string
         }
         Insert: {
           alias: string
+          alias_canonical_id?: string
           created_at?: string
           id?: string
           ingredient_id: string
         }
         Update: {
           alias?: string
+          alias_canonical_id?: string
           created_at?: string
           id?: string
           ingredient_id?: string
@@ -281,6 +284,9 @@ export type Database = {
         Row: {
           canonical_id: string
           category_id: string | null
+          component_dish: string | null
+          component_dish_canonical_id: string | null
+          component_kind: Database["public"]["Enums"]["component_kind"] | null
           created_at: string
           default_shelf_life_days: number | null
           description: string | null
@@ -299,6 +305,9 @@ export type Database = {
         Insert: {
           canonical_id: string
           category_id?: string | null
+          component_dish?: string | null
+          component_dish_canonical_id?: string | null
+          component_kind?: Database["public"]["Enums"]["component_kind"] | null
           created_at?: string
           default_shelf_life_days?: number | null
           description?: string | null
@@ -317,6 +326,9 @@ export type Database = {
         Update: {
           canonical_id?: string
           category_id?: string | null
+          component_dish?: string | null
+          component_dish_canonical_id?: string | null
+          component_kind?: Database["public"]["Enums"]["component_kind"] | null
           created_at?: string
           default_shelf_life_days?: number | null
           description?: string | null
@@ -343,6 +355,54 @@ export type Database = {
           {
             foreignKeyName: "ingredients_parent_id_fkey"
             columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ingredient_merge_reviews: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          evidence: Json
+          id: string
+          ingredient_a: string
+          ingredient_b: string
+          note: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          evidence?: Json
+          id?: string
+          ingredient_a: string
+          ingredient_b: string
+          note?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          evidence?: Json
+          id?: string
+          ingredient_a?: string
+          ingredient_b?: string
+          note?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingredient_merge_reviews_ingredient_a_fkey"
+            columns: ["ingredient_a"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingredient_merge_reviews_ingredient_b_fkey"
+            columns: ["ingredient_b"]
             isOneToOne: false
             referencedRelation: "ingredients"
             referencedColumns: ["id"]
@@ -1537,6 +1597,29 @@ export type Database = {
       }
     }
     Views: {
+      ingredient_alias_collisions: {
+        Row: {
+          duplicate_id: string | null
+          duplicate_name: string | null
+          duplicate_uses: number | null
+          keep_id: string | null
+          keep_name: string | null
+          via_alias: string | null
+        }
+        Relationships: []
+      }
+      ingredient_alias_collisions_all: {
+        Row: {
+          duplicate_id: string | null
+          duplicate_name: string | null
+          duplicate_uses: number | null
+          keep_id: string | null
+          keep_name: string | null
+          review_status: string | null
+          via_alias: string | null
+        }
+        Relationships: []
+      }
       recipe_dietary: {
         Row: {
           diet_canonical_id: string | null
@@ -1690,6 +1773,20 @@ export type Database = {
       merge_ingredient: {
         Args: { p_from: string; p_into: string }
         Returns: undefined
+      }
+      merge_ingredients_batch: {
+        Args: { p_pairs: Json }
+        Returns: Json
+      }
+      record_merge_review: {
+        Args: {
+          p_a: string
+          p_b: string
+          p_evidence?: Json
+          p_note?: string
+          p_status?: string
+        }
+        Returns: string
       }
       merge_recipe: {
         Args: { p_from: string; p_into: string }
@@ -1972,6 +2069,7 @@ export type Database = {
       title_case_name: { Args: { input: string }; Returns: string }
     }
     Enums: {
+      component_kind: "dish" | "prep" | "bought"
       dietary_property:
         | "meat"
         | "fish"
@@ -2007,6 +2105,9 @@ export type Database = {
         source: string | null
         total_time_minutes: number | null
         origin: string | null
+        total_recipes: number | null
+        total_suggestions: number | null
+        facets: Json | null
       }
     }
   }
@@ -2135,6 +2236,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      component_kind: ["dish", "prep", "bought"],
       dietary_property: [
         "meat",
         "fish",

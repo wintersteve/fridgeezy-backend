@@ -59,6 +59,11 @@ const CATEGORY_GUIDE = `- meats: red meat, poultry, game
 
 export interface IngredientAdjudication {
     decision: IngredientDecision;
+    /**
+     * Which candidate the name resolved to — an index into the shortlist that
+     * was offered. Populated only when decision is "same".
+     */
+    matchIndex?: number;
     /** Controlled food category — populated only when decision is "new". */
     category?: IngredientCategory;
 }
@@ -66,23 +71,44 @@ export interface IngredientAdjudication {
 const CATEGORY_RULE = `the single best-fitting food category. Return EXACTLY one of these ids (the id itself, not the description):
 ${CATEGORY_GUIDE}`;
 
-/** Asked when a near-miss candidate exists: is NAME the same thing as CANDIDATE? */
+/**
+ * Asked when near-miss candidates exist: is NAME any of them?
+ *
+ * The shortlist form is the fix, not a refactor. This used to be handed exactly
+ * ONE candidate — whichever ranked first by embedding — and asked a yes/no
+ * question about it. Because name embeddings are lexical, rank 1 is
+ * systematically a SIBLING (shares the head noun) while the synonym sits
+ * further down, so the model was reliably asked about the wrong ingredient,
+ * correctly answered "not the same", and a duplicate was created. It answered
+ * well every time; it was never shown the right pair.
+ */
 const DEDUP_SYSTEM_PROMPT = `You classify ingredient names for a cooking database.
 
-Given an ingredient NAME and a CANDIDATE existing ingredient, respond with a decision and (for new ingredients) a category.
+Given an ingredient NAME and a numbered list of CANDIDATE existing ingredients, decide whether NAME is one of them, and if not, give the new ingredient a category.
 
 decision:
-- "same": NAME is the same ingredient as CANDIDATE — a synonym, regional name, or spelling variant (e.g. "spring onion" vs "scallion").
-- "new": NAME is a real, distinct culinary ingredient, different from CANDIDATE.
+- "same": NAME is the same ingredient as one candidate — a synonym, regional name, or spelling variant (e.g. "spring onion" vs "scallion", "cilantro" vs "coriander", "minced pork" vs "ground pork"). Set "match" to that candidate's number.
+- "new": NAME is a real, distinct culinary ingredient, different from EVERY candidate.
 
-A qualifier that changes VARIETY/TYPE (e.g. "Thai basil" vs "basil", "cherry tomato" vs "tomato") or STATE (e.g. "dried oregano" vs "fresh oregano" vs "oregano", "frozen peas" vs "peas") makes NAME a DISTINCT ingredient → "new", NOT "same", even though it is closely related to CANDIDATE. Only rule "same" for a true synonym of the identical item. Ignore pure preparation words (chopped, minced, sliced) — those do not by themselves make it distinct.
+Default to "new". Only answer "same" when NAME and the candidate are DIFFERENT WORDS FOR THE SAME THING — a regional name, a spelling variant, or a translation. "spring onion" is "scallion"; "cilantro" is "coriander"; "crayfish" is "crawfish"; "minced pork" is "ground pork"; "aubergine" is "eggplant".
 
-NAME is always a real ingredient. You are not being asked to validate it, only to decide whether it is the same thing as CANDIDATE.
+If the two names differ by a QUALIFIER rather than by vocabulary, answer "new". This holds even when the qualified thing is obviously a kind of the other, and even when one name contains the other:
+- "whole wheat flour" is NOT "flour". "rice flour" is NOT "flour".
+- "iceberg lettuce" is NOT "lettuce". "kewpie mayonnaise" is NOT "mayonnaise".
+- "back bacon" is NOT "bacon". "green olives" is NOT "olives".
+- "thai basil" is NOT "basil". "duck egg" is NOT "egg". "brown sugar" is NOT "sugar".
+- "dried oregano" is NOT "fresh oregano". "firm tofu" is NOT "tofu".
+
+Do not reason about which one is the "default" or "everyday" form — that judgement is made elsewhere, from a curated alias list, and making it here produces exactly the wrong merges. A narrower ingredient swallowed by a broader one silently corrupts every recipe using it.
+
+Ignore pure preparation words (chopped, minced, sliced, grated) — those do not by themselves make it distinct, so "chopped parsley" IS "parsley".
+
+NAME is always a real ingredient. You are not being asked to validate it, only to decide whether it is one of the candidates.
 
 category (only when decision is "new"): ${CATEGORY_RULE}
 
 Respond with a single JSON object and nothing else:
-{"decision":"same"|"new","category":"<one id from the list above, or null>"}.`;
+{"decision":"same"|"new","match":<candidate number or null>,"category":"<one id from the list above, or null>"}.`;
 
 /**
  * Asked when there is no candidate at all. "same" is impossible, so the only
@@ -124,23 +150,28 @@ Respond with a single JSON object and nothing else:
  */
 export async function adjudicateIngredient(
     name: string,
-    candidateName?: string
+    candidateNames: string[] = []
 ): Promise<IngredientAdjudication> {
+    const hasCandidates = candidateNames.length > 0;
+
     try {
         const { text: content } = await generateCompletion({
             model: { openai: "gpt-4o-mini" },
             label: "adjudicate.ingredient",
-            system: candidateName
+            system: hasCandidates
                 ? DEDUP_SYSTEM_PROMPT
                 : CATEGORY_SYSTEM_PROMPT,
-            user: candidateName
-                ? `NAME: ${name}\nCANDIDATE: ${candidateName}`
+            user: hasCandidates
+                ? `NAME: ${name}\nCANDIDATES:\n${candidateNames
+                      .map((candidate, i) => `${i + 1}. ${candidate}`)
+                      .join("\n")}`
                 : `NAME: ${name}`,
             json: true,
-            // 30 covers `{"decision":"same","category":"vegetables"}` on a model
-            // that answers immediately; the Bedrock number has to clear the
+            // 40 covers `{"decision":"same","match":3,"category":null}` on a
+            // model that answers immediately — up from 30, since the verdict now
+            // carries the candidate number. The Bedrock number has to clear the
             // thinking budget first, which is why it isn't a conversion of it.
-            maxTokens: { openai: 30, bedrock: 1024 },
+            maxTokens: { openai: 40, bedrock: 1024 },
             // Picking one of a fixed 20-item vocabulary — the shallowest
             // judgement of the three adjudicators.
             effort: "low",
@@ -150,12 +181,23 @@ export async function adjudicateIngredient(
 
         const parsed = JSON.parse(content) as {
             decision?: string;
+            match?: number | null;
             category?: string;
         };
 
-        // "same" is only meaningful against an actual candidate.
-        if (parsed.decision === "same" && candidateName) {
-            return { decision: "same" };
+        // "same" is only meaningful against an actual candidate, and only when
+        // the model names one that was actually offered. A match number outside
+        // the shortlist is treated as "new": inventing an index is the one
+        // failure here that would silently attach an ingredient to an unrelated
+        // row, and creating a duplicate is the recoverable direction.
+        if (parsed.decision === "same" && hasCandidates) {
+            const index = Number(parsed.match) - 1;
+            if (Number.isInteger(index) && index >= 0 && index < candidateNames.length) {
+                return { decision: "same", matchIndex: index };
+            }
+            console.warn(
+                `[Ingredients] "${name}" adjudicated "same" with out-of-range match ${parsed.match} — creating instead`
+            );
         }
 
         // "new" (default): keep the category only if it's in the controlled list.

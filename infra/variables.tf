@@ -253,3 +253,49 @@ variable "log_retention_days" {
   type        = number
   default     = 30
 }
+
+# ---------------------------------------------------------------------------
+# Cold-start mitigation. See warmer.tf for the reasoning and the measurements.
+# ---------------------------------------------------------------------------
+
+variable "warmer_enabled" {
+  description = <<-EOT
+    Whether to keep one execution environment alive with a scheduled ping.
+
+    Cheap and effective for a single user returning to the app after an idle
+    period, which is where the cold start actually lands. It does NOT help
+    concurrent callers — each additional simultaneous request gets its own,
+    cold, environment. That is what `lambda_provisioned_concurrency` is for.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "warmer_schedule_expression" {
+  description = <<-EOT
+    How often to ping. Lambda's idle reclaim is undocumented and variable, but
+    environments are commonly reclaimed somewhere between five and fifteen
+    minutes; five is comfortably inside that and costs roughly nine thousand
+    invocations a month, which is free-tier noise.
+  EOT
+  type        = string
+  default     = "rate(5 minutes)"
+}
+
+variable "lambda_provisioned_concurrency" {
+  description = <<-EOT
+    Number of execution environments to keep initialised, or null for none.
+
+    Off by default because it bills by the GB-second whether or not anyone
+    calls — unlike the warmer, which bills per invocation. Turn it on when the
+    timing logs show cold starts surviving the warmer, which means concurrent
+    traffic rather than idle reclaim.
+
+    Setting this publishes a version and an alias; the Function URL still points
+    at $LATEST, so raising this alone does not route traffic to the provisioned
+    environments. Point the URL at the alias in the same change if that is what
+    you want.
+  EOT
+  type        = number
+  default     = null
+}

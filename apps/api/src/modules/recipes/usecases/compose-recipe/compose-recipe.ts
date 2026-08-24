@@ -9,6 +9,8 @@ import {
 } from "@fridgeezy/schemas";
 import {
     initSseStream,
+    logRequestError,
+    stripQuery,
     writeSseEvent,
     endSseStream,
 } from "@fridgeezy/streaming-server";
@@ -19,6 +21,12 @@ import {
     fetchRecipe,
     generateComposeRecipes,
 } from "../../services";
+
+/**
+ * The name this endpoint reports itself as in the log group. Hard-coded
+ * because a mounted Express router only sees its sub-path.
+ */
+const ROUTE = "recipes.compose";
 
 /**
  * Parse JSON body from request stream
@@ -125,6 +133,19 @@ export async function composeRecipe(
             // 6. End stream
             endSseStream(res);
         } catch (streamError) {
+            // Both catch arms in this handler used to be entirely silent — a
+            // composition could fail in full and leave the log group holding a
+            // clean 200. This is a premium route, so a failure here is a paid
+            // feature not working.
+            logRequestError(streamError, {
+                route: ROUTE,
+                phase: "mid_stream",
+                method: req.method,
+                path: stripQuery(req.originalUrl),
+                streaming: true,
+                detail: { recipeId: req.params.recipeId },
+            });
+
             // Headers are already out, so the only way to report this is in the
             // stream. Validated like every other frame, and declared in the
             // schema alongside them — it went undeclared for a long time, and a
@@ -145,6 +166,19 @@ export async function composeRecipe(
         }
     } catch (error) {
         // Handle validation errors and errors before streaming starts
+        const status =
+            error instanceof Error && error.name === "ZodError" ? 400 : 500;
+
+        logRequestError(error, {
+            route: ROUTE,
+            phase: "pre_stream",
+            method: req.method,
+            path: stripQuery(req.originalUrl),
+            streaming: false,
+            status,
+            detail: { recipeId: req.params.recipeId },
+        });
+
         if (error instanceof Error && error.name === "ZodError") {
             res.status(400).json({
                 error: "Invalid request parameters",

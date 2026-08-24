@@ -9,7 +9,7 @@ import { streamSingleSuggestion } from "../../suggestions/services/stream-single
 
 import { fetchRecipeSummary } from "./fetch-recipe-summary";
 import { findCatalogueRecipes } from "./find-catalogue-recipes";
-import { searchRecipes } from "./search-recipes";
+import { searchRecipes, searchRecipesByEmbedding } from "./search-recipes";
 
 /**
  * Recalibrated 2026-07-31 against the queries chat actually sends. 0.70 was
@@ -215,6 +215,55 @@ export interface PartialRecipeSuggestion {
     tags?: string[];
 }
 
+/**
+ * The dish as the generator wrote it, handed over the moment it validates and
+ * BEFORE it is reviewed, embedded, deduped and inserted.
+ *
+ * It exists so a caller can start work that needs the dish's WORDS without
+ * waiting for the work that produces its ID. Everything after generation —
+ * `verifySuggestionAuthenticity`, the signature embedding, `findRecipeForDish`,
+ * `searchSimilar`, the insert — is several seconds during which the dish is
+ * fully known and nothing downstream is allowed to say so.
+ *
+ * **It is not a promise that a card will appear.** The review can still drop
+ * this dish as unauthentic or out of scope, and dedup can resolve it onto a
+ * differently-named catalogue row. A caller that renders from this must be able
+ * to survive both — see the note on the summary in `process-chat`.
+ */
+export interface EarlyDish {
+    name: string;
+    description: string;
+    difficulty: "easy" | "medium" | "hard";
+    totalTimeMinutes?: number | null;
+    ingredients: string[];
+    tags: string[];
+}
+
+/**
+ * A query embedding computed BEFORE the tool arguments existed, offered back to
+ * stage 1b so it does not have to pay for one.
+ *
+ * The whole point is that the embedding can be started against the user's raw
+ * message while the routing model is still deciding what to search for — those
+ * two run concurrently, and by the time the arguments land the vector is usually
+ * sitting here already.
+ *
+ * **`text` is what makes it safe.** The routed `query` is not the raw message:
+ * the prompt tells the model to resolve pronouns against the conversation, so
+ * "what sauce goes with it?" becomes "sauce for chicken parmesan" — an entirely
+ * different vector. Reusing a speculative embedding there would search for the
+ * wrong thing, silently and only on follow-ups, which is the worst shape a bug
+ * can have. So the text it was computed from travels with it and stage 1b reuses
+ * the vector only when the two canonicalise to the same string, which is the
+ * common first-turn case and never a pronoun-bearing follow-up.
+ */
+export interface SpeculativeEmbedding {
+    /** The text the vector was computed from. */
+    text: string;
+    /** Resolves to the vector, or to null if the speculative embedding failed. */
+    vector: Promise<number[] | null>;
+}
+
 export interface SearchRecipeSuggestionsOptions {
     /**
      * Present for streaming callers (chat). When set, stage 3 generates a SINGLE
@@ -222,7 +271,25 @@ export interface SearchRecipeSuggestionsOptions {
      * when absent, stage 3 falls back to the multi-suggestion JSONL generator.
      */
     onPartialSuggestion?: (partial: PartialRecipeSuggestion) => void;
+    /**
+     * Fired once, when a generated dish has validated but not yet been
+     * persisted. See {@link EarlyDish}.
+     */
+    onDishReady?: (dish: EarlyDish) => void;
+    /** A vector computed ahead of time; see {@link SpeculativeEmbedding}. */
+    speculativeEmbedding?: SpeculativeEmbedding;
+    /**
+     * Called with a one-word name for each stage as it starts, so a streaming
+     * caller can say what it is doing. Deliberately a callback rather than a
+     * return value: the interesting moments are all mid-flight.
+     */
+    onStage?: (stage: SearchStage) => void;
+    /** Counter sink for instrumentation; see `TurnTimer`. */
+    onMetric?: (name: string, value?: number) => void;
 }
+
+/** The stages a caller can narrate. `generate` is the only slow one. */
+export type SearchStage = "catalogue" | "generate" | "persist";
 
 export interface SearchMetadata {
     vectorSearchHits: number;
@@ -233,6 +300,67 @@ export interface SearchMetadata {
 export interface RecipeSuggestionResult {
     suggestions: RecipeSuggestionItem[];
     searchMetadata: SearchMetadata;
+}
+
+/**
+ * Stage 1b's vector search, reusing a speculative embedding when it is safe to.
+ *
+ * "Safe" is a string comparison and nothing cleverer: the vector must have been
+ * computed from text that canonicalises to the same thing as the query we are
+ * about to search for. A routed query that differs — which is what a pronoun
+ * resolution produces — pays for its own embedding, as it always did.
+ *
+ * The counters are the point of doing it this narrowly. Reusing the vector for
+ * a merely SIMILAR query would very likely be fine and would hit far more often,
+ * but "very likely fine" is not something to ship into a recall path on a
+ * guess. `search.embedding_reused` against `search.embedding_computed` is the
+ * measurement that would justify widening it.
+ */
+async function runVectorSearch(
+    query: string,
+    threshold: number,
+    limit: number,
+    speculative: SpeculativeEmbedding | undefined,
+    onMetric: SearchRecipeSuggestionsOptions["onMetric"]
+) {
+    if (speculative && canonicalizeName(speculative.text) === canonicalizeName(query)) {
+        const vector = await speculative.vector;
+
+        if (vector) {
+            onMetric?.("search.embedding_reused");
+
+            return searchRecipesByEmbedding(vector, threshold, limit);
+        }
+    }
+
+    onMetric?.("search.embedding_computed");
+
+    return searchRecipes(query, threshold, limit);
+}
+
+/**
+ * Stage 2, asking under both names at once.
+ *
+ * The raw query rarely IS a canonical name ("a thai green curry recipe
+ * please"), so the dish name has to be asked for as well — and it used to be
+ * asked for only after the first lookup came back empty, which is a second
+ * serial round trip to learn something the first one could not have told us.
+ * The query's answer still wins when both hit, preserving the original
+ * precedence.
+ */
+async function findCanonicalSuggestion(
+    query: string,
+    dish: string | undefined,
+    isExcluded: (...names: Array<string | null | undefined>) => boolean
+) {
+    const [byQuery, byDish] = await Promise.all([
+        isExcluded(query) ? Promise.resolve(null) : findSuggestionByName(query),
+        dish && !isExcluded(dish)
+            ? findSuggestionByName(dish)
+            : Promise.resolve(null),
+    ]);
+
+    return byQuery ?? byDish;
 }
 
 /**
@@ -260,7 +388,13 @@ export async function searchRecipeSuggestions(
         blacklist,
         difficulty,
     } = input;
-    const { onPartialSuggestion } = options;
+    const {
+        onPartialSuggestion,
+        onDishReady,
+        speculativeEmbedding,
+        onStage,
+        onMetric,
+    } = options;
 
     const excluded = new Set((exclude ?? []).map(canonicalizeName));
     const isExcluded = (...names: Array<string | null | undefined>) =>
@@ -294,6 +428,8 @@ export async function searchRecipeSuggestions(
         newSuggestionsCreated: 0,
     };
 
+    onStage?.("catalogue");
+
     // Stage 1a: exact name match. Recipes are embedded by dish SIGNATURE
     // (English name + tags + ingredients), which reads nothing like a short
     // foreign proper noun — "Toum" scores 0.239 against its own recipe, "Palak
@@ -301,6 +437,16 @@ export async function searchRecipeSuggestions(
     // user named outright, so ask for it by name first — under the dish name as
     // well as the raw query, since "a thai green curry recipe please" matches
     // nothing verbatim while the dish it names is in the catalogue.
+    //
+    // ## This one stage stays serial, and the rest below do not
+    //
+    // It is a single indexed lookup on an exact name — tens of milliseconds —
+    // and when it hits, it hits with `matchScore: 1` and chat's `maxResults` of
+    // 1 means nothing after it can change the answer. Folding it into the fan-out
+    // would buy no wall-clock (it is never the long pole) and would make every
+    // named-dish request pay for an embedding it currently skips. So the cheap,
+    // decisive early-out keeps its place at the front, and the parallelism goes
+    // where the seconds actually are.
     const namedRecipe = await new RecipesRepository().findBaseRecipes(
         [query, dish].filter((name): name is string => !!name && !isExcluded(name))
     );
@@ -336,168 +482,191 @@ export async function searchRecipeSuggestions(
                 tags: summary.tags,
             });
             metadata.vectorSearchHits++;
+            onMetric?.("catalogue.named_hit");
         }
     }
 
-    // Stage 1b: Vector search on recipes
-    const vectorResults = (
-        await searchRecipes(query, matchThreshold, maxResults)
-    ).filter((result) => !suggestions.some((item) => item.id === result.id));
+    // Stages 1b, 1c and 2 all at once.
+    //
+    // They are three independent reads and they used to run one after another,
+    // each behind an early return. The early returns are worth almost nothing —
+    // they save database time on the path that already has an answer — while the
+    // serial arrangement costs the SUM of all three on a MISS, which is exactly
+    // the path that then goes on to spend ten seconds generating. Wrong way
+    // round: pay the cheap concurrent cost always, and never make the slow path
+    // wait for its own preamble.
+    //
+    // Precedence is unchanged, because it is applied when the results are
+    // assembled below rather than by the order they were issued in.
+    if (suggestions.length < maxResults) {
+        const [vectorSearch, catalogueRows, canonicalMatch] = await Promise.all([
+            // Stage 1b: vector search on recipes.
+            runVectorSearch(query, matchThreshold, maxResults, speculativeEmbedding, onMetric),
 
-    // Fetch each hit's summary in parallel (independent reads) rather than one
-    // round-trip per result, then assemble in the original ranked order.
-    const summaries = await Promise.all(
-        vectorResults.map((result) => fetchRecipeSummary(result.id))
-    );
+            // Stage 1c: the catalogue lookup the SEARCH SCREEN uses — filter by
+            // ingredient id via `find_recipes`, no similarity involved.
+            //
+            // Stages 1a and 1b between them only find a dish the user all but
+            // named: measured, "what can I make with chicken and rice?" scores
+            // 0.429 against even the right recipe, so no similarity gate can
+            // accept it without accepting noise too. That question is a filter,
+            // not a search, and it is the one the search screen answers well
+            // while chat did not answer at all — it generated a new dish over a
+            // catalogue that already had one.
+            ingredients?.length
+                ? findCatalogueRecipes({
+                      ingredients,
+                      blacklist,
+                      limit: maxResults,
+                  })
+                : Promise.resolve([]),
 
-    vectorResults.forEach((result, i) => {
-        const recipeSummary = summaries[i];
+            // Stage 2: canonical search on the suggestions table, under the raw
+            // query AND the named dish. The raw query rarely IS a canonical name
+            // ("a thai green curry recipe please"), so both are asked for — and
+            // asked for together, since the second used to run only after the
+            // first came back empty.
+            findCanonicalSuggestion(query, dish, isExcluded),
+        ]);
 
-        // `isRequestedDish` is what keeps a similarity hit from impersonating
-        // a dish the user named: without it, "thai green curry" clears the
-        // threshold against Thai Red Curry and the wrong sibling is returned
-        // as the answer. A rejected hit falls through to generation, whose
-        // dedup folds a genuinely-same dish back into this very row.
+        // Stage 1b results, in the order the vector search ranked them.
+        const vectorResults = vectorSearch.filter(
+            (result) => !suggestions.some((item) => item.id === result.id)
+        );
+
+        // Fetch each hit's summary in parallel (independent reads) rather than
+        // one round-trip per result, then assemble in the original ranked order.
+        const summaries = await Promise.all(
+            vectorResults.map((result) => fetchRecipeSummary(result.id))
+        );
+
+        vectorResults.forEach((result, i) => {
+            const recipeSummary = summaries[i];
+
+            // `isRequestedDish` is what keeps a similarity hit from impersonating
+            // a dish the user named: without it, "thai green curry" clears the
+            // threshold against Thai Red Curry and the wrong sibling is returned
+            // as the answer. A rejected hit falls through to generation, whose
+            // dedup folds a genuinely-same dish back into this very row.
+            if (
+                recipeSummary &&
+                !isExcluded(recipeSummary.name) &&
+                isWantedComponent(recipeSummary.tags) &&
+                isRequestedDish(recipeSummary.name, recipeSummary.nameEn)
+            ) {
+                suggestions.push({
+                    id: recipeSummary.id,
+                    name: recipeSummary.name,
+                    description:
+                        recipeSummary.shortDescription ||
+                        recipeSummary.description,
+                    image: recipeSummary.image,
+                    difficulty: recipeSummary.difficulty,
+                    totalTimeMinutes: recipeSummary.totalTimeMinutes,
+                    source: "existing_recipe",
+                    matchScore: result.score,
+                    ingredients: recipeSummary.ingredients.map((ing) => ({
+                        id: ing.id,
+                        name: ing.name,
+                    })),
+                    tags: recipeSummary.tags.map((tag) => ({
+                        id: tag.id,
+                        name: tag.name,
+                    })),
+                });
+                metadata.vectorSearchHits++;
+            }
+        });
+
+        // Stage 1c results, deduped against 1a/1b by id.
+        if (suggestions.length < maxResults) {
+            for (const row of catalogueRows) {
+                if (suggestions.some((item) => item.id === row.id)) continue;
+                if (isExcluded(row.name)) continue;
+                if (!isWantedComponent(row.tags)) continue;
+                // Same guard as stage 1b: sharing the requested ingredients does
+                // not make a row the dish the user named.
+                if (!isRequestedDish(row.name)) continue;
+
+                suggestions.push({
+                    id: row.id,
+                    name: row.name,
+                    description: row.description,
+                    image: row.image,
+                    difficulty: row.difficulty,
+                    totalTimeMinutes: row.totalTimeMinutes,
+                    // A `recipe` row is already generated, so the card opens it;
+                    // a `suggestion` row still routes to the generate screen.
+                    source:
+                        row.source === "recipe"
+                            ? "existing_recipe"
+                            : "suggestion",
+                    ingredients: row.ingredients,
+                    tags: row.tags,
+                });
+
+                if (row.source === "recipe") {
+                    metadata.vectorSearchHits++;
+                } else {
+                    metadata.canonicalSearchHits++;
+                }
+            }
+        }
+
+        // Stage 2 result.
+        //
+        // Skipped when an earlier stage already returned this dish: a suggestion
+        // row can outlive its promotion (nothing deletes it if the user reached
+        // the recipe another way), and surfacing both would show the same dish
+        // twice — once as a recipe and once as a card offering to generate it
+        // again.
+        const existingSuggestion = canonicalMatch;
+        const alreadyListed =
+            !!existingSuggestion &&
+            (isExcluded(existingSuggestion.name, existingSuggestion.nameEn) ||
+                !isWantedComponent(existingSuggestion.tags) ||
+                suggestions.some(
+                    (item) =>
+                        // By id as well as by name: stage 1c can surface this
+                        // very suggestion row via find_recipes, and a name
+                        // comparison alone would miss it if the two spellings
+                        // ever diverged.
+                        item.id === existingSuggestion.id ||
+                        canonicalizeName(item.name) ===
+                            canonicalizeName(existingSuggestion.name) ||
+                        canonicalizeName(item.name) ===
+                            canonicalizeName(existingSuggestion.nameEn)
+                ));
+
         if (
-            recipeSummary &&
-            !isExcluded(recipeSummary.name) &&
-            isWantedComponent(recipeSummary.tags) &&
-            isRequestedDish(recipeSummary.name, recipeSummary.nameEn)
+            existingSuggestion &&
+            !alreadyListed &&
+            suggestions.length < maxResults
         ) {
             suggestions.push({
-                id: recipeSummary.id,
-                name: recipeSummary.name,
-                description:
-                    recipeSummary.shortDescription || recipeSummary.description,
-                image: recipeSummary.image,
-                difficulty: recipeSummary.difficulty,
-                totalTimeMinutes: recipeSummary.totalTimeMinutes,
-                source: "existing_recipe",
-                matchScore: result.score,
-                ingredients: recipeSummary.ingredients.map((ing) => ({
+                id: existingSuggestion.id,
+                name: existingSuggestion.name,
+                description: existingSuggestion.description,
+                difficulty: existingSuggestion.difficulty,
+                totalTimeMinutes: existingSuggestion.totalTimeMinutes,
+                source: "suggestion",
+                ingredients: existingSuggestion.ingredients.map((ing) => ({
                     id: ing.id,
                     name: ing.name,
                 })),
-                tags: recipeSummary.tags.map((tag) => ({
+                tags: existingSuggestion.tags.map((tag) => ({
                     id: tag.id,
                     name: tag.name,
                 })),
             });
-            metadata.vectorSearchHits++;
-        }
-    });
-
-    // Stage 1c: the catalogue lookup the SEARCH SCREEN uses — filter by
-    // ingredient id via `find_recipes`, no similarity involved.
-    //
-    // Stages 1a and 1b between them only find a dish the user all but named:
-    // measured, "what can I make with chicken and rice?" scores 0.429 against
-    // even the right recipe, so no similarity gate can accept it without
-    // accepting noise too. That question is a filter, not a search, and it is
-    // the one the search screen answers well while chat did not answer at all —
-    // it generated a new dish over a catalogue that already had one.
-    //
-    // Only runs when the model actually extracted ingredients, and its rows are
-    // deduped against stages 1a/1b by id.
-    if (ingredients?.length && suggestions.length < maxResults) {
-        const catalogue = await findCatalogueRecipes({
-            ingredients,
-            blacklist,
-            limit: maxResults,
-        });
-
-        for (const row of catalogue) {
-            if (suggestions.some((item) => item.id === row.id)) continue;
-            if (isExcluded(row.name)) continue;
-            if (!isWantedComponent(row.tags)) continue;
-            // Same guard as stage 1b: sharing the requested ingredients does
-            // not make a row the dish the user named.
-            if (!isRequestedDish(row.name)) continue;
-
-            suggestions.push({
-                id: row.id,
-                name: row.name,
-                description: row.description,
-                image: row.image,
-                difficulty: row.difficulty,
-                totalTimeMinutes: row.totalTimeMinutes,
-                // A `recipe` row is already generated, so the card opens it; a
-                // `suggestion` row still routes to the generate screen.
-                source:
-                    row.source === "recipe" ? "existing_recipe" : "suggestion",
-                ingredients: row.ingredients,
-                tags: row.tags,
-            });
-
-            if (row.source === "recipe") {
-                metadata.vectorSearchHits++;
-            } else {
-                metadata.canonicalSearchHits++;
-            }
+            metadata.canonicalSearchHits++;
         }
     }
 
-    // If we have enough results from the catalogue, return early
+    // If the catalogue answered, return without generating.
     if (suggestions.length >= maxResults) {
-        return {
-            suggestions: suggestions.slice(0, maxResults),
-            searchMetadata: metadata,
-        };
-    }
+        onMetric?.("catalogue.answered");
 
-    // Stage 2: Canonical search on suggestions table.
-    //
-    // Skipped when stage 1 already returned this dish: a suggestion row can
-    // outlive its promotion (nothing deletes it if the user reached the recipe
-    // another way), and surfacing both would show the same dish twice — once as
-    // a recipe and once as a card offering to generate it again.
-    let existingSuggestion = isExcluded(query)
-        ? null
-        : await findSuggestionByName(query);
-
-    // The raw query rarely IS a canonical name ("a thai green curry recipe
-    // please"); when the user named a dish, ask for that name as well.
-    if (!existingSuggestion && dish && !isExcluded(dish)) {
-        existingSuggestion = await findSuggestionByName(dish);
-    }
-    const alreadyListed =
-        !!existingSuggestion &&
-        (isExcluded(existingSuggestion.name, existingSuggestion.nameEn) ||
-            !isWantedComponent(existingSuggestion.tags) ||
-            suggestions.some(
-                (item) =>
-                    // By id as well as by name: stage 1c can surface this very
-                    // suggestion row via find_recipes, and a name comparison
-                    // alone would miss it if the two spellings ever diverge.
-                    item.id === existingSuggestion.id ||
-                    canonicalizeName(item.name) ===
-                        canonicalizeName(existingSuggestion.name) ||
-                    canonicalizeName(item.name) ===
-                        canonicalizeName(existingSuggestion.nameEn)
-            ));
-
-    if (existingSuggestion && !alreadyListed) {
-        suggestions.push({
-            id: existingSuggestion.id,
-            name: existingSuggestion.name,
-            description: existingSuggestion.description,
-            difficulty: existingSuggestion.difficulty,
-            totalTimeMinutes: existingSuggestion.totalTimeMinutes,
-            source: "suggestion",
-            ingredients: existingSuggestion.ingredients.map((ing) => ({
-                id: ing.id,
-                name: ing.name,
-            })),
-            tags: existingSuggestion.tags.map((tag) => ({
-                id: tag.id,
-                name: tag.name,
-            })),
-        });
-        metadata.canonicalSearchHits++;
-    }
-
-    // If we have enough results, return
-    if (suggestions.length >= maxResults) {
         return {
             suggestions: suggestions.slice(0, maxResults),
             searchMetadata: metadata,
@@ -509,6 +678,8 @@ export async function searchRecipeSuggestions(
         console.log(
             `[SearchRecipeSuggestions] No results found for "${query}", generating suggestions with LLM`
         );
+
+        onStage?.("generate");
 
         try {
             if (onPartialSuggestion) {
@@ -546,6 +717,22 @@ export async function searchRecipeSuggestions(
                                 totalTimeMinutes: fields.totalTimeMinutes,
                                 ingredients: fields.ingredients,
                                 tags: fields.tags,
+                            });
+                        },
+                        // The generator has finished writing and the dish has
+                        // validated; everything from here to an id is review,
+                        // embedding, dedup and insert. Hand the words over now
+                        // so a caller can get on with the work that only needs
+                        // words — see `EarlyDish`.
+                        onDishParsed: (parsed) => {
+                            onStage?.("persist");
+                            onDishReady?.({
+                                name: parsed.name,
+                                description: parsed.description,
+                                difficulty: parsed.difficulty,
+                                totalTimeMinutes: parsed.total_time_minutes,
+                                ingredients: parsed.ingredients,
+                                tags: parsed.tags,
                             });
                         },
                     }

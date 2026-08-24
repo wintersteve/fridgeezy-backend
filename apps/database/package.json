@@ -223,16 +223,45 @@
                     "cwd": "apps/database"
                 }
             },
+            "check-ingredient-identity": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/check-ingredient-identity.ts",
+                    "cwd": "apps/database"
+                }
+            },
+            "backup-ingredient-tables": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/backup-ingredient-tables.ts",
+                    "cwd": "apps/database"
+                }
+            },
+            "cleanup-ingredient-duplicates": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/cleanup-ingredient-duplicates.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "classify-ingredient-diet": {
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "npx jiti operations/classify-ingredient-diet.ts",
                     "cwd": "apps/database"
                 }
+            },
+            "classify-ingredient-component": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/classify-ingredient-component.ts",
+                    "cwd": "apps/database"
+                }
             }
         }
     },
     "dependencies": {
+        "@fridgeezy/components": "0.0.1",
         "@fridgeezy/dietary": "0.0.1",
         "@fridgeezy/genai": "0.0.1",
         "@fridgeezy/llm": "0.0.1",

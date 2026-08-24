@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 
-import { generateSuggestion, promoteSuggestion } from "./usecases";
+import { generateSuggestion, promoteSuggestion, resolveDish } from "./usecases";
 
 export class SuggestionsController {
     static generate = async (
@@ -12,6 +12,18 @@ export class SuggestionsController {
             return generateSuggestion(req, res);
         } catch (err) {
             console.log("error", err);
+            next(err);
+        }
+    };
+
+    static resolve = async (
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) => {
+        try {
+            return resolveDish(req, res);
+        } catch (err) {
             next(err);
         }
     };

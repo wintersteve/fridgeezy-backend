@@ -121,6 +121,7 @@ export const RECIPE_FIXTURES: RecipeFixture[] = [
  *  - a name the model will want to normalise (it must echo it EXACTLY)
  *  - a cuisine-sensitive swap, where the generic answer is the wrong one
  *  - an ingredient that is genuinely optional ("Leave it out" is legitimate)
+ *  - a caller whose restrictions rule out the obvious swap
  */
 export interface SubstituteFixture {
     label: string;
@@ -170,6 +171,26 @@ export const SUBSTITUTE_FIXTURES: SubstituteFixture[] = [
             recipeId: "fixture-pho",
             recipeName: "Pho Bo",
             missingIngredients: missing("thai basil"),
+        },
+    },
+    {
+        // Restrictions, on the two ingredients whose obvious answer they take
+        // away: butter's is cream or ghee, and heavy cream's is more dairy. The
+        // model has to reach past the first thing it thinks of rather than
+        // refusing the line — a dropped line reads to the client as a card that
+        // never arrives.
+        //
+        // `compileBlacklist` catches an exact "double cream" in the output; it
+        // cannot catch "ghee", which is a form of butter under a different
+        // canonical id. That gap is the model's half of the rule, so this is
+        // the fixture that measures it.
+        label: "restricted — obvious swap ruled out",
+        request: {
+            recipeId: "fixture-gratin",
+            recipeName: "Potato Gratin",
+            missingIngredients: missing("butter", "heavy cream"),
+            blacklist: ["double cream"],
+            dietaryRestrictions: ["dairy_free"],
         },
     },
 ];

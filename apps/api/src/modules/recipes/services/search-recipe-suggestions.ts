@@ -3,12 +3,16 @@ import { randomUUID } from "node:crypto";
 import { RecipesRepository } from "@fridgeezy/supabase";
 import { canonicalizeName } from "@fridgeezy/toolkit";
 
+import { type ComponentTag } from "../../suggestions/services/component-identity";
 import { findSuggestionByName } from "../../suggestions/services/find-suggestion-by-name";
 import { generateSuggestionsStream } from "../../suggestions/services/generate-suggestions-stream";
 import { streamSingleSuggestion } from "../../suggestions/services/stream-single-suggestion";
 
 import { fetchRecipeSummary } from "./fetch-recipe-summary";
-import { findCatalogueRecipes } from "./find-catalogue-recipes";
+import {
+    findCatalogueRecipes,
+    resolveIngredientIds,
+} from "./find-catalogue-recipes";
 import { searchRecipes, searchRecipesByEmbedding } from "./search-recipes";
 
 /**
@@ -45,52 +49,18 @@ import { searchRecipes, searchRecipesByEmbedding } from "./search-recipes";
 const DEFAULT_MATCH_THRESHOLD = 0.5;
 
 /**
- * The canonical `component` tag vocabulary, mirroring `seeds/002_tags.sql`.
+ * Re-exported from `component-identity`, which is where the list now lives so
+ * that `suggestions/` can read it without importing this module (that direction
+ * is already taken — this file imports several of its services — and closing the
+ * loop would make them cyclic).
  *
- * A row carries one of these ONLY when it is a building block rather than a
- * finished dish, which makes it the one reliable way to tell "a sauce" from "a
- * dish that has a sauce in it" — similarity search cannot: "sauce for apple
- * strudel" scores highest against Apple Strudel itself, so a component question
- * always answered with the dish.
- *
- * `dish` is deliberately NOT in this list. It used to be, back when every recipe
- * was required to carry a component and `dish` was the catch-all for the 87% that
- * were not components at all. Now absence carries that meaning, so a `dish` entry
- * would be a filter value matching nothing — and worse, an option the chat model
- * could pick, silently emptying the results for an ordinary request. Omitting the
- * parameter is how "an ordinary dish" is expressed.
+ * Kept exported HERE because the chat tool's `component` enum imports it from
+ * this path, and one vocabulary with one home is the whole point.
  */
-export const COMPONENT_TAGS = [
-    "sauce",
-    "stock",
-    "gravy",
-    "roux",
-    "slurry",
-    "spice blend",
-    "paste",
-    "rub",
-    "marinade",
-    "brine",
-    "cure",
-    "dough",
-    "batter",
-    "pastry",
-    "vinaigrette",
-    "dressing",
-    "custard",
-    "curd",
-    "caramel",
-    "crumb",
-    "pickle",
-    "jam",
-    "compote",
-    "syrup",
-    "glaze",
-    "icing",
-    "puree",
-] as const;
-
-export type ComponentTag = (typeof COMPONENT_TAGS)[number];
+export {
+    COMPONENT_TAGS,
+    type ComponentTag,
+} from "../../suggestions/services/component-identity";
 
 export interface RecipeSuggestionInput {
     query: string;
@@ -297,9 +267,43 @@ export interface SearchMetadata {
     newSuggestionsCreated: number;
 }
 
+/**
+ * Why a search came back with nothing, when the reason is a STATEMENT about the
+ * request rather than a fault.
+ *
+ * - `no_known_dish` — the catalogue held nothing and every dish the generator
+ *   wrote was refused by the notability gate. There is no established dish here
+ *   under any name.
+ * - `not_food` — the request was for a drink. This catalogue holds food.
+ *
+ * ## Why this exists at all
+ *
+ * `persistOrReuseSuggestion` has always known both of these and said so in the
+ * server log, and this function threw the whole `dropped` outcome away — a
+ * refusal and a crash left the caller with the same empty array. Chat then read
+ * "the tool was invoked and produced no card" as a broken turn and offered a
+ * Regenerate button, which re-ran the identical request. Measured 2026-08-24:
+ * four consecutive retries of "brussel sprouts recipe", four generations, four
+ * drops, four identical "Something went wrong" toasts.
+ *
+ * An empty result with no reason attached is still exactly that — a failure, or
+ * a request nobody has classified. Absence of this field is not a claim.
+ */
+export interface SearchUnsatisfied {
+    reason: "no_known_dish" | "not_food";
+    /** The dish names that were written and refused, for the log and the reply. */
+    attempted: string[];
+}
+
 export interface RecipeSuggestionResult {
     suggestions: RecipeSuggestionItem[];
     searchMetadata: SearchMetadata;
+    /**
+     * Set only when the search produced nothing AND knows why. See
+     * {@link SearchUnsatisfied} — never set alongside a non-empty
+     * `suggestions`.
+     */
+    unsatisfied?: SearchUnsatisfied;
 }
 
 /**
@@ -422,6 +426,8 @@ export async function searchRecipeSuggestions(
         !wanted || tags.some((tag) => canonicalizeName(tag.name) === wanted);
 
     const suggestions: RecipeSuggestionItem[] = [];
+    /** See {@link SearchUnsatisfied}. Only ever set on the generate path. */
+    let unsatisfied: SearchUnsatisfied | undefined;
     const metadata: SearchMetadata = {
         vectorSearchHits: 0,
         canonicalSearchHits: 0,
@@ -486,6 +492,41 @@ export async function searchRecipeSuggestions(
         }
     }
 
+    /**
+     * The ingredient ids the user actually asked about, resolved once.
+     *
+     * Used twice and that is the point: `find_recipes` FILTERS on them, and the
+     * similarity stage below has to CHECK against them. Resolving separately in
+     * each place would be two round trips to the same answer, free to disagree.
+     */
+    const requestedIngredientIds = ingredients?.length
+        ? new Set(await resolveIngredientIds(ingredients))
+        : new Set<string>();
+
+    /**
+     * Does this row contain something the user named?
+     *
+     * **Open when no ingredient was named, and a hard gate when one was.** This
+     * is `isRequestedDish`'s counterpart for the other kind of request: that one
+     * stops a similarity hit impersonating a dish the user NAMED, this one stops
+     * it answering an INGREDIENT question with a dish that does not contain the
+     * ingredient.
+     *
+     * Without it, "give me a recipe containing brussels sprouts" sets no `dish`,
+     * so `isRequestedDish` stays open, and every recipe clearing the 0.5
+     * similarity threshold was accepted — none of which need contain a brussels
+     * sprout. Similarity is measured against the dish SIGNATURE, so a request
+     * phrased around a vegetable scores respectably against anything vegetable-
+     * ish. And because the vector rows are pushed FIRST, on chat's `maxResults`
+     * of 1 a loose hit took the single slot that the exact ingredient match
+     * (stage 1c) was about to fill.
+     */
+    const containsRequestedIngredient = (
+        rows: Array<{ id: string }>
+    ): boolean =>
+        requestedIngredientIds.size === 0 ||
+        rows.some((row) => requestedIngredientIds.has(row.id));
+
     // Stages 1b, 1c and 2 all at once.
     //
     // They are three independent reads and they used to run one after another,
@@ -513,9 +554,9 @@ export async function searchRecipeSuggestions(
             // not a search, and it is the one the search screen answers well
             // while chat did not answer at all — it generated a new dish over a
             // catalogue that already had one.
-            ingredients?.length
+            requestedIngredientIds.size
                 ? findCatalogueRecipes({
-                      ingredients,
+                      ingredientIds: [...requestedIngredientIds],
                       blacklist,
                       limit: maxResults,
                   })
@@ -552,7 +593,8 @@ export async function searchRecipeSuggestions(
                 recipeSummary &&
                 !isExcluded(recipeSummary.name) &&
                 isWantedComponent(recipeSummary.tags) &&
-                isRequestedDish(recipeSummary.name, recipeSummary.nameEn)
+                isRequestedDish(recipeSummary.name, recipeSummary.nameEn) &&
+                containsRequestedIngredient(recipeSummary.ingredients)
             ) {
                 suggestions.push({
                     id: recipeSummary.id,
@@ -687,27 +729,43 @@ export async function searchRecipeSuggestions(
                 // its fields out — title first, then description, etc. — sharing
                 // a tempId so the enriched item below upgrades the same card.
                 //
-                // `dish` before `query`: the generator reads its "Ingredients"
-                // line as a dish name when it looks like one, and the pinned
-                // name IS that name with the question stripped off ("Béchamel"
-                // rather than "how do I make a perfect Béchamel"). When no dish
-                // was named the raw query is all there is, and it is the concept
-                // query that line was written for.
+                // A named dish is PINNED, not passed as an ingredient. The
+                // generator does read the "Ingredients" line as a dish name when
+                // it looks like one — but "looks like one" is a guess, and it
+                // resolves the wrong way for every dish that is also an
+                // ingredient of something else. When no dish was named the raw
+                // query is all there is, and it is the concept query that line
+                // was written for.
                 const tempId = randomUUID();
+
+                // Every distinct title the generator wrote this turn. On the
+                // happy path it is one; on a retried notability drop it is the
+                // rejected name and then the replacement, and if NOTHING clears
+                // the gate it is what `unsatisfied.attempted` reports.
+                const attempted: string[] = [];
 
                 const outcome = await streamSingleSuggestion(
                     {
-                        ingredients: [dish ?? query],
+                        // ONLY when no dish was named. A named dish goes in as a
+                        // dish (below) — putting it here renders `Ingredients:
+                        // Ragu`, and a ragù really is an ingredient of other
+                        // dishes, so the generator answered with the plate built
+                        // on it. See `StreamSingleSuggestionOptions.dish`.
+                        ingredients: dish ? [] : [query],
                         component,
                         dietaryRestrictions,
                         blacklist,
                         difficulty,
                     },
                     {
+                        dish,
                         onField: (fields) => {
                             // `name` streams first; hold the frame until it lands
                             // so the card never renders without a title.
                             if (!fields.name) return;
+                            if (!attempted.includes(fields.name)) {
+                                attempted.push(fields.name);
+                            }
                             onPartialSuggestion({
                                 tempId,
                                 source: "new_suggestion",
@@ -724,7 +782,7 @@ export async function searchRecipeSuggestions(
                         // embedding, dedup and insert. Hand the words over now
                         // so a caller can get on with the work that only needs
                         // words — see `EarlyDish`.
-                        onDishParsed: (parsed) => {
+                        onDishReviewed: (parsed) => {
                             onStage?.("persist");
                             onDishReady?.({
                                 name: parsed.name,
@@ -765,6 +823,41 @@ export async function searchRecipeSuggestions(
                     // that streamed in upgrades in place) rather than minting a
                     // duplicate suggestion for something the user already has.
                     const recipe = outcome.recipe;
+
+                    // The caller's own filters, which this path was missing —
+                    // three routes return an existing recipe and only two of
+                    // them applied these.
+                    //
+                    // **Deliberately NOT `isRequestedDish` here**, unlike stages
+                    // 1b and 1c. Those match by similarity or by ingredient, so
+                    // a name check is what stops a lookalike impersonating the
+                    // dish that was asked for. This row was chosen by DEDUP,
+                    // whose entire job is to decide that two DIFFERENT names are
+                    // one dish — Som Tam and Green Papaya Salad, Bechamel and
+                    // "Béchamel Sauce". Requiring the name to match the user's
+                    // phrasing here refuses dedup's correct answers: measured, a
+                    // request for "Bechamel" generated "Béchamel Sauce",
+                    // resolved onto the catalogue recipe of that exact name, and
+                    // was thrown away for not being spelled the way the user
+                    // typed it.
+                    //
+                    // What protects the Ragu-returning-Lasagna case is
+                    // `componentsDisagree`, at the source, where the tags can
+                    // actually settle it.
+                    if (isExcluded(recipe.name) || !isWantedComponent(recipe.tags)) {
+                        console.warn(
+                            `[SearchRecipeSuggestions] Refusing "${recipe.name}" for "${dish ?? query}" — excluded, or not the component asked for`
+                        );
+                        unsatisfied = { reason: "no_known_dish", attempted };
+                        onMetric?.("search.dedup_mismatch");
+
+                        return {
+                            suggestions: [],
+                            searchMetadata: metadata,
+                            unsatisfied,
+                        };
+                    }
+
                     suggestions.push({
                         id: recipe.id,
                         name: recipe.name,
@@ -779,6 +872,26 @@ export async function searchRecipeSuggestions(
                         tags: recipe.tags,
                     });
                     metadata.vectorSearchHits++;
+                } else if (outcome.kind === "dropped") {
+                    // The generation is over and produced no card. Say WHY, so
+                    // the caller can answer the question instead of reporting a
+                    // fault — see `SearchUnsatisfied`. `not_food` and
+                    // `unauthentic` are the two verdicts about the REQUEST; a
+                    // `persist_failed` / `invalid` / `duplicate` drop is a fault
+                    // or an accident and deliberately says nothing, so the
+                    // caller keeps treating it as one.
+                    if (outcome.reason === "not_food") {
+                        unsatisfied = { reason: "not_food", attempted };
+                    } else if (outcome.reason === "unauthentic") {
+                        unsatisfied = { reason: "no_known_dish", attempted };
+                    }
+
+                    if (unsatisfied) {
+                        console.log(
+                            `[SearchRecipeSuggestions] Nothing to offer for "${query}" (${unsatisfied.reason}${attempted.length ? `; tried ${attempted.join(", ")}` : ""})`
+                        );
+                        onMetric?.(`search.unsatisfied.${unsatisfied.reason}`);
+                    }
                 }
             } else {
                 // Non-streaming caller: keep the multi-suggestion JSONL generator.
@@ -834,5 +947,6 @@ export async function searchRecipeSuggestions(
     return {
         suggestions: suggestions.slice(0, maxResults),
         searchMetadata: metadata,
+        unsatisfied,
     };
 }

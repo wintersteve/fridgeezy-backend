@@ -10,6 +10,7 @@ import {
     Result,
     success,
 } from "@fridgeezy/domain";
+import { ingredientCanonicalId } from "@fridgeezy/toolkit";
 import { Ingredient, IngredientInsertPayload } from "@fridgeezy/types";
 
 import { supabaseAdmin } from "../../client";
@@ -177,7 +178,24 @@ export class IngredientsRepository implements IIngredientsRepository {
             const { error } = await supabaseAdmin
                 .from("ingredient_aliases")
                 .upsert(
-                    { ingredient_id: ingredientId, alias },
+                    {
+                        ingredient_id: ingredientId,
+                        alias,
+                        // Stamped again by `set_alias_canonical_id` on the way
+                        // in — the trigger overwrites this unconditionally, so
+                        // the database stays the authority and a drift here
+                        // cannot corrupt a row. It is sent because the column is
+                        // NOT NULL with no DEFAULT, which is all the generated
+                        // `Insert` type can see: a trigger is invisible to it.
+                        // `ingredients.canonical_id` is the same shape and is
+                        // supplied the same way from `match-ingredients`.
+                        //
+                        // `ingredientCanonicalId` and not `canonicalizeName`:
+                        // this is the singularising rule, the one
+                        // `findByAliasCanonicalIds` reads back with, and the one
+                        // the trigger mirrors.
+                        alias_canonical_id: ingredientCanonicalId(alias),
+                    },
                     {
                         onConflict: "alias_canonical_id",
                         ignoreDuplicates: true,

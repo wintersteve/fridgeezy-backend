@@ -1046,6 +1046,23 @@ and left alone on purpose. Don't "fix" one without the trigger next to it:
   `listCatalogDishes`): the generator free-texts them and `matchIngredients`
   reconciles after the fact. *Revisit when* the `[Ingredients]` logs show the
   gate rejecting or duplicating often.
+- **`ingredient_canonical_id` singularises only the LAST word**, so a compound
+  whose EARLIER word carries the plural makes a second identity: `Brussels
+  Sprout` -> `brussels_sprout` and `Brussel Sprout` -> `brussel_sprout` are two
+  rows for one vegetable, and nothing in the write path can tell them apart. Not
+  cosmetic — `find_recipes` filters by ingredient ID, so a split catalogue
+  answers an ingredient question with a fraction of what it holds. Measured
+  2026-08-24: 17 brussels-sprouts dishes stored, the search returned 3; after
+  the merge, 8 of 8 asked for.
+
+  `nx run @fridgeezy/database:merge-spelling-variants` collapses them —
+  deterministic, no embeddings, no LLM, dry run unless
+  `MERGE_VARIANTS_APPLY=true`. Run it BEFORE `dedupe-ingredients`: this is the
+  cheap half and the half that recurs, while that one hunts synonymy
+  ("scallion"/"green onion") which only a model can judge. The merge leaves the
+  losing name behind as an ALIAS, and that is what stops the row coming back —
+  the next "brussel sprouts" resolves through `findByAliasCanonicalIds` instead
+  of falling through to a create.
 - **The authenticity gate judges the INGREDIENTS, not the name.** Its blind spot
   was measured on 2026-08-05: a "Ceviche de Mariscos" whose ingredients were
   lime, onion, chili, sweet potato and corn — ceviche's garnishes, no seafood —
@@ -1057,6 +1074,112 @@ and left alone on purpose. Don't "fix" one without the trigger next to it:
   prompt. `GUTTED_DISHES` in `dedup-authenticity.eval.ts` holds that exact row —
   **keep it there.** Prompt edits that improve the common case have a habit of
   restoring this one.
+- **A COMPONENT is never the dish built on it, whatever the signature says.**
+  `componentsDisagree` (`component-identity.ts`) is a hard gate in BOTH dedup
+  paths — `findRecipeForDish` and `persistOrReuseSuggestion`'s layer 3 — checked
+  BEFORE the score, so it overrules auto-merge above `SIGNATURE_HIGH_THRESHOLD`
+  too. A ragù and a lasagne share nearly every ingredient, so their signatures
+  score higher against each other than most genuine duplicates do; this is the
+  one case similarity is structurally incapable of judging, and this repo already
+  said so twice ("similarity alone always scores a bechamel query highest against
+  Lasagne", and the `from` parameter on `/recipes/new`).
+
+  Measured 2026-08-24: "Give me a Ragu recipe" generated a correct Ragù,
+  `findRecipeForDish` folded it into the catalogue's **Lasagna**, and chat
+  answered a request for a sauce with a baked pasta dish. The tags said so the
+  whole time — the ragù carried `sauce`, the lasagne did not — and nothing read
+  them. The gate can only ever keep two rows APART; it never merges anything the
+  signature considered distinct.
+
+  `COMPONENT_TAGS` moved to `component-identity.ts` so `suggestions/` can read it
+  without importing `search-recipe-suggestions` (that direction is already taken;
+  closing the loop would make them cyclic). It is re-exported from the old path
+  because the chat tool's `component` enum imports it from there.
+- **A NAMED DISH IS NOT AN INGREDIENT, and passing one as an ingredient is what
+  answered "give me a ragu recipe" with a pasta dish.** The generation call used
+  to be `streamSingleSuggestion({ ingredients: [dish ?? query] })`, which renders
+  as `Ingredients: Ragu` — and a ragù genuinely IS an ingredient of other dishes,
+  so the generator read it as "a dish featuring ragù" and returned Tagliatelle al
+  Ragù. It was doing exactly what it was asked. The system prompt's "the
+  Ingredients line may ALSO be a dish name" is a GUESS, and it resolves the wrong
+  way for every dish that is also a component of something else.
+
+  A named dish now goes in on its own `Dish:` line
+  (`StreamSingleSuggestionOptions.dish`, backend-local so it needs no tarball
+  rebuild) with a rule that says to return that dish itself and never the plate
+  built on it. `ingredients` is left EMPTY when a dish is pinned. Measured
+  2026-08-24, 5 of 5: Ragu -> Bolognese Sauce, and Bechamel, Pesto, Lasagna and
+  Thai Green Curry all resolve to themselves.
+- **The generation path's `existing_recipe` outcome applies `isExcluded` and
+  `isWantedComponent` — but deliberately NOT `isRequestedDish`.** Stages 1b and
+  1c do apply it, because they match by similarity or by ingredient and a name
+  check is what stops a lookalike impersonating the dish that was asked for. This
+  row was chosen by DEDUP, whose entire job is to decide that two DIFFERENT names
+  are one dish — Som Tam and Green Papaya Salad, "Bechamel" and "Béchamel Sauce".
+  Requiring the name to match the user's phrasing refuses dedup's CORRECT
+  answers: measured, a request for "Bechamel" generated "Béchamel Sauce",
+  resolved onto the catalogue recipe of that exact name, and was thrown away for
+  not being spelled the way the user typed it. What protects the
+  Ragu-returning-Lasagna case is `componentsDisagree`, at the source, where the
+  tags can actually settle it.
+- **An INGREDIENT request needs its own relevance gate, and had none.**
+  `isRequestedDish` is deliberately open when no `dish` was named — which is
+  exactly what an ingredient question looks like — so every recipe clearing the
+  0.5 similarity threshold was accepted for "give me a recipe containing brussels
+  sprouts", none of which need contain one. `containsRequestedIngredient` is its
+  counterpart: that one stops a similarity hit impersonating a dish the user
+  NAMED, this one stops it answering an ingredient question with a dish that does
+  not contain the ingredient. The ids are resolved ONCE and shared with
+  `findCatalogueRecipes`, which is why that function now takes `ingredientIds`
+  rather than names.
+- **The two generators must state the notability bar the SAME way, and for a
+  year they did not.** `generate-suggestions-stream` (the feed) carried "BEING
+  WELL KNOWN IS PARAMOUNT" plus a ban on descriptive names; `stream-single-
+  suggestion` — the one CHAT and the search screen use — carried only
+  "AUTHENTICITY IS PARAMOUNT". Both are judged by the same gate, so the weaker
+  prompt failed it constantly and silently. Measured 2026-08-24: five
+  consecutive chat turns for "brussel sprouts recipe" produced "Roasted Brussels
+  Sprouts with Hazelnut Dukkah", "Brussels Sprouts Tortellini", "Shaved Brussels
+  Sprout and Hazelnut Salad", "Caramelized Brussel Sprouts with Hazelnut Dukkah"
+  and "Brussels Sprouts Bourguignon", and the gate correctly dropped all five as
+  `obscure`. The user's chat answered four retries with an error toast.
+
+  **The floor was not the problem.** Put through the same classifier by hand,
+  named brussels-sprouts dishes clear it comfortably — Choux de Bruxelles à la
+  Flamande and Rosenkohl mit Speck both `well_known` at 0.9. Loosening `ATTESTED`
+  for the direct-request path was the tempting fix and would have been the wrong
+  one; the generator simply never reached for a named dish. Both prompts now
+  share `WELL_KNOWN_RULE` (`constraint-rules.ts`), which also names the specific
+  failure shape: handed a bare INGREDIENT — a vegetable most of all — the model
+  composes a plate (`<method> <ingredient> with <garnish>`) instead of recalling
+  the dish some tradition already named around it.
+- **The single-suggestion path retries a notability drop; it used to get one
+  roll.** The batch generator has had `MAX_PASSES`, a ledger and a saturation
+  test since it was written, and the single path had none of it — so one bad roll
+  ended a paid chat turn. `MAX_GENERATION_ATTEMPTS` is 2, the second attempt is
+  handed the first one's name as a rejection (its own wording, NOT
+  `buildExistingDishesBlock` — these dishes are the opposite of "already in the
+  catalog"), and **only `unauthentic` retries**: `not_food` is a property of the
+  request, and `duplicate` / `persist_failed` / `invalid` are not questions a
+  second generation answers. Same distinction the batch's `saturated` test makes.
+
+  It earns its keep because the gate is noisy at this margin: "Roasted Brussels
+  Sprouts with Balsamic" clears at 0.9 while "Roasted Brussels Sprouts with
+  Romesco Sauce" is dropped as `obscure`.
+- **A drop that is a STATEMENT about the request now reaches the client.**
+  `searchRecipeSuggestions` used to discard the whole `dropped` outcome, so a
+  refusal and a crash left chat with the same empty array — which it reported as
+  "Something went wrong" with a Regenerate button that re-ran the identical
+  request. It now returns `SearchUnsatisfied` for `no_known_dish` and `not_food`
+  only, and `process-chat` turns that into `buildUnsatisfiedLine` prose plus an
+  `unsatisfied` frame. **A fault must keep returning nothing**: an empty result
+  with no reason attached is still exactly that.
+- **`onReviewed` is where a caller may first act on a dish's WORDS.** Chat starts
+  writing its summary from it, so it fires past the notability gate rather than
+  on the raw parsed object — otherwise a dropped dish left a finished paragraph
+  on screen about a dish the reader never saw. It is still not a commitment
+  (dedup can resolve the dish onto another row), but that mismatch is a real dish
+  under a near-identical name.
 - **A dietary restriction changes the DISH, never the recipe.** `BLACKLIST_RULE`
   distinguishes the two: a blacklisted item gets swapped, a dietary restriction
   means picking a dish that already complies. Strip seafood from a ceviche and

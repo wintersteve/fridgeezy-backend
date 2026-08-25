@@ -55,6 +55,13 @@
                     "forwardAllArgs": true
                 }
             },
+            "merge-spelling-variants": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/merge-spelling-variants.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "dedupe-ingredients": {
                 "executor": "nx:run-commands",
                 "options": {

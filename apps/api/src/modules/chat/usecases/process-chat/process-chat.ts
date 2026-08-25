@@ -15,10 +15,12 @@ import type {
     RecipeSuggestionItem,
     RecipeSuggestionResult,
     SearchMetadata,
+    SearchUnsatisfied,
     SpeculativeEmbedding,
 } from "../../../recipes/services/search-recipe-suggestions";
 import {
     buildIntentLine,
+    buildUnsatisfiedLine,
     convertToolsToOpenAiTools,
     createChatCompletion,
     endSseStream,
@@ -322,6 +324,18 @@ export async function processChat(req: Request, res: Response): Promise<void> {
             RecipeSuggestionItem | PartialRecipeSuggestion
         > = [];
         let resultMetadata: SearchMetadata | null = null;
+        /**
+         * Why the search came back empty, when it knows. See
+         * `SearchUnsatisfied` — a turn carrying one is a turn that ANSWERED the
+         * question, and must not be reported as a broken stream.
+         *
+         * A holder rather than a bare `let`, for the reason spelled out on
+         * `resultMenu`: it is written inside a `.then` and read after it, and
+         * TypeScript would keep the `null` narrowing across that boundary.
+         */
+        const resultUnsatisfied: { reason: SearchUnsatisfied | null } = {
+            reason: null,
+        };
 
         /**
          * Set instead of `resultSuggestions` when the turn asked for a menu.
@@ -613,6 +627,10 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                         if (parsedResult.searchMetadata) {
                             resultMetadata = parsedResult.searchMetadata;
                         }
+
+                        if (parsedResult.unsatisfied) {
+                            resultUnsatisfied.reason = parsedResult.unsatisfied;
+                        }
                     }
 
                     if (toolCall?.function.name === "PLAN_MENU") {
@@ -846,6 +864,33 @@ export async function processChat(req: Request, res: Response): Promise<void> {
             }
         }
 
+        /**
+         * The turn has nothing to offer, and says so.
+         *
+         * Written after the cards rather than before, for the same reason they
+         * are written after the prose: this IS the reply's last paragraph, and
+         * there is nothing above it to push down (the summary is skipped on this
+         * path — there was no dish to summarise).
+         *
+         * Two frames, deliberately. The sentence goes out as `content` so a
+         * client that has never heard of `unsatisfied` still renders a complete
+         * reply; the frame is what tells a client that HAS heard of it that this
+         * turn is finished and correct, so it commits the exchange instead of
+         * offering to regenerate a request the server has just explained cannot
+         * be answered.
+         */
+        const unsatisfied = resultUnsatisfied.reason;
+
+        if (unsatisfied && resultSuggestions.length === 0) {
+            writeSseEvent(res, {
+                type: "content",
+                data: {
+                    delta: `\n\n${buildUnsatisfiedLine(unsatisfied.reason, routed)}`,
+                },
+            });
+            writeSseEvent(res, { type: "unsatisfied", data: unsatisfied });
+        }
+
         if (resultMetadata) {
             writeSseEvent(res, { type: "metadata", data: resultMetadata });
         }
@@ -858,7 +903,9 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                     : "menu_inquiry"
                 : resultSuggestions.length > 0
                   ? "suggested"
-                  : "empty"
+                  : unsatisfied
+                    ? `unsatisfied_${unsatisfied.reason}`
+                    : "empty"
         );
         timer.count("suggestions", resultSuggestions.length);
 

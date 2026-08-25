@@ -138,6 +138,85 @@ export function buildIntentLine(routed: RoutedSearch): string {
 }
 
 /**
+ * What a turn that found nothing is ABOUT, and which PREPOSITION it takes.
+ *
+ * The two are one decision. A named dish is a thing the catalogue does not
+ * hold — "no established dish CALLED Salsify Gratin" — while an ingredient is
+ * something nothing could be built out of — "no established dish BUILT AROUND
+ * salsify". One phrasing for both gets the named case exactly backwards, and it
+ * is the case where the reader is most likely to be right and us wrong.
+ */
+function subjectOf(
+    routed: RoutedSearch
+): { lead: string; subject: string } | null {
+    if (routed.dish) return { lead: "called", subject: routed.dish };
+    if (routed.component) {
+        return { lead: "built around", subject: routed.component };
+    }
+    if (routed.ingredients?.length) {
+        return { lead: "built around", subject: listPhrase(routed.ingredients) };
+    }
+
+    if (routed.query) {
+        // The raw query is the last resort and it is the one that reads badly
+        // interpolated — it is a whole request ("brussel sprouts recipe"), not a
+        // noun. Trimming the request words off leaves the subject behind.
+        const trimmed = routed.query
+            .replace(/\b(a |an |some |the )/gi, "")
+            .replace(/\b(recipes?|dishes?|ideas?|something|anything)\b/gi, "")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        return { lead: "built around", subject: trimmed || routed.query };
+    }
+
+    return null;
+}
+
+/**
+ * What the assistant says when the turn genuinely has nothing to offer.
+ *
+ * ## It is a real answer, and that is the whole point of it
+ *
+ * Until this existed the two cases below reached the reader as "Something went
+ * wrong. The reply stopped before it finished." with a Regenerate button —
+ * because the client's only test was "the tool was invoked and no card came
+ * back", which is equally true of a crash. Regenerating re-ran the identical
+ * request, so the four attempts measured on 2026-08-24 produced four
+ * generations, four notability drops and four identical toasts. The server knew
+ * the answer every time and had no way to say it.
+ *
+ * Written here rather than by a model, for the reason {@link buildIntentLine}
+ * is: the summary call is skipped on this path (there is nothing to summarise),
+ * and a turn that has to admit a limit should not have its phrasing decided
+ * fresh each time. It goes out as `content` deltas, so a client that has never
+ * heard of the `unsatisfied` frame still reads a complete, true reply.
+ *
+ * Both endings name a next move. "There is no dish" is only a dead end if the
+ * reader is not told which way out is open.
+ */
+export function buildUnsatisfiedLine(
+    reason: "no_known_dish" | "not_food",
+    routed: RoutedSearch
+): string {
+    if (reason === "not_food") {
+        return "That is a drink rather than a dish, and Fridgeezy only holds food — so there is nothing here for me to write up. Ask me for something to eat and I will find it.";
+    }
+
+    const about = subjectOf(routed);
+
+    if (!about) {
+        return "I could not find an established dish for that — everything I came up with was a plate of food rather than a dish anyone asks for by name. Try naming a dish, or give me an ingredient or two to work with.";
+    }
+
+    // A named dish that is not in the catalogue is a different sentence from an
+    // ingredient nothing can be built from, and so is the way out of each.
+    return about.lead === "called"
+        ? `I could not find an established dish called ${about.subject}, and nothing I wrote for it was a dish people ask for by name. Check the spelling, or describe what is in it and I will look again.`
+        : `I could not find an established dish built around ${about.subject} — everything I came up with was a plate of food rather than a dish anyone asks for by name. Try naming a dish, or give me another ingredient to pair it with.`;
+}
+
+/**
  * The short, replaceable line under the typing indicator — what the server is
  * doing RIGHT NOW, as distinct from the reply text above which is permanent.
  *

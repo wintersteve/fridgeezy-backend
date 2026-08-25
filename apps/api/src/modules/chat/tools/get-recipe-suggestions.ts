@@ -128,6 +128,18 @@ export const RecipeSuggestionOutputSchema = z.object({
         canonicalSearchHits: z.number(),
         newSuggestionsCreated: z.number(),
     }),
+    /**
+     * Present only when the search came back empty AND knows why — see
+     * `SearchUnsatisfied`. Declared here because the tool output is also what
+     * the summary turn reads, so a turn that has nothing to offer can at least
+     * be summarised honestly rather than skipped.
+     */
+    unsatisfied: z
+        .object({
+            reason: z.enum(["no_known_dish", "not_food"]),
+            attempted: z.array(z.string()),
+        })
+        .optional(),
 });
 
 export type RecipeSuggestionInput = z.infer<typeof RecipeSuggestionInputSchema>;

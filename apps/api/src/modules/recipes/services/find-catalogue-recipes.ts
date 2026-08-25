@@ -98,16 +98,20 @@ export async function resolveIngredientIds(
  * is what it did before this path existed.
  */
 export async function findCatalogueRecipes(options: {
-    ingredients: string[];
+    /**
+     * Already resolved, because the CALLER needs these ids too: the same set is
+     * what lets it check that a similarity hit actually contains what was asked
+     * for. Resolving here as well would be a second round trip to reach the same
+     * answer, and two resolutions free to disagree.
+     */
+    ingredientIds: string[];
     blacklist?: string[];
     difficulty?: "easy" | "medium" | "hard";
     limit?: number;
 }): Promise<CatalogueRecipe[]> {
-    const { ingredients, blacklist = [], difficulty, limit = 5 } = options;
+    const { ingredientIds, blacklist = [], difficulty, limit = 5 } = options;
 
     try {
-        const ingredientIds = await resolveIngredientIds(ingredients);
-
         // With no resolvable ingredient this degenerates into "any recipe at
         // all", which is not what the user asked for — leave it to the other
         // stages.

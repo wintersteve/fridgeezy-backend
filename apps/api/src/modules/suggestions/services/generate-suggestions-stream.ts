@@ -17,6 +17,7 @@ import {
     ADAPTED_FOR_RULE,
     BLACKLIST_RULE,
     FOOD_ONLY_RULE,
+    WELL_KNOWN_RULE,
 } from "./constraint-rules";
 import { DIFFICULTY_RULE } from "./difficulty-rules";
 import { createFrameQueue, createGate } from "./frame-queue";
@@ -94,9 +95,8 @@ The "Ingredients" line below may list literal ingredients, but it may ALSO be a 
 - A meal/course or cuisine concept -> a varied set of authentic dishes that fit it.
 
 ## Rules
-- BEING WELL KNOWN IS PARAMOUNT: only suggest dishes that people actually ask for BY NAME within their own food culture. Known locally is enough — a dish every household in Oaxaca can name qualifies; it does not have to be famous worldwide.
-- Modern and fusion dishes are welcome when they are established in their own right (California Roll, Korean tacos, Banh Mi). Age and purity are not the test; recognition is.
-- Each recipe MUST have a REAL NAME people use for it — never an invented or descriptive one (NOT "Indian Tomato Butter Chicken", NOT "Persian Chicken with Yogurt and Walnuts"). If the only way you can label a dish is by listing what is in it, it is not an established dish: leave it out and pick one that has a name. Do NOT add alternative names in parenthesis.
+${WELL_KNOWN_RULE}
+- Do NOT add alternative names in parenthesis.
 - Do NOT reach for obscure dishes to satisfy the exclusion list below. If the well-known dishes matching this request are already in the catalog, return FEWER dishes — even none. A short batch is correct; padding it with something nobody has heard of is not.
 - Include ALL essential ingredients that define the dish. Never omit core ingredients that make the recipe authentic.
 - EVERY DISH YOU RETURN MUST BE A DIFFERENT DISH. Never return a dish alongside a qualified version of itself ("Arancini" and "Arancini di Riso al Ragù"), a dish alongside its own base ("Haemul Pajeon" and "Pajeon"), or the same dish under two names ("Som Tam" and "Green Papaya Salad"). If a request only really supports one of them, pick the best one — fill the other slot with a genuinely different dish if you have one, and drop the slot if you do not.

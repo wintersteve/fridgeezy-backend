@@ -47,5 +47,35 @@ export const FOOD_ONLY_RULE = `FOOD ONLY. This catalog holds things you EAT. Nev
   - A dish that CONTAINS a drink is food and is welcome: coq au vin, beer-battered fish, risotto with white wine, bourbon-glazed ribs and tiramisu are all fine. NEVER drop a dish because alcohol appears in its ingredients.
   - When the request asks for a drink and nothing else — "mojito", "cocktails", "something to sip" — return nothing rather than substituting a food dish that shares its flavours. Someone asking for a Mojito does not want a lime tart, and a card they did not ask for is worse than no card.`;
 
+/**
+ * The notability bar, stated to the GENERATOR — the same question
+ * `verifySuggestionAuthenticity` asks afterwards, asked before the dish is
+ * written rather than only after it has been paid for.
+ *
+ * ## It is shared because the two generators had drifted apart
+ *
+ * The batch prompt carried all of this; the single-suggestion prompt — the one
+ * CHAT uses — carried only "AUTHENTICITY IS PARAMOUNT" and a one-line ban on
+ * invented names. Both are judged by the same gate, so the weaker prompt failed
+ * it constantly and invisibly: measured on 2026-08-24, five consecutive chat
+ * turns for "brussel sprouts recipe" produced "Roasted Brussels Sprouts with
+ * Hazelnut Dukkah", "Brussels Sprouts Tortellini", "Shaved Brussels Sprout and
+ * Hazelnut Salad", "Caramelized Brussel Sprouts with Hazelnut Dukkah" and
+ * "Brussels Sprouts Bourguignon", and the gate dropped all five as `obscure`.
+ * It was right to: not one of them is a dish anybody asks for by name.
+ *
+ * The gate was not the problem, and loosening it would have been the wrong fix.
+ * Put through the same classifier by hand, *named* brussels-sprouts dishes clear
+ * it comfortably — Choux de Bruxelles à la Flamande and Rosenkohl mit Speck both
+ * came back `well_known` at 0.9. The generator simply never reached for one.
+ *
+ * Same reasoning as `buildSuggestionsUserPrompt` and `naming-rules`: a rule that
+ * exists in two copies is a rule that will exist in one.
+ */
+export const WELL_KNOWN_RULE = `- BEING WELL KNOWN IS PARAMOUNT: only suggest a dish that people actually ask for BY NAME within their own food culture. Known locally is enough — a dish every household in Oaxaca can name qualifies; it does not have to be famous worldwide.
+- Modern and fusion dishes are welcome when they are established in their own right (California Roll, Korean tacos, Banh Mi). Age and purity are not the test; recognition is.
+- A dish MUST have a REAL NAME people use for it — never an invented or descriptive one (NOT "Indian Tomato Butter Chicken", NOT "Persian Chicken with Yogurt and Walnuts"). If the only way you can label a dish is by listing what is in it, it is not an established dish: pick one that has a name.
+- AN INGREDIENT IS NOT A BRIEF TO INVENT. When the request names an ingredient rather than a dish — a vegetable or a staple most of all — the thing you will reach for first is a plate you have composed yourself: <method> <ingredient> with <garnish>, as in "Roasted Brussels Sprouts with Hazelnut Dukkah" or "Caramelized Cauliflower with Brown Butter". Those are descriptions of a plate, not names of a dish, and they will be rejected. Recall instead the dish some tradition has ALREADY named around that ingredient — Choux de Bruxelles à la Flamande, Rosenkohl mit Speck, Colcannon, Aloo Gobi, Ratatouille, Baba Ganoush, Bubble and Squeak — and suggest that. A restaurant menu line is not a dish name.`;
+
 /** The `adaptedFor` output field, described for the JSONL key list. */
 export const ADAPTED_FOR_RULE = `adaptedFor — array of the blacklisted ingredient names you replaced, exactly as given. [] when the dish is unchanged.`;

@@ -6,6 +6,7 @@ import {
 import { SuggestionsRepository } from "@fridgeezy/supabase";
 
 import { adjudicateSameDish } from "./adjudicate-suggestion";
+import { componentsDisagree } from "./component-identity";
 import { resolveIdentityCuisine } from "./cuisine-identity";
 import { fetchEnrichedSuggestion } from "./fetch-enriched-suggestion";
 import { findKnownDish } from "./find-known-dish";
@@ -63,6 +64,25 @@ export interface PersistOrReuseOptions {
      * only the caller can retract the slot it drew.
      */
     onAdmit?: (admission: SuggestionAdmission) => void;
+    /**
+     * Fired the moment the dish has CLEARED THE NOTABILITY GATE — after step 0's
+     * known-dish lookup or after the review, and before the embedding, the three
+     * dedup layers and the persist that between them take seconds.
+     *
+     * It is the earliest point at which the dish's WORDS can be acted on without
+     * risking acting on words that are about to be thrown away, which is why it
+     * is here rather than at the top of the function. `streamSingleSuggestion`
+     * used to announce the parsed object directly, one step earlier — and chat
+     * starts writing its summary from that announcement, so a dish the gate then
+     * dropped left a finished paragraph on screen about a dish the reader never
+     * saw, followed by "Something went wrong".
+     *
+     * It is still not a guarantee the dish survives: dedup below can resolve it
+     * onto an existing row under another name, and the persist can fail. Both
+     * are far more benign than the case this moved past — a real dish under a
+     * near-identical name, rather than no dish at all.
+     */
+    onReviewed?: (dish: GenerateSuggestionResponseDto) => void;
 }
 
 /**
@@ -122,7 +142,12 @@ export async function persistOrReuseSuggestion(
     request: Pick<GenerateSuggestionRequestDto, "cuisine">,
     options: PersistOrReuseOptions = {}
 ): Promise<SuggestionOutcome> {
-    const { batch, onAdmit, suggestionsRepo = new SuggestionsRepository() } = options;
+    const {
+        batch,
+        onAdmit,
+        onReviewed,
+        suggestionsRepo = new SuggestionsRepository(),
+    } = options;
     const slot = batch?.open();
     let settled = false;
 
@@ -158,6 +183,10 @@ export async function persistOrReuseSuggestion(
         );
 
         if (known) {
+            // Vetted when it was first stored, so the gate has effectively
+            // already passed on it.
+            onReviewed?.(suggestion);
+
             // Only the suggestion half is a card. An `existing_recipe` hit means
             // the user already has the dish, and the batch feed drops it.
             if (known.kind === "suggestion") {
@@ -235,6 +264,9 @@ export async function persistOrReuseSuggestion(
         const dish = review.name
             ? { ...suggestion, name: review.name, name_alt: review.nameAlt }
             : suggestion;
+
+        // Past the gate, under the name the dish will actually carry.
+        onReviewed?.(dish);
 
         // Embed the dish SIGNATURE (canonical name + tags + ingredients) once,
         // under the FINAL name: both halves of the catalog and every sibling are
@@ -357,6 +389,17 @@ export async function persistOrReuseSuggestion(
                     continue;
                 }
                 const existing = enrichedResult.value;
+
+                // Same hard gate the recipe half applies: a sauce and the dish
+                // built on it are not one row, whatever the signature says.
+                if (
+                    componentsDisagree(
+                        dish.tags,
+                        existing.tags.map((tag) => tag.name)
+                    )
+                ) {
+                    continue;
+                }
 
                 const autoMerge = candidate.score >= SIGNATURE_HIGH_THRESHOLD;
                 const isSameDish =

@@ -7,6 +7,7 @@ import {
 import { searchRecipesByEmbedding } from "../../recipes/services/search-recipes";
 
 import { adjudicateSameDish } from "./adjudicate-suggestion";
+import { componentsDisagree } from "./component-identity";
 import { pickIdentityMatch, sharesCanonicalName } from "./pick-identity-match";
 import {
     describeSuggestion,
@@ -91,6 +92,19 @@ export async function findRecipeForDish(
     for (const candidate of candidates) {
         const summary = await fetchRecipeSummary(candidate.id);
         if (!summary) continue;
+
+        // A building block is never the dish built on it, however close the
+        // signatures sit — and they sit very close, because they share nearly
+        // every ingredient. Checked BEFORE the score so it overrules auto-merge
+        // too: that is the path that folded a generated Ragù into Lasagna.
+        if (
+            componentsDisagree(
+                dish.tags,
+                summary.tags.map((tag) => tag.name)
+            )
+        ) {
+            continue;
+        }
 
         const autoMerge = candidate.score >= SIGNATURE_HIGH_THRESHOLD;
         const isSameDish =

@@ -429,6 +429,7 @@ export type Database = {
           id: string
           image_url: string | null
           name: string
+          name_ascii: string | null
           nutritional_info: Json | null
           parent_id: string | null
           shelf_life: string | null
@@ -450,6 +451,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           name: string
+          name_ascii?: string | null
           nutritional_info?: Json | null
           parent_id?: string | null
           shelf_life?: string | null
@@ -471,6 +473,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           name?: string
+          name_ascii?: string | null
           nutritional_info?: Json | null
           parent_id?: string | null
           shelf_life?: string | null
@@ -1460,36 +1463,45 @@ export type Database = {
           canonical_id: string
           created_at: string
           description: string | null
+          description_ascii: string | null
           difficulty: Database["public"]["Enums"]["difficulty_type"] | null
           embedding: string | null
           id: string
           identity_cuisine: string | null
           name: string
+          name_ascii: string | null
           name_en: string | null
+          name_en_ascii: string | null
           total_time_minutes: number | null
         }
         Insert: {
           canonical_id: string
           created_at?: string
           description?: string | null
+          description_ascii?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           embedding?: string | null
           id?: string
           identity_cuisine?: string | null
           name: string
+          name_ascii?: string | null
           name_en?: string | null
+          name_en_ascii?: string | null
           total_time_minutes?: number | null
         }
         Update: {
           canonical_id?: string
           created_at?: string
           description?: string | null
+          description_ascii?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           embedding?: string | null
           id?: string
           identity_cuisine?: string | null
           name?: string
+          name_ascii?: string | null
           name_en?: string | null
+          name_en_ascii?: string | null
           total_time_minutes?: number | null
         }
         Relationships: []
@@ -1612,6 +1624,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           description: string | null
+          description_ascii: string | null
           difficulty: Database["public"]["Enums"]["difficulty_type"] | null
           fat: number | null
           favourite_count: number
@@ -1622,12 +1635,15 @@ export type Database = {
           is_generated: boolean
           kcal: number | null
           name: string
+          name_ascii: string | null
           name_en: string | null
+          name_en_ascii: string | null
           origin: string
           prep_time: string | null
           protein: number | null
           servings: number
           short_description: string | null
+          short_description_ascii: string | null
           source_suggestion_id: string | null
           tips: string[] | null
           total_time_minutes: number | null
@@ -1641,6 +1657,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          description_ascii?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           fat?: number | null
           favourite_count?: number
@@ -1651,12 +1668,15 @@ export type Database = {
           is_generated?: boolean
           kcal?: number | null
           name: string
+          name_ascii?: string | null
           name_en?: string | null
+          name_en_ascii?: string | null
           origin?: string
           prep_time?: string | null
           protein?: number | null
           servings?: number
           short_description?: string | null
+          short_description_ascii?: string | null
           source_suggestion_id?: string | null
           tips?: string[] | null
           total_time_minutes?: number | null
@@ -1670,6 +1690,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          description_ascii?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           fat?: number | null
           favourite_count?: number
@@ -1680,12 +1701,15 @@ export type Database = {
           is_generated?: boolean
           kcal?: number | null
           name?: string
+          name_ascii?: string | null
           name_en?: string | null
+          name_en_ascii?: string | null
           origin?: string
           prep_time?: string | null
           protein?: number | null
           servings?: number
           short_description?: string | null
+          short_description_ascii?: string | null
           source_suggestion_id?: string | null
           tips?: string[] | null
           total_time_minutes?: number | null
@@ -1859,6 +1883,7 @@ export type Database = {
           id: string
           image_url: string | null
           name: string
+          name_ascii: string | null
           parent_id: string | null
           type: Database["public"]["Enums"]["tag_type"]
         }
@@ -1870,6 +1895,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           name: string
+          name_ascii?: string | null
           parent_id?: string | null
           type: Database["public"]["Enums"]["tag_type"]
         }
@@ -1881,6 +1907,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           name?: string
+          name_ascii?: string | null
           parent_id?: string | null
           type?: Database["public"]["Enums"]["tag_type"]
         }
@@ -2037,6 +2064,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      fold_accents: { Args: { p_text: string }; Returns: string }
       get_recipe_family_default: {
         Args: { p_recipe_id: string }
         Returns: {

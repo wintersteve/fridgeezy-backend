@@ -45,9 +45,15 @@ const TABLES = [
     "ingredient_merge_reviews",
 ] as const;
 
-/** Columns skipped per table — big, regenerable, and unread by a restore. */
+/**
+ * Columns skipped per table — big, regenerable, and unread by a restore.
+ *
+ * `name_ascii` is there for a second reason: it is a STORED GENERATED column,
+ * so a restore that fed these rows straight back would not merely waste space,
+ * it would be rejected. Postgres computes it from `name`.
+ */
 const SKIP_COLUMNS: Record<string, string[]> = {
-    ingredients: ["embedding"],
+    ingredients: ["embedding", "name_ascii"],
 };
 
 async function main() {

@@ -5,6 +5,7 @@
     "scripts": {
         "api": "nx run api:serve",
         "api:dev": "nx run api:serve:dev",
+    "webhook:dev": "./infra/send-webhook-event.sh",
         "build:all": "nx run-many -t build --all",
         "build:app": "nx run-many -t lint --projects=tag:scope:app",
         "build:shared": "nx run-many -t build --projects=tag:scope:shared",

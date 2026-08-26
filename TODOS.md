@@ -645,10 +645,12 @@ do with this repo and are the slowest; do them first.
    identifier is stored as `entitlement_id` but nothing branches on it: the
    client gate and the server check both ask only whether *any* entitlement is
    active.
-5. **Offering** — this one is exact. The client reads
-   `offerings.all.default.availablePackages`, so the offering's identifier must
-   literally be **`default`**. Add a monthly and an annual package to it.
-   An offering named anything else yields an empty paywall with no error.
+5. **Offering** — add a monthly and an annual package to it, and make sure it is
+   marked **current** in the dashboard. The identifier no longer matters: the
+   client reads `offerings.current.availablePackages`, so whichever offering is
+   current is the one the paywall sells. It used to read `all.default`, which
+   required the identifier to literally be `default` and emptied the paywall
+   with no error if it was ever renamed.
 6. Confirm the **iOS public SDK key** matches the one hardcoded in
    `src/core/revenuecat/constants/index.ts` (`appl_PypeQOMOR…`).
 
@@ -702,10 +704,20 @@ do with this repo and are the slowest; do them first.
    terraform -chdir=infra apply -var-file=environments/dev.tfvars
    ```
 
-5. Confirm on the deployed function: the startup banner's `billing` line should
-   read `active subscription required`. While anything is missing it says so —
-   `⚠ NOT ENFORCED` if the flag is unset, or `⚠ enforced, but
-   REVENUECAT_WEBHOOK_SECRET is unset` if the secret did not arrive.
+5. Confirm the deployed state. **The startup banner does NOT print on Lambda** —
+   `startupBanner` is imported only by `main.ts`, the local serve entrypoint, so
+   its `billing` line is a check for `npm run api`, never for CloudWatch. On the
+   deployed function the two facts are confirmed separately:
+
+   ```bash
+   # the flag — from the function's own config, not the banner
+   aws lambda get-function-configuration --function-name fridgeezy-dev-api \
+     --region eu-central-1 --query 'Environment.Variables.REQUIRE_ENTITLEMENT'
+
+   # the secret — only an actual delivery proves it; nothing reports it at boot
+   aws logs tail /aws/lambda/fridgeezy-dev-api --follow --region eu-central-1 \
+     | grep --line-buffered "\[billing\]"
+   ```
 
 ## 5. Device
 

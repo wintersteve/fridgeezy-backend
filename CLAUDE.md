@@ -480,6 +480,43 @@ ordered list). That is the whole reason `generate-suggestions-stream` is built
 around a queue rather than one loop. Run it after touching that file,
 `slot-ledger.ts` or `frame-queue.ts`.
 
+### Accent folding: a fold written twice, in two repos
+
+Every searchable text column has an accent-folded twin —
+`recipes.name_ascii`, `recipe_suggestions.description_ascii`,
+`ingredients.name_ascii`, `tags.name_ascii` and the rest — as a **stored
+generated column** over `public.fold_accents()`
+(`20260825000001_accent_folded_search.sql`).
+
+They exist because the CLIENT searches this database directly. Its catalogue
+search is a PostgREST `ilike` straight at these tables, and PostgREST cannot
+call a function on the column side of a filter, so the fold has to be
+materialised — an expression index would speed up a predicate the client has
+no way to write. Before this, "bechamel" missed "Béchamel Sauce" and the
+browse screen reported it as a dish the catalogue does not hold; same for
+Soufflé, Salade Niçoise, Pâté en Croûte, Moules Marinières and Supplì.
+
+**The fold is written twice and the two copies must agree.** `fold_accents()`
+here folds the row; `foldAccents()` in the client's `shared/toolkit` folds the
+query. A divergence raises nothing — it just makes some dishes quietly
+unfindable, which is the bug this closed.
+
+That is why it is `normalize(NFD)` plus a strip of U+0300–U+036F and **not
+`unaccent`**: it is the one fold Postgres and JavaScript both implement
+natively and identically. `unaccent` folds further (ø→o, æ→ae, ß→ss), which
+JavaScript would not, so it would disagree on exactly those characters. The
+coverage that costs is a Danish or German dish still needing its own letters
+typed — no worse than before. **Widen both sides in one change or neither.**
+
+Two properties callers lean on: the fold is **length-preserving** for
+precomposed text, which is what lets the client's `HighlightedLabel` slice a
+match out of the ORIGINAL string at an index found in the folded one; and it
+**does not lowercase**, because `ilike` already handles that.
+
+A generated column cannot be inserted into, so anything that round-trips rows
+has to skip these — see `SKIP_COLUMNS` in `backup-ingredient-tables.ts`, where
+`name_ascii` sits beside `embedding` for a stricter reason than size.
+
 ### knip
 
 `npm run knip` finds dead files, exports and dependencies. Config in

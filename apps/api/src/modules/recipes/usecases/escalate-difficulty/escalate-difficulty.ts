@@ -24,6 +24,7 @@ import {
     HEADER_DESCRIPTION_RULES,
     TEMPERATURE_RULES,
     STEP_DURATION_RULES,
+    UNIT_CHOICE_RULE,
 } from "../../services";
 import { persistRecipe } from "../../services/persist-recipe";
 
@@ -105,6 +106,8 @@ harder — see the core constraints above.
 Use ONLY these unit abbreviations when specifying ingredient quantities:
 
 ${units}
+
+${UNIT_CHOICE_RULE}
 
 ## Valid Tags
 Use ONLY these tags when tagging recipes. Tags must accurately represent the recipe:

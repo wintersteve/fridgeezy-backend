@@ -594,24 +594,31 @@ mount path anyway; the nesting only made every import inside it `../../../`.
 
 | Endpoint | Module |
 | --- | --- |
-| `POST /rest/ingredients/extract` | `modules/ingredients` |
-| `POST /rest/suggestions/generate` | `modules/suggestions` |
-| `POST /rest/suggestions/:id/promote` | `modules/suggestions` |
-| `POST /rest/recipes/generate` | `modules/recipes` |
-| `POST /rest/recipes/difficulty/escalate` | `modules/recipes` |
-| `POST /rest/recipes/modify` | `modules/recipes` |
-| `POST /rest/recipes/import` | `modules/recipes` |
-| `POST /rest/recipes/:recipeId/compose` | `modules/recipes` |
-| `POST /rest/recipes/:recipeId/chat` | `modules/recipes` |
+| `POST /rest/ingredients/extract` | `modules/ingredients` — **premium** |
+| `POST /rest/suggestions/generate` | `modules/suggestions` — **premium** |
+| `POST /rest/suggestions/:id/promote` | `modules/suggestions` — **premium** |
+| `POST /rest/suggestions/resolve` | `modules/suggestions` — **premium** |
+| `POST /rest/recipes/generate` | `modules/recipes` — **premium** |
+| `POST /rest/recipes/difficulty/escalate` | `modules/recipes` — **premium** |
+| `POST /rest/recipes/modify` | `modules/recipes` — **premium** |
+| `POST /rest/recipes/import` | `modules/recipes` — **premium** |
+| `POST /rest/recipes/:recipeId/compose` | `modules/recipes` — **premium** |
+| `POST /rest/recipes/:recipeId/chat` | `modules/recipes` — **premium** |
 | `GET /rest/recipes/:recipeId/share` | `modules/recipes` — **open** |
-| `POST /rest/substitutes/generate` | `modules/substitutes` |
-| `POST /rest/chat` | `modules/chat` |
+| `POST /rest/substitutes/generate` | `modules/substitutes` — **premium** |
+| `POST /rest/chat` | `modules/chat` — **premium** |
+| `POST /rest/speech/command` | `modules/speech` — **premium** |
+| `POST /rest/speech/synthesize` | `modules/speech` |
 | `GET /rest/prompts` | `modules/prompts` |
 | `POST /rest/prompts` | `modules/prompts` |
 | `DELETE /rest/prompts` | `modules/prompts` |
 | `DELETE /rest/prompts/:id` | `modules/prompts` |
 | `POST /rest/billing/revenuecat` | `modules/billing` — **open** |
 | `GET /rest/health` | direct — **open** |
+
+**Premium** means the route additionally requires an active subscription
+(`requireEntitlement`, 402) — 13 of them, applied by mount `tier` except on
+`/speech`. See the entitlement section below.
 
 **Every route above requires a Supabase access token**
 (`Authorization: Bearer <access_token>`), checked by `requireSupabaseUser` in
@@ -685,37 +692,64 @@ self-hosted rather than Google-CDN'd on purpose (GDPR — LG München).
 401 — "you are who you say you are, and this needs a subscription", which is what
 tells the client to show the paywall rather than the login screen.
 
-**It is attached per ROUTE, not per mount** (2026-08-12). It used to run on every
-mount except `billing`, which made "signed in" and "subscribed" the same thing.
-The product now has three tiers and the split runs *through* the recipes module
-rather than between modules:
+**It is attached per MOUNT, via `tier`** (2026-08-26). The product's rule is one
+sentence — **if a model runs, it is paid** — and the three tiers are:
 
 | Tier | Gets |
 | --- | --- |
 | **guest** | the catalog, read straight from Supabase — never reaches this API |
-| **account** | every prompt: generate, promote, chat, extract, substitutes, modify, escalate |
-| **subscriber** | premium routes — currently only `POST /recipes/:id/compose` |
+| **account** | `POST /speech/synthesize` and `/prompts`. Nothing else |
+| **subscriber** | every AI route: generate, promote, chat, extract, substitutes, modify, escalate, import, compose, `/speech/command` |
 
-So the MOUNTS loop applies `requireSupabaseUser` alone, and a premium route names
-the gate itself:
+So a mount declares what it costs and the loop applies both gates:
 
 ```ts
-router.post("/:recipeId/compose", requireEntitlement, RecipesController.compose);
+{ prefix: "/suggestions", router: SuggestionsRoutes },                  // paid
+{ prefix: "/prompts",     router: PromptsRoutes, tier: "account" },     // free
 ```
 
-Note this is the opposite of how authentication works, and deliberately so. Auth
-is applied by the loop precisely so a new module *cannot* be added
-unauthenticated; premium is now an addition someone has to remember. The failure
-directions differ — forgetting auth is a security hole, forgetting this gives a
-premium route away — and the safety net is that the startup banner **derives**
-`← premium` from a marker the middleware sets on itself
-(`requireEntitlement.isEntitlementGate`) and counts it on the `billing` line. A
-route that lost its gate shows up on every boot. **After adding a premium route,
-read the banner.** The marker is a property rather than the function's name
-because esbuild may rename a local binding in the Lambda bundle, which would
-leave the banner reporting zero while the gate was in fact enforcing.
+**`tier` defaults to `subscriber`, so forgetting fails CLOSED.** That is the
+whole reason it moved back. This is the third arrangement and it returns to the
+first: pre-2026-08-12 the gate ran on every mount but `billing`, which made
+"signed in" and "subscribed" the same thing; it then moved per-route because the
+split genuinely ran *through* the recipes module (`generate` free, `compose`
+paid), which a mount cannot express. Once every AI feature became paid, no
+module was split but `/speech`, and a mount could express it again — recovering
+the property auth has always had, that an omission cannot give anything away.
 
-`entitlementExempt` is gone — with the gate opt-in per route, nothing needs
+**`/speech` is the one exception, and the only per-route gate left in the app.**
+Synthesis is free because `getOrSynthesizeSpeech` is content-addressed — the
+text hashes to a storage path, so a step spoken once is a storage read for every
+listener afterwards, forever — while `/speech/command` is an uncached classifier
+call and carries `requireEntitlement` directly. If that module ever loses its
+free half, delete the per-route gate and give the mount the default rather than
+leaving a lone opt-in behind.
+
+The startup banner marks `← premium` from **two** sources that must agree: the
+mount's `tier`, and the `requireEntitlement.isEntitlementGate` marker for a
+route inside an `account` mount. Note the asymmetry that leaves — the mount half
+is a *declaration* the banner echoes, not a derivation from the router stack
+(Express 5 does not expose a mounted router's path, which is why `MOUNTS` exists
+at all), exactly as `isPublic` already works. The per-route half is still a true
+derivation. **After changing any tier, read the banner**: 13 premium routes,
+3 open, and `/speech/synthesize` plus the four `/prompts` lines unmarked.
+
+The marker is a property rather than the function's name because esbuild may
+rename a local binding in the Lambda bundle, which would leave the banner
+reporting zero while the gate was in fact enforcing.
+
+**What is deliberately NOT gated, and why it is not an oversight:** everything
+the user owns — saves, favourites, collections, shopping lists, saved menus,
+recipe variants, cooking mode, and setting dietary preferences, allergies,
+dislikes and skill level. None of it reaches this API; the client holds it in
+Supabase directly. Note the consequence for personalisation: the dietary
+filters, the blacklist and `difficulty_preference_rank` are all **parameters to
+`find_recipes`**, which the client calls with the shipped anon key — so nothing
+computed in that function can be paywalled without moving it server-side first.
+The paid half of personalisation is the half that runs a model
+(`POST /recipes/:id/personalise`, dark behind `TASTE_PROFILE_ENABLED`).
+
+`entitlementExempt` is gone — with the tier declared per mount, nothing needs
 exempting.
 
 **`REQUIRE_ENTITLEMENT=true` is still opt-IN, inverting `ALLOW_UNAUTHENTICATED`

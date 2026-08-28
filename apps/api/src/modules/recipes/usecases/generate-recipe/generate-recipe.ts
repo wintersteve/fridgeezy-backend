@@ -27,6 +27,7 @@ import {
     HEADER_DESCRIPTION_RULES,
     TEMPERATURE_RULES,
     STEP_DURATION_RULES,
+    UNIT_CHOICE_RULE,
     INGREDIENT_CATEGORY_GUIDE,
 } from "../../services";
 import { generateAndUploadRecipeImage } from "../../services/create-recipe-image";
@@ -71,6 +72,8 @@ export const buildRecipeSystemPrompt = (
 Use ONLY these unit abbreviations when specifying ingredient quantities:
 
 ${units}
+
+${UNIT_CHOICE_RULE}
 
 ## Valid Tags
 Use ONLY these tags when tagging recipes. Tags must accurately represent the recipe:

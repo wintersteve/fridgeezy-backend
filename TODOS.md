@@ -30,6 +30,28 @@ bottom of this file — the checkboxes here are the summary.
       `put-secrets.sh` and a cold start.
 - [ ] `REQUIRE_ENTITLEMENT=true`, then **delete the flag** and make the gate
       unconditional so it cannot end up off in production quietly.
+- [x] **Decide what the subscription actually sells.** Done 2026-08-26: **every
+      AI feature**, on the rule "if a model runs, it is paid". Compose alone was
+      too thin to sell — one surface, several taps deep, that most users never
+      reach. 13 routes are now premium; `tier` in `MOUNTS` defaults to
+      `subscriber` so an omission fails closed, and the client's `FEATURE_TIER`
+      was moved to match in the same change.
+
+      Free keeps everything that does not run a model: browsing, saving,
+      collections, shopping lists, saved menus, cooking mode, recipe navigation,
+      setting dietary preferences/allergies/dislikes and filtering by them, and
+      speech **synthesis** (content-addressed, so a step spoken once is a
+      storage read for everyone after). Saving stays free permanently — it is
+      the retention mechanism, and charging for it charges for the reason people
+      come back.
+
+      Two things fell out of it worth knowing. Nothing computed inside
+      `find_recipes` can be paywalled — the client calls that RPC directly with
+      the shipped anon key, so the dietary filters, blacklist and
+      `difficulty_preference_rank` are free by architecture, not by choice. And
+      the browse feed was **already** recipes-only (suggestions surface only in
+      typed search), which is exactly the behaviour this needed, so no client
+      feed change was required.
 - [ ] Sandbox purchase and restore, on a device, on a development build.
 
 ## Known gaps, deliberately shipped open
@@ -59,19 +81,31 @@ bottom of this file — the checkboxes here are the summary.
       The modal is **dismissible** (the onboarding wall it replaces was not), so
       the failure costs a tap rather than trapping anyone. Still fix the
       purchase-to-webhook window above.
-- [ ] **A trial quota for signed-in users — the "let them try it" tier.**
+- [ ] **A per-account quota — now an ABUSE CEILING, not the business model.**
 
-      The open question is whether every auth-gated feature is also a paid one.
-      **It should not be, and the split is already in `FEATURE_TIER`:** `save` and
-      `personalize` are gated because the data needs an *owner*, not because it
-      costs anything, and they must never become paid — saving is the retention
-      mechanism, and charging for it charges for the reason people come back.
-      Only the AI features carry marginal cost, so only they can sensibly be
-      metered.
+      Demoted 2026-08-26. The question this used to ask — whether every
+      auth-gated feature is also a paid one — is answered: every AI feature is
+      paid, and `save`/`personalize` stay free forever for the reason below.
 
-      That gives a three-and-a-half tier ladder: guest browses, a free **account**
-      gets all the saving plus **N trial units** of chat / generate / compose, and
-      a subscription lifts the cap.
+      What is left for a quota is bounding a **subscriber's** spend, not
+      converting a free user. "Unlimited" against a ~$0.14 image plus a stream
+      per new dish goes underwater somewhere around 30 new dishes a month at a
+      $5 price, so the cap wants to exist and to sit high enough that no honest
+      user meets it. It also closes §4 (no per-user rate limiting), which is
+      reason enough on its own.
+
+      **The trial is a 14-day RevenueCat intro offer**, not a free unit
+      allowance — decided 2026-08-26. It needs no backend work, and the paywall
+      copy already promises it. Note what that makes the trial: with every AI
+      route gated, it is the ONLY way anyone experiences the core product before
+      paying, so trial conversion now carries the whole funnel.
+
+      The tier reasoning it replaced is still correct and worth keeping: `save`
+      and `personalize` are gated because the data needs an *owner*, not because
+      it costs anything, and they must never become paid — saving is the
+      retention mechanism, and charging for it charges for the reason people
+      come back. Only the AI features carry marginal cost, so only they can
+      sensibly be metered.
 
       **Meter the account, not the guest.** A signed-in user has a row to count
       against, so the quota is a `profile_usage` table and a middleware — no

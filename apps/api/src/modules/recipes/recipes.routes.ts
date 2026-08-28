@@ -1,7 +1,5 @@
 import { Router } from "express";
 
-import { requireEntitlement } from "../../middleware/require-entitlement";
-
 import { RecipesController } from "./recipes.controller";
 
 /**
@@ -36,26 +34,27 @@ router.post("/modify", RecipesController.modify);
  * below whatever order they are registered in — those are two segments and this
  * is one, and Express never has to choose.
  *
- * Account tier, not premium: it is one vision call, and what it produces is
- * content the user brought in rather than content this app wrote for them. See
- * the use case for that decision and for why the route is SSE despite the read
- * itself being a single blocking call.
+ * **Premium, with the rest of this mount.** It was account tier until
+ * 2026-08-26 on the argument that it produces content the user brought in
+ * rather than content this app wrote for them — true, and no longer the test.
+ * The line is now simply whether a model runs, and reading a page is a vision
+ * call. See the use case for why the route is SSE despite the read itself being
+ * a single blocking call.
  */
 router.post("/import", RecipesController.import);
 
 /**
- * The one premium route, and the reason `requireEntitlement` is attached per
- * route rather than per mount: the free/paid line runs through this module, not
- * between modules. Generating, modifying and escalating a recipe are what a
- * signed-in account gets; composing a whole menu around one is what a
- * subscription gets.
+ * Compose a menu around this dish.
  *
- * `requireSupabaseUser` still runs first — it is applied to the whole mount by
- * `createRestRouter`, and this gate reads the user id it resolves. Adding a
- * premium route means adding this middleware *and* checking it shows up as
- * `← premium` in the startup banner.
+ * It carried the app's only `requireEntitlement` until 2026-08-26, back when the
+ * free/paid line ran *through* this module. It no longer does — every route here
+ * is paid — so the gate moved to the mount (`MOUNTS` in `rest/index.ts`) and
+ * this is an ordinary line again. **Do not re-add it here**: the middleware is
+ * not idempotent in any useful way, it would cost a second entitlement lookup
+ * per request, and a second place to declare the tier is a second place for it
+ * to disagree with the banner.
  */
-router.post("/:recipeId/compose", requireEntitlement, RecipesController.compose);
+router.post("/:recipeId/compose", RecipesController.compose);
 
 router.post("/:recipeId/chat", RecipesController.chat);
 
@@ -68,14 +67,17 @@ router.post("/:recipeId/chat", RecipesController.chat);
  * nothing about a feature that has not been decided on, and the banner stays an
  * honest inventory of what the server actually serves.
  *
- * **Account tier, not premium, when it does come back.** It is
+ * **Premium when it does come back**, and the argument that used to say
+ * otherwise has dissolved rather than been overruled. It ran: this is
  * `POST /recipes/modify` with the instruction read off the caller's own history
- * instead of typed — and modify is free. Gating this while the manual
- * equivalent sits next door unmetered would paywall the convenience and nothing
- * else, which anyone can walk around by typing "make it spicier" themselves. If
- * standing preferences are to carry a subscription, the thing to charge for is
- * having them applied *automatically* rather than on request, or the per-user
- * quota sketched in TODOS — not this route.
+ * instead of typed, modify is free, so gating this paywalls the convenience and
+ * nothing else — walkable around by typing "make it spicier" yourself.
+ *
+ * Modify is not free any more. The walk-around it pointed at is now behind the
+ * same gate, so the objection has no free equivalent left to compare against and
+ * this simply inherits the mount's tier like everything else here. Automatic
+ * application — the thing TODOS said to charge for if anything — is what this
+ * route is.
  */
 if (TASTE_PROFILE_ENABLED) {
     router.post("/:recipeId/personalise", RecipesController.personalise);

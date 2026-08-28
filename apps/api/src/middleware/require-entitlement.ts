@@ -28,32 +28,45 @@ export function isEntitlementRequired(): boolean {
 /**
  * Rejects a request from a user with no active subscription.
  *
- * ## Attach this per ROUTE, not per mount
+ * ## Attach this per MOUNT, via `tier`
  *
- * It used to run on every mount except `billing`, which made "signed in" and
- * "subscribed" the same thing and left no tier in between. The product now has
- * three:
+ * Declare it in `MOUNTS` (`rest/index.ts`) and let the loop apply it. `tier`
+ * defaults to `subscriber`, so a new feature module is paid unless it says
+ * otherwise — **forgetting fails closed.**
+ *
+ * The product's three tiers are:
  *
  * - **guest** — reads the catalog straight from Supabase, never reaches this API
- * - **account** — every prompt: generate, chat, extract, substitutes, modify
- * - **subscriber** — premium surfaces, currently just `POST /recipes/:id/compose`
+ * - **account** — free surfaces that still need an owner or a session: speech
+ *   synthesis, and reading or deleting your own prompt history
+ * - **subscriber** — every AI feature: generate, promote, chat, modify,
+ *   escalate, import, extract, substitutes, compose, voice commands
  *
- * A mount cannot express that, because the split runs *through* the recipes
- * module rather than between modules. So the gate moved onto the route:
+ * This is the SECOND arrangement, and it went back to where it started. Before
+ * 2026-08-12 the gate ran on every mount but `billing`, which made "signed in"
+ * and "subscribed" the same thing. It then moved per-route, because the split
+ * genuinely ran *through* the recipes module — `generate` free, `compose` paid —
+ * and a mount cannot express that. On 2026-08-26 the product settled on "every
+ * AI feature is paid", the split stopped running through any module but
+ * `/speech`, and a mount could express it again.
  *
- * ```ts
- * router.post("/:recipeId/compose", requireEntitlement, RecipesController.compose);
- * ```
+ * What that buys back is the property this file used to warn was missing.
+ * Authentication is applied by the MOUNTS loop precisely so a module *cannot* be
+ * added unauthenticated by accident; the paid gate now works the same way, and
+ * the two failure directions no longer point opposite ways. An omission is safe
+ * in both.
  *
- * Note what that costs, because it is the opposite of how `requireSupabaseUser`
- * works. Authentication is applied by the MOUNTS loop precisely so a new module
- * *cannot* be added unauthenticated by accident; premium is now an addition
- * someone has to remember. The failure directions differ — forgetting auth is a
- * security hole, forgetting this gives a premium route away — and the compromise
- * is that the startup banner derives `← premium` from {@link isEntitlementGate}
- * and counts it, so a route that lost its gate is visible on every boot rather
- * than only in the diff that dropped it. **If you add a premium route, check the
- * banner.**
+ * ## The one exception, and how the banner still catches it
+ *
+ * `/speech` is `account` because synthesis is content-addressed — a step spoken
+ * once is a storage read for every listener after — while `/speech/command` is
+ * an uncached model call and carries this middleware directly. That is the only
+ * per-route attachment left in the app.
+ *
+ * So the banner derives `← premium` from two sources that must agree: the mount
+ * `tier` for a whole prefix, and {@link isEntitlementGate} for a route inside an
+ * `account` mount. **If you add a premium route, check the banner** — a mount
+ * that lost its tier reads as a block of missing marks on the next boot.
  *
  * Runs *after* `requireSupabaseUser` and reads the id that middleware resolved,
  * so the pair costs one Supabase round trip plus one indexed select rather than

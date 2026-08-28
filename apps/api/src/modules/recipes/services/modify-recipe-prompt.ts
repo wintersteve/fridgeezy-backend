@@ -2,6 +2,7 @@ import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
 
 import { HEADER_DESCRIPTION_RULES } from "./description-rules";
 import { STEP_DURATION_RULES, TEMPERATURE_RULES } from "./instruction-rules";
+import { UNIT_CHOICE_RULE } from "./unit-rules";
 
 /**
  * The "rewrite this recipe, keep it the same dish" prompt.
@@ -45,6 +46,8 @@ export const buildModifySystemPrompt = (
 Use ONLY these unit abbreviations when specifying ingredient quantities:
 
 ${units}
+
+${UNIT_CHOICE_RULE}
 
 ## Valid Tags
 Reference only (keep the recipe's existing tags unchanged):

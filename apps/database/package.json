@@ -187,6 +187,14 @@
                     "forwardAllArgs": true
                 }
             },
+            "generate-client-art": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/generate-client-art.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
             "generate-splash": {
                 "executor": "nx:run-commands",
                 "options": {
@@ -220,6 +228,13 @@
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "npx jiti operations/check-recipe-visibility.ts",
+                    "cwd": "apps/database"
+                }
+            },
+            "check-near-miss": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/check-near-miss.ts",
                     "cwd": "apps/database"
                 }
             },

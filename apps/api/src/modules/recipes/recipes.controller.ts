@@ -4,6 +4,7 @@ import {
     generateRecipe,
     escalateDifficulty,
     composeRecipe,
+    adaptRecipe,
     modifyRecipe,
     personaliseRecipe,
     importRecipe,
@@ -43,6 +44,18 @@ export class RecipesController {
     ) => {
         try {
             return composeRecipe(req, res);
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    static adapt = async (
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) => {
+        try {
+            return adaptRecipe(req, res);
         } catch (err) {
             next(err);
         }

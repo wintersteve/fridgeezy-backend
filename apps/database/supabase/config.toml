@@ -169,7 +169,12 @@ enabled = true
 # in emails.
 site_url = "http://127.0.0.1:3000"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# The app's own scheme has to be here, or the local stack refuses the round trip
+# at the callback — AFTER Google has accepted the sign-in, which is what makes it
+# look like Google refused you. Matches `makeRedirectUri({ scheme: "fridgeezy",
+# path: "auth/callback" })` in the app's `SignInMethods`; the hosted project
+# needs the same value under Authentication → URL Configuration.
+additional_redirect_urls = ["https://127.0.0.1:3000", "fridgeezy://auth/callback"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).
@@ -241,6 +246,18 @@ otp_expiry = 3600
 # pass = "env(SENDGRID_API_KEY)"
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
+
+# The sign-in mail. This is the ONLY template the app depends on: the whole auth
+# flow is `signInWithOtp` + `verifyOtp`, so what has to arrive is the six digits.
+#
+# The hosted default has only `{{ .ConfirmationURL }}` in it — no `{{ .Token }}`
+# — which is why prod mail read "Follow this link to login" and the code boxes
+# could never be filled. Local worked by accident: the CLI's own default carries
+# the token. Push this with `supabase config push` after changing it, or the
+# remote keeps the default.
+[auth.email.template.magic_link]
+subject = "Your Fridgeezy sign-in code"
+content_path = "./supabase/templates/magic-link.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
@@ -334,8 +351,12 @@ skip_nonce_check = false
 email_optional = false
 
 [auth.external.google]
-enabled = false
-client_id = ""
+enabled = true
+# Public by design — a client ID is not a secret, and keeping it here rather
+# than behind another env var is what makes the local stack match the hosted
+# project without a second thing to set up. The SECRET stays in
+# `apps/database/.env` (gitignored) and is read through `env()` below.
+client_id = "747935050253-m8kmfus9e2bji50t7oucfs7oua4rm19q.apps.googleusercontent.com"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
 skip_nonce_check = false

@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fridgeezy — personalisation, and the dishes that almost fit</title>
+<style>
+:root{
+  color-scheme: light;
+  --bg:#FCFAF2;
+  --card:#FFFFFF;
+  --ink:#1B150E;
+  --ink-2:#4A4136;
+  --muted:#847867;
+  --line:#E7DFD0;
+  --line-soft:#F0E9DC;
+  --peach:#E07A45;
+  --peach-soft:#FBEDE3;
+  --ship:#3F7D58;
+  --ship-soft:#E8F2EB;
+  --hold:#B5822A;
+  --hold-soft:#FAF0DC;
+  --skip:#B04A30;
+  --skip-soft:#FAEAE5;
+  --code:#F4EFE4;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1020px;margin:0 auto;padding:48px 28px 100px}
+code,.mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.86em}
+code{background:var(--code);padding:1px 5px;border-radius:4px;color:#5A4B36;white-space:nowrap}
+
+header{border-bottom:2px solid var(--ink);padding-bottom:26px;margin-bottom:38px}
+.kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--peach);font-weight:700;margin-bottom:14px}
+h1{font-size:39px;line-height:1.1;margin:0 0 16px;letter-spacing:-.022em;font-weight:700;max-width:17ch}
+.thesis{font-size:17.5px;line-height:1.55;color:var(--ink-2);max-width:66ch;margin:0}
+.thesis strong{color:var(--ink);font-weight:650;background:linear-gradient(transparent 62%, #FBE3D2 62%)}
+.thesis + .thesis{margin-top:13px}
+
+section{margin:58px 0 0}
+h2{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 6px;display:flex;align-items:center;gap:10px}
+h2::after{content:"";flex:1;height:1px;background:var(--line)}
+.h2sub{font-size:22px;font-weight:660;letter-spacing:-.015em;margin:0 0 10px}
+.lede{font-size:14.6px;line-height:1.62;color:var(--ink-2);max-width:74ch;margin:0 0 22px}
+h3.sub{font-size:15px;font-weight:660;margin:30px 0 10px;letter-spacing:-.008em}
+p.para{font-size:14.3px;line-height:1.62;color:var(--ink-2);max-width:74ch;margin:0 0 12px}
+
+/* inventory grid */
+.inv{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:11px}
+.iv{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 15px;display:flex;flex-direction:column}
+.iv.dim{background:transparent;border-style:dashed;border-color:#DCD3C2}
+.iv .nm{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11.4px;color:var(--ink);font-weight:600;line-height:1.4;word-break:break-word}
+.iv .what{font-size:12.3px;color:var(--ink-2);margin-top:7px;line-height:1.5}
+.iv .flow{font-size:11px;color:var(--muted);margin-top:9px;padding-top:8px;border-top:1px solid var(--line-soft);line-height:1.5}
+.iv .flow b{color:var(--ink-2);font-weight:640}
+.st{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;padding:2.5px 7px;border-radius:20px;margin-bottom:9px;align-self:flex-start}
+.s-live{background:var(--ship-soft);color:var(--ship)}
+.s-leak{background:var(--hold-soft);color:var(--hold)}
+.s-dark{background:var(--skip-soft);color:var(--skip)}
+.s-idle{background:#EFE9DD;color:#7A6E5C}
+.rowcount{float:right;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--muted);font-weight:600}
+
+.callout{margin-top:20px;background:var(--peach-soft);border-left:3px solid var(--peach);border-radius:0 10px 10px 0;padding:15px 18px;font-size:14.3px;line-height:1.62;color:#6B4426}
+.callout b{color:#4C2E17}
+.callout + .callout{margin-top:11px}
+
+/* leaks */
+.leak{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--skip);border-radius:0 12px 12px 0;padding:17px 20px;margin-bottom:13px}
+.leak h5{margin:0 0 8px;font-size:15.5px;font-weight:660;letter-spacing:-.008em}
+.leak p{margin:0 0 9px;font-size:13.6px;line-height:1.6;color:var(--ink-2)}
+.leak p:last-child{margin-bottom:0}
+.pipe{display:flex;align-items:stretch;gap:0;margin:13px 0;flex-wrap:wrap;font-size:11.3px}
+.pipe .node{background:#F4EFE4;border:1px solid #E9E0CE;padding:7px 11px;border-radius:7px;font-family:"SF Mono",ui-monospace,Menlo,monospace;color:#5A4B36;white-space:nowrap;display:flex;align-items:center}
+.pipe .node.ok{background:var(--ship-soft);border-color:#BFD9C9;color:#2F5F42}
+.pipe .node.dead{background:var(--skip-soft);border-color:#E5C9C0;color:#8C3A22;text-decoration:line-through;text-decoration-thickness:1.5px}
+.pipe .arrow{display:flex;align-items:center;padding:0 9px;color:var(--muted);font-size:13px}
+.pipe .wall{width:4px;background:repeating-linear-gradient(45deg,#E5C9C0,#E5C9C0 3px,transparent 3px,transparent 6px);border-radius:2px;margin:0 9px}
+
+/* bars */
+.bars{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:20px 22px}
+.barrow{display:grid;grid-template-columns:112px 1fr 88px;align-items:center;gap:13px;margin-bottom:9px}
+.barrow .lb{font-size:12.3px;color:var(--ink-2);font-weight:560;text-align:right}
+.bartrack{height:19px;background:#F4EFE4;border-radius:5px;overflow:hidden;display:flex}
+.bartrack i{display:block;height:100%}
+.b-have{background:var(--ship)}
+.b-near{background:repeating-linear-gradient(45deg,var(--peach),var(--peach) 4px,#EB9A6E 4px,#EB9A6E 8px)}
+.barrow .vl{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11px;color:var(--muted)}
+.barrow .vl b{color:var(--peach);font-weight:700}
+.legend{display:flex;gap:18px;margin-top:15px;padding-top:13px;border-top:1px solid var(--line-soft);font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:7px}
+.legend i{width:13px;height:13px;border-radius:3px;display:block}
+
+/* ladder */
+.ladder{display:flex;flex-direction:column;gap:0}
+.rung{background:var(--card);border:1px solid var(--line);padding:15px 18px;display:grid;grid-template-columns:98px 1fr 152px;gap:16px;align-items:center}
+.rung:first-child{border-radius:12px 12px 0 0}
+.rung:last-child{border-radius:0 0 12px 12px}
+.rung + .rung{border-top:none}
+.rung.newtier{border-left:3px solid var(--peach);background:#FFFBF7}
+.rung .tier{font-size:10px;letter-spacing:.11em;text-transform:uppercase;font-weight:800;color:var(--muted)}
+.rung.newtier .tier{color:var(--peach)}
+.rung .desc{font-size:13.4px;line-height:1.52;color:var(--ink-2)}
+.rung .desc b{color:var(--ink);font-weight:640;display:block;margin-bottom:2px;font-size:13.9px}
+.rung .cost{font-size:11px;font-family:"SF Mono",ui-monospace,Menlo,monospace;color:var(--muted);line-height:1.5;text-align:right}
+.rung .cost b{display:block;color:var(--ink-2);font-weight:700}
+
+/* split panes */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pane{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 17px}
+.pane.good{border-color:#BFD9C9;box-shadow:0 0 0 3px rgba(63,125,88,.07)}
+.pane.bad{border-color:#E5C9C0;box-shadow:0 0 0 3px rgba(176,74,48,.05)}
+.pane-t{font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;margin-bottom:12px}
+.pane.bad .pane-t{color:var(--skip)}
+.pane.good .pane-t{color:var(--ship)}
+.dishlist{list-style:none;margin:0;padding:0}
+.dishlist li{padding:7px 0;border-bottom:1px solid var(--line-soft);font-size:12.7px;display:flex;justify-content:space-between;gap:11px;line-height:1.4}
+.dishlist li:last-child{border-bottom:none}
+.dishlist .dn{color:var(--ink);font-weight:560}
+.dishlist .bl{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:10.8px;color:var(--muted);white-space:nowrap;padding-top:1px}
+.pane-note{font-size:11.8px;color:var(--muted);line-height:1.55;margin-top:13px;padding-top:11px;border-top:1px solid var(--line-soft)}
+
+/* card mock */
+.mockwrap{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.phone{background:#F1EADD;border-radius:14px;padding:14px}
+.phone-t{font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;color:var(--muted);margin-bottom:11px}
+.rcard{background:var(--card);border:1px solid var(--line);border-radius:11px;overflow:hidden;margin-bottom:9px}
+.rcard .img{height:56px;background:linear-gradient(125deg,#F3E4D3,#E9D6C2 60%,#DFC8B0)}
+.rcard .bd{padding:10px 12px}
+.rcard .tt{font-size:13.4px;font-weight:640;color:var(--ink);line-height:1.3}
+.rcard .eb{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:4px}
+.rcard .why{font-size:11.6px;color:#6B4426;background:var(--peach-soft);border-radius:6px;padding:6px 9px;margin-top:8px;line-height:1.42;display:flex;gap:6px;align-items:flex-start}
+.rcard .why b{font-weight:700;color:#4C2E17}
+.rcard.mine{border-color:#EFC9AC;box-shadow:0 0 0 3px rgba(224,122,69,.09)}
+.divlabel{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--peach);margin:14px 0 8px;display:flex;align-items:center;gap:8px}
+.divlabel::after{content:"";flex:1;height:1px;background:#E8D5C2}
+.badlabel{color:var(--skip)}
+.badlabel::after{background:#E5C9C0}
+.tapline{font-size:11.4px;color:var(--muted);text-align:center;margin-top:10px;line-height:1.5}
+
+/* verdict board */
+.board{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.col{background:var(--card);border:1px solid var(--line);border-radius:13px;overflow:hidden}
+.col h3{margin:0;padding:11px 15px;font-size:11.5px;letter-spacing:.11em;text-transform:uppercase;font-weight:700}
+.col.ship h3{background:var(--ship-soft);color:var(--ship)}
+.col.hold h3{background:var(--hold-soft);color:var(--hold)}
+.col.skip h3{background:var(--skip-soft);color:var(--skip)}
+.col ul{list-style:none;margin:0;padding:6px 0}
+.col li{padding:9px 15px;font-size:13.2px;line-height:1.45;border-bottom:1px solid var(--line-soft);color:var(--ink-2)}
+.col li:last-child{border-bottom:none}
+.col li b{color:var(--ink);font-weight:620;display:block;font-size:13.4px}
+.col li .why{font-size:11.8px;color:var(--muted);margin-top:2px;display:block}
+
+/* idea cards */
+.idea{background:var(--card);border:1px solid var(--line);border-radius:15px;margin-bottom:20px;overflow:hidden}
+.idea > .head{padding:19px 24px 18px}
+.badgerow{display:flex;align-items:center;gap:9px;margin-bottom:10px;flex-wrap:wrap}
+.num{width:23px;height:23px;border-radius:6px;background:var(--ink);color:var(--bg);font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.verdict{font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:5px}
+.v-ship{background:var(--ship);color:#fff}
+.v-hold{background:var(--hold);color:#fff}
+.v-skip{background:var(--skip);color:#fff}
+.cost{font-size:11px;color:var(--muted);font-weight:600}
+.idea h4{margin:0 0 9px;font-size:19.5px;line-height:1.28;letter-spacing:-.015em;font-weight:660}
+.idea .body{font-size:14.2px;line-height:1.62;color:var(--ink-2);max-width:76ch;margin:0}
+.idea .body + .body{margin-top:11px}
+.surface{margin-top:14px;display:flex;flex-wrap:wrap;gap:6px}
+.surface span{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:10.8px;background:var(--code);color:#5A4B36;padding:3.5px 8px;border-radius:5px;border:1px solid #E9E0CE}
+.idea .foot{background:#FBF7EE;border-top:1px solid var(--line-soft);padding:14px 24px;font-size:12.6px;line-height:1.55;color:var(--ink-2);display:grid;grid-template-columns:104px 1fr;gap:14px}
+.idea .foot .fl{font-size:10px;letter-spacing:.11em;text-transform:uppercase;font-weight:800;color:var(--muted);padding-top:2px}
+
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:13px;overflow:hidden;font-size:13.2px}
+th{text-align:left;padding:11px 15px;background:#F5EFE3;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);font-weight:700;border-bottom:1px solid var(--line)}
+td{padding:11px 15px;border-bottom:1px solid var(--line-soft);vertical-align:top;line-height:1.5;color:var(--ink-2)}
+tr:last-child td{border-bottom:none}
+td.mn{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11.3px;color:var(--ink);font-weight:600}
+td b{color:var(--ink);font-weight:640}
+.yes{color:var(--ship);font-weight:700}
+.no{color:var(--skip);font-weight:700}
+.mid{color:var(--hold);font-weight:700}
+
+pre{background:var(--code);border:1px solid #E9E0CE;border-radius:9px;padding:14px 16px;overflow-x:auto;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11.6px;line-height:1.62;color:#5A4B36;margin:14px 0}
+
+.steps{counter-reset:s;list-style:none;margin:0;padding:0}
+.steps li{counter-increment:s;position:relative;padding:0 0 16px 40px;font-size:14.2px;line-height:1.6;color:var(--ink-2)}
+.steps li::before{content:counter(s);position:absolute;left:0;top:0;width:25px;height:25px;border-radius:7px;background:var(--peach);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.steps li b{color:var(--ink);font-weight:640}
+
+footer{margin-top:66px;padding-top:22px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.7}
+
+@media (max-width:860px){
+  .board{grid-template-columns:1fr}
+  .split,.mockwrap{grid-template-columns:1fr}
+  .rung{grid-template-columns:1fr}
+  .rung .cost{text-align:left}
+  .barrow{grid-template-columns:96px 1fr 74px;gap:9px}
+  h1{font-size:31px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Fridgeezy · personalisation &amp; recipe matching · 30 Aug 2026</div>
+  <h1>The dishes that almost fit</h1>
+  <p class="thesis">You have <strong>eight stores of personal data and three of them reach a query</strong>. The rest are written faithfully and read by nobody. Before adding anything, the honest finding is that personalisation here is not missing — it is <strong>dropped on the floor in three specific places</strong>, and switched off in a fourth.</p>
+  <p class="thesis">Your near-miss idea is right, and it is buildable today from data that already exists — I measured it. But the number that decides whether a near-miss is a good idea is <strong>not how close the dish is</strong>. Eighteen catalogue recipes are one ingredient away from vegan; most of them are one ingredient away because that ingredient is <em>the dish</em>. Bak Kut Teh minus the pork ribs is not a vegan Bak Kut Teh.</p>
+</header>
+
+<!-- ═══════════════ 1. INVENTORY ═══════════════ -->
+<section>
+  <h2>01 · What already exists</h2>
+  <p class="h2sub">Eight stores. Three reach a query.</p>
+  <p class="lede">Row counts are from the live dev project, read-only, today. One profile — yours — so every count is a lower bound on nothing, but the <em>shapes</em> are real and the wiring is real.</p>
+
+  <div class="inv">
+    <div class="iv">
+      <span class="st s-leak">Live · leaks</span><span class="rowcount">0 rows</span>
+      <div class="nm">profile_dietary_preferences</div>
+      <div class="what">Diets you ticked, as tag ids.</div>
+      <div class="flow">Written by onboarding + Settings. Read by <b>chat generation</b> and the <b>search screen</b>. Not read by the home feed, not read by any catalogue lookup.</div>
+    </div>
+    <div class="iv">
+      <span class="st s-live">Live</span><span class="rowcount">0 rows</span>
+      <div class="nm">profile_blacklisted_ingredients</div>
+      <div class="what">Ingredients you will not eat.</div>
+      <div class="flow">The best-wired signal in the app. Reaches <b>find_recipes</b>, every generator prompt, and <code>decideReuse</code>, which adapts a reused recipe rather than serving it.</div>
+    </div>
+    <div class="iv">
+      <span class="st s-live">Live</span><span class="rowcount">1 row</span>
+      <div class="nm">profile_settings.difficulty</div>
+      <div class="what">Your skill level.</div>
+      <div class="flow">The only preference that reaches <b>ranking</b>: <code>difficulty_preference_rank</code> orders every feed. It ranks, it never filters — deliberately.</div>
+    </div>
+    <div class="iv">
+      <span class="st s-dark">Built · dark</span><span class="rowcount">6 rows</span>
+      <div class="nm">profile_taste_signals</div>
+      <div class="what">What you asked for more than once, counted.</div>
+      <div class="flow">Written by <code>modify</code>, <code>escalate</code>, <code>substitutes</code>. Read only by <code>POST /recipes/:id/personalise</code>, which <b>is not registered</b> — <code>TASTE_PROFILE_ENABLED</code> is unset on both sides.</div>
+    </div>
+    <div class="iv">
+      <span class="st s-dark">Write-only</span><span class="rowcount">29 rows</span>
+      <div class="nm">profile_prompts</div>
+      <div class="what">Every free-text prompt, as typed.</div>
+      <div class="flow">Written server-side by three routes. <b>Read by nothing at all</b> — not even by a history screen. The client still shows chat history from its own AsyncStorage store.</div>
+    </div>
+    <div class="iv">
+      <span class="st s-idle">Corpus building</span><span class="rowcount">n/a</span>
+      <div class="nm">profile_ingredient_substitutions</div>
+      <div class="what">Which swap you actually tapped.</div>
+      <div class="flow">Deliberately unread — the migration says so. The eventual reader is the one <code>menu_pairings_for_recipe</code> already got: retrieve before you generate.</div>
+    </div>
+    <div class="iv">
+      <span class="st s-leak">Live · thin</span><span class="rowcount">35 rows</span>
+      <div class="nm">profile_recipe_interactions</div>
+      <div class="what"><code>viewed</code> (34) and <code>favourite</code> (1).</div>
+      <div class="flow">Only the favourite half is read, and only in aggregate: a trigger maintains <code>recipes.favourite_count</code>, which <code>find_recipes</code> sorts on. <b>Global popularity, not yours.</b> Views are read by nothing.</div>
+    </div>
+    <div class="iv">
+      <span class="st s-live">Live</span><span class="rowcount">2 rows</span>
+      <div class="nm">recipe_variants · recipe_family_defaults</div>
+      <div class="what">Your versions of a dish, and which one opens by default.</div>
+      <div class="flow">The most complete piece of personalisation in the app, and the one the near-miss tier should write into rather than inventing a new shape.</div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>The pattern worth naming.</b> Everything <em>declared</em> (diet, blacklist, skill) is wired to a query. Everything <em>revealed</em> (taste signals, prompts, substitutions, views) is written and never read. That is not an accident — it is three separate, individually reasonable decisions to wait for evidence. The cost is that the app has been accumulating inferred data about people for two weeks with no user-visible way to see or delete any of it, which <code>TODOS.md</code> §11 already flags as the one thing that is not deferrable before launch.
+  </div>
+</section>
+
+<!-- ═══════════════ 2. LEAKS ═══════════════ -->
+<section>
+  <h2>02 · Where it is dropped</h2>
+  <p class="h2sub">Three leaks. None of them needs new data.</p>
+  <p class="lede">These are the highest-value work in this document and none of them is a feature. Each is a place where a preference the user stated, and the app already loaded into memory, does not reach the query.</p>
+
+  <div class="leak">
+    <h5>Leak 1 — the home feed ignores your diet</h5>
+    <p><code>useBaseRecipeFilters</code> returns <code>{ difficulty, blacklist }</code>. The same store holds <code>restrictions</code>, persisted across restarts and rehydrated from <code>profile_dietary_preferences</code> on <em>every</em> home-screen focus — and the home feed does not pass it.</p>
+    <div class="pipe">
+      <div class="node">profile_dietary_preferences</div><div class="arrow">→</div>
+      <div class="node">initializeFromDB</div><div class="arrow">→</div>
+      <div class="node ok">store.restrictions</div>
+      <div class="wall"></div>
+      <div class="node dead">useBaseRecipeFilters</div><div class="arrow">→</div>
+      <div class="node">find_recipes</div>
+    </div>
+    <p>The comment in <code>home-feed.tsx</code> says <em>"Only the user's own preferences apply — their skill level, and the ingredients they never want to see."</em> It lists two of the three. A vegan's home feed is the entire catalogue.</p>
+    <p><b>Fix:</b> add <code>tags: restrictions.map(r =&gt; r.id)</code> to <code>useBaseRecipeFilters</code>. One line, client-only, no tarball rebuild. Guard it on <code>hasHydrated</code> — the store already exposes that for exactly this class of read.</p>
+  </div>
+
+  <div class="leak">
+    <h5>Leak 2 — chat honours your diet only when it <em>writes</em> a dish, never when it <em>finds</em> one</h5>
+    <p><code>searchRecipeSuggestions</code> takes <code>dietaryRestrictions</code> and uses it in exactly two places: <code>streamSingleSuggestion</code> and <code>generateSuggestionsStream</code>. Both are stage 3. Stages 1a (exact name), 1b (vector), 1c (<code>find_recipes</code>) and 2 (suggestions) — <b>every path that returns a dish that already exists</b> — never see it.</p>
+    <div class="pipe">
+      <div class="node">client sends diet</div><div class="arrow">→</div>
+      <div class="node ok">searchRecipeSuggestions</div><div class="arrow">→</div>
+      <div class="node dead">stages 1a·1b·1c·2</div>
+      <div class="arrow">·</div>
+      <div class="node ok">stage 3 generate</div>
+    </div>
+    <p>And retrieval wins by design — the whole point of the ladder is to return a catalogue hit before paying for a generation. So the dish the model would have written is vegan, and the dish you actually get is Carbonara. Note the asymmetry that makes this hard to spot: <code>blacklist</code> <em>is</em> forwarded to stage 1c, so half the constraint machinery looks right.</p>
+    <p><b>Fix:</b> resolve the diet names to <code>dietary_rules.diet_canonical_id</code> once, pass the tag ids into <code>findCatalogueRecipes</code> (which already calls <code>find_recipes</code>, which already takes <code>tags</code>), and post-filter 1a/1b/2 against <code>recipe_dietary</code>. Server-only — no schema change, no tarball rebuild.</p>
+  </div>
+
+  <div class="leak">
+    <h5>Leak 3 — ranking knows your skill level and nothing else</h5>
+    <p><code>find_recipes</code> ends on <code>order by source, difficulty_preference_rank, favourite_count desc, name, id</code>. Skill level is the only per-reader term. <code>favourite_count</code> is <em>everyone's</em> favourites — with one favourite in the database it currently orders nothing, and at scale it orders by popularity, which is the opposite of personal.</p>
+    <p>This is the correct place for revealed preference to enter, and the correct way for it to enter: <b>as an ORDER BY term below the restriction tiers, never as a WHERE clause.</b> The existing comment already makes exactly this argument for why likes sit below difficulty — "skill level is a stated preference and a like count is inferred taste". Extend the principle rather than inventing one.</p>
+  </div>
+
+  <div class="callout">
+    <b>All three fixes together are perhaps a day.</b> They need no new table, no new model call, and no data that does not exist. They also work on the first launch for anybody who ticked a box in onboarding — which is the only personalisation in this document with no cold-start problem at all.
+  </div>
+</section>
+
+<!-- ═══════════════ 3. DATA SUFFICIENCY ═══════════════ -->
+<section>
+  <h2>03 · What the data can actually support</h2>
+  <p class="h2sub">The taste-profile review is due 2026-09-13. The data already answers it.</p>
+
+  <p class="para"><code>TODOS.md</code> §11 set a threshold: does anything reach <code>occurrences &gt;= 2</code>? Here is the whole table, today:</p>
+
+<pre>kind         | value                                   | occurrences
+-------------+-----------------------------------------+------------
+difficulty   | harder                                  | 3   ← qualifies
+difficulty   | easier                                  | 2   ← qualifies
+modification | vegetarian                              | 1
+modification | use_store_bought_curry_paste_instead_of | 1
+substitution | shrimp_paste                            | 1
+substitution | tamarind                                | 1</pre>
+
+  <p class="para">§11 predicted this precisely — "a feature that fires only on <code>harder</code> is thin" — and the outcome is worse than thin. <b>The two qualifying signals are the same axis pointing in both directions.</b> One profile has asked to make things harder three times and easier twice. Fed to <code>readStandingPreferences</code>, that yields the instruction <em>"take the technique further, with more refined method; keep the technique plain and the step count low"</em>, joined by a semicolon, in that order, because it sorts by count.</p>
+
+  <p class="para">That is not a calibration problem. Difficulty is not a standing preference at all — it is a <em>per-dish</em> decision, and the app already has a first-class place to record it (<code>profile_settings.difficulty</code>, which the user sets deliberately and which already ranks every feed). Recording it as a taste signal was the design error, not the threshold.</p>
+
+  <p class="para">The other two kinds behave exactly as §11 feared and for the reason it gave. <code>modification</code> stores canonicalised free text, so <code>use_store_bought_curry_paste_instead_of</code> — truncated mid-word at 40 characters — is a key nothing will ever collide with. <code>substitution</code> stores ingredient names and <em>will</em> accumulate, but two rows at one occurrence each after two weeks of single-user testing is not evidence of anything yet.</p>
+
+  <h3 class="sub">Prompt history: right table, wrong question</h3>
+  <p class="para">29 rows, one profile. The contents are unambiguous:</p>
+<pre>"Give me a pad kraw pao recipe"        ×4 consecutive
+"Give me a japanese curry recipe"      ×3 (two spellings, one typo)
+"Give me a carbonara recipe"           ×2
+"Test"                                 ×2
+"It's still not beef"
+"Give me a laksa recipe Michelin leebl"</pre>
+
+  <p class="para">These are <b>dish requests, not preference statements</b>. Nobody has typed "I don't like coriander" and nobody will — that is what the blacklist screen is for. So any design that reads prompts as a preference log needs an LLM to extract preferences that are not there.</p>
+
+  <p class="para">But there is a real signal in that list, and it is not the one <code>INGREDIENT_AFFINITY.md</code> §4.4 ruled out. That analysis correctly rejected prompts as an <em>ingredient-affinity</em> source (wrong granularity — it re-derives the catalogue's own affinity weighted by request frequency). <b>Cuisine affinity is a different claim.</b> Of the 21 non-test prompts, 14 name a Thai, Japanese, Korean, Chinese or Malaysian dish. That resolves without any NLP — prompt → dish name → catalogue row → cuisine tag — and cuisine is a taxonomy the app already ranks, filters and renders. It is the one thing prompt history can honestly say about a person today.</p>
+
+  <div class="callout">
+    <b>The threshold for acting on it is not row count, it is profile count.</b> Cuisine affinity from one user's 29 prompts is a mirror, not a model. Build the read as a view now if you like — it costs nothing and it is checkable — but do not put it on a surface until there are enough profiles that being wrong about one of them is a rounding error rather than the entire experience.
+  </div>
+</section>
+
+<!-- ═══════════════ 4. NEAR MISS ═══════════════ -->
+<section>
+  <h2>04 · The near-miss tier</h2>
+  <p class="h2sub">Your idea, examined. It is real, it is measurable, and it has one sharp edge.</p>
+
+  <p class="lede">You are right that "no recipes match, so generate" already exists — <code>shouldUseAI = catalogueAnswered &amp;&amp; isSuccess &amp;&amp; !hasNextPage</code>. What is missing is the rung between them. Today the ladder is binary: the catalogue either answers or it is exhausted and you pay a model. There is no tier for <em>the catalogue holds this dish and it is one swap away from being yours</em>.</p>
+
+  <div class="ladder">
+    <div class="rung">
+      <div class="tier">Tier 1 · today</div>
+      <div class="desc"><b>Exact catalogue match</b>All hard predicates satisfied. <code>find_recipes</code> is an <code>AND</code> over ingredients, tags and blacklist; difficulty ranks rather than filters.</div>
+      <div class="cost"><b>~30 ms</b>no model</div>
+    </div>
+    <div class="rung newtier">
+      <div class="tier">Tier 2 · proposed</div>
+      <div class="desc"><b>Near miss — "your version"</b>Fails <em>exactly one</em> predicate, by <em>exactly one</em> ingredient, and that ingredient is not the dish. Retrieved free; adapted on tap, once, into a variant of the family.</div>
+      <div class="cost"><b>~35 ms</b>to retrieve<br>1 call on tap</div>
+    </div>
+    <div class="rung">
+      <div class="tier">Tier 3 · today</div>
+      <div class="desc"><b>Generate</b>Nothing in the catalogue is close. The generator is told the constraint and writes a new dish.</div>
+      <div class="cost"><b>6–20 s</b>1–2 calls<br>+ image</div>
+    </div>
+  </div>
+
+  <h3 class="sub">What "almost fits" means concretely</h3>
+  <p class="para"><code>find_recipes</code> narrows on three hard predicates, and each one has a natural, countable relaxation:</p>
+
+  <table>
+    <tr><th style="width:20%">Predicate</th><th style="width:34%">Hard form (today)</th><th>Near-miss form</th></tr>
+    <tr>
+      <td class="mn">blacklist</td>
+      <td>Recipe contains <b>none</b> of the excluded ids.</td>
+      <td>Contains <b>exactly one</b>. The offending ingredient is known by name, and <code>decideReuse</code> / <code>adaptRecipeForBlacklist</code> <b>already do the adaptation</b> on the promote path. Only the retrieval half is new.</td>
+    </tr>
+    <tr>
+      <td class="mn">tags (derivable diet)</td>
+      <td><code>recipe_dietary</code> is a <code>not exists</code> over ingredients carrying a forbidden property.</td>
+      <td>Invert it and count. One blocker → the dish is one swap from qualifying, <b>and the query returns which ingredient it is</b>. This is the whole feature and it costs a <code>GROUP BY</code>.</td>
+    </tr>
+    <tr>
+      <td class="mn">ingredients</td>
+      <td>Recipe contains <b>all</b> requested ids.</td>
+      <td>Contains <b>n−1</b>. Weakest of the three: "you have four of the five" is a shopping-list observation, not an adaptation, and it competes with a feature <code>INGREDIENT_AFFINITY.md</code> §4.1 already deferred with numbers.</td>
+    </tr>
+  </table>
+
+  <h3 class="sub">The measurement</h3>
+  <p class="para">Over the 62 catalogue recipes, per derivable diet: how many qualify today, and how many are exactly one classified blocker away. Ingredient classification is at 1040 / 1041, so the <code>unknown</code> escape hatch is not hiding anything here.</p>
+
+  <div class="bars">
+    <div class="barrow"><div class="lb">gluten free</div><div class="bartrack"><i class="b-have" style="width:33.9%"></i><i class="b-near" style="width:38.7%"></i></div><div class="vl">21 → <b>45</b></div></div>
+    <div class="barrow"><div class="lb">vegan</div><div class="bartrack"><i class="b-have" style="width:21.0%"></i><i class="b-near" style="width:29.0%"></i></div><div class="vl">13 → <b>31</b></div></div>
+    <div class="barrow"><div class="lb">paleo</div><div class="bartrack"><i class="b-have" style="width:8.1%"></i><i class="b-near" style="width:24.2%"></i></div><div class="vl">5 → <b>20</b></div></div>
+    <div class="barrow"><div class="lb">pescatarian</div><div class="bartrack"><i class="b-have" style="width:59.7%"></i><i class="b-near" style="width:30.6%"></i></div><div class="vl">37 → <b>56</b></div></div>
+    <div class="barrow"><div class="lb">vegetarian</div><div class="bartrack"><i class="b-have" style="width:54.8%"></i><i class="b-near" style="width:27.4%"></i></div><div class="vl">34 → <b>51</b></div></div>
+    <div class="barrow"><div class="lb">egg free</div><div class="bartrack"><i class="b-have" style="width:67.7%"></i><i class="b-near" style="width:27.4%"></i></div><div class="vl">42 → <b>59</b></div></div>
+    <div class="barrow"><div class="lb">dairy free</div><div class="bartrack"><i class="b-have" style="width:59.7%"></i><i class="b-near" style="width:25.8%"></i></div><div class="vl">37 → <b>53</b></div></div>
+    <div class="barrow"><div class="lb">soy free</div><div class="bartrack"><i class="b-have" style="width:69.4%"></i><i class="b-near" style="width:16.1%"></i></div><div class="vl">43 → <b>53</b></div></div>
+    <div class="barrow"><div class="lb">sesame free</div><div class="bartrack"><i class="b-have" style="width:79.0%"></i><i class="b-near" style="width:16.1%"></i></div><div class="vl">49 → <b>59</b></div></div>
+    <div class="barrow"><div class="lb">nut free</div><div class="bartrack"><i class="b-have" style="width:91.9%"></i><i class="b-near" style="width:6.5%"></i></div><div class="vl">57 → <b>61</b></div></div>
+    <div class="legend">
+      <span><i class="b-have"></i> qualifies today</span>
+      <span><i class="b-near"></i> one ingredient away</span>
+      <span>n = 62 catalogue recipes · 258 suggestions show the same shape (vegan 45 → 118, gluten free 103 → 223)</span>
+    </div>
+  </div>
+
+  <p class="para" style="margin-top:20px">For <b>vegan and gluten free the near-miss tier is larger than the catalogue that qualifies.</b> For paleo it is four times larger. That is the case for building it — and it is also exactly why it has to be gated, because a tier that doubles your vegan catalogue by relaxing the definition of vegan is not a feature, it is a lie.</p>
+
+  <h3 class="sub">The sharp edge: the blocker is often the dish</h3>
+  <p class="para">Both columns below are <em>one ingredient away</em>. Structurally identical. Query cannot tell them apart.</p>
+
+  <div class="split">
+    <div class="pane good">
+      <div class="pane-t">✓ Genuine adaptations — dairy free</div>
+      <ul class="dishlist">
+        <li><span class="dn">Apfelpfannkuchen</span><span class="bl">Butter</span></li>
+        <li><span class="dn">Apple Strudel</span><span class="bl">Butter</span></li>
+        <li><span class="dn">Cotoletta alla Milanese</span><span class="bl">Ghee</span></li>
+        <li><span class="dn">Chicken 65</span><span class="bl">Yogurt</span></li>
+        <li><span class="dn">Dürüm</span><span class="bl">Yogurt</span></li>
+        <li><span class="dn">Kimchi Fried Rice</span><span class="bl">Soy Sauce <i>(gf)</i></span></li>
+      </ul>
+      <div class="pane-note">The blocker is a <em>medium</em> — a fat, a marinade, a seasoning. Oil for butter, tamari for soy sauce. The dish survives, keeps its name honestly, and a cook would make the same swap.</div>
+    </div>
+    <div class="pane bad">
+      <div class="pane-t">✗ Gutted dishes — same query, same distance</div>
+      <ul class="dishlist">
+        <li><span class="dn">Bak Kut Teh</span><span class="bl">Pork Ribs</span></li>
+        <li><span class="dn">Cheeseburger</span><span class="bl">Ground Beef</span></li>
+        <li><span class="dn">Chicken 65</span><span class="bl">Chicken</span></li>
+        <li><span class="dn">Abalone Porridge</span><span class="bl">Abalone</span></li>
+        <li><span class="dn">Beurre Blanc</span><span class="bl">Butter</span></li>
+        <li><span class="dn">Margherita Pizza</span><span class="bl">Pizza Dough <i>(gf)</i></span></li>
+      </ul>
+      <div class="pane-note">The blocker <em>is</em> the dish. This is precisely the failure <code>GUTTED_DISHES</code> pins in <code>dedup-authenticity.eval.ts</code> — the ceviche with no seafood that scored <b>0.95 canonical</b> because the gate was reading the name.</div>
+    </div>
+  </div>
+
+  <p class="para" style="margin-top:18px">Note that <b>Chicken 65 appears in both columns</b>, under different diets. So this cannot be a property of the recipe or of the ingredient alone — it is a property of the <em>(dish, blocker)</em> pair. And note <b>Beurre Blanc</b>: the blocker is named in the dish's own title, in French.</p>
+
+  <h3 class="sub">Three discriminators, cheapest first</h3>
+  <table>
+    <tr><th style="width:22%">Test</th><th style="width:12%">Cost</th><th>What it catches, and what it misses</th></tr>
+    <tr>
+      <td><b>Blocker in the name</b></td>
+      <td class="yes">free</td>
+      <td>Catches Cheeseburger, Abalone Porridge, Beurre Blanc. Uses the fold you already have — <code>name_ascii</code> vs <code>ingredients.name_ascii</code>, both sides already materialised. Misses Bak Kut Teh entirely.</td>
+    </tr>
+    <tr>
+      <td><b>Ingredient category</b></td>
+      <td class="no">free — and it does not work</td>
+      <td>Tempting: "Meats and Seafood are protagonists, Fats &amp; Oils and Sauces are media." Measured against the actual rows: <b>Mozzarella is filed under Noodles</b> and <b>Butter under Baking</b>. The category taxonomy is not clean enough to carry a safety decision. Do not build on it without fixing it first.</td>
+    </tr>
+    <tr>
+      <td><b>Adaptation gate</b></td>
+      <td class="mid">1 call, on tap</td>
+      <td>The one that works, and you already own it. <code>verifySuggestionAuthenticity</code>'s <code>adaptation</code> status exists for exactly this question, with the "name the defining ingredient, then find it in the list" test in its prompt. Run it against <em>(dish, proposed swap)</em> before writing the variant.</td>
+    </tr>
+  </table>
+
+  <div class="callout">
+    <b>The economics make the gate affordable.</b> Retrieval is free and shows a rail. The gate only runs when someone <em>taps</em>, and its result is written as a variant into the existing family — so it is paid once per cook per dish, and <code>recipe_family_defaults</code> serves it free forever after. That is the same shape <code>decideReuse</code> already uses, including the "fail closed" rule: if the gate errors, generate instead of serving a doubtful adaptation.
+  </div>
+
+  <h3 class="sub">What it looks like</h3>
+  <div class="mockwrap">
+    <div class="phone">
+      <div class="phone-t">Proposed — search screen, gluten-free filter on</div>
+      <div class="rcard"><div class="img"></div><div class="bd"><div class="eb">Italian · Sauce</div><div class="tt">Arrabbiata Sauce</div></div></div>
+      <div class="rcard"><div class="img"></div><div class="bd"><div class="eb">Malaysian · Noodles</div><div class="tt">Asam Laksa</div></div></div>
+      <div class="divlabel">Close, with one change</div>
+      <div class="rcard mine"><div class="img"></div><div class="bd"><div class="eb">Korean · Rice</div><div class="tt">Kimchi Fried Rice</div>
+        <div class="why"><b>1 swap</b><span>Uses soy sauce — we'd use tamari.</span></div></div></div>
+      <div class="rcard mine"><div class="img"></div><div class="bd"><div class="eb">Chinese · Salad</div><div class="tt">Pai Huang Gua</div>
+        <div class="why"><b>1 swap</b><span>Uses soy sauce — we'd use tamari.</span></div></div></div>
+      <div class="tapline">Tapping runs the adaptation once,<br>and saves it as your version of the dish.</div>
+    </div>
+    <div class="phone">
+      <div class="phone-t">What this must never be</div>
+      <div class="rcard"><div class="img"></div><div class="bd"><div class="eb">Italian · Pasta</div><div class="tt">Pasta e Fagioli</div></div></div>
+      <div class="divlabel badlabel">Personalised for you</div>
+      <div class="rcard mine" style="border-color:#E5C9C0;box-shadow:0 0 0 3px rgba(176,74,48,.07)"><div class="img"></div><div class="bd"><div class="eb">Italian · Pizza</div><div class="tt">Margherita Pizza</div>
+        <div class="why" style="background:var(--skip-soft);color:#8C3A22"><b>✱</b><span>Your personalised idea</span></div></div></div>
+      <div class="rcard mine" style="border-color:#E5C9C0;box-shadow:0 0 0 3px rgba(176,74,48,.07)"><div class="img"></div><div class="bd"><div class="eb">American · Sandwich</div><div class="tt">Cheeseburger</div>
+        <div class="why" style="background:var(--skip-soft);color:#8C3A22"><b>✱</b><span>Your personalised idea</span></div></div></div>
+      <div class="tapline">Same query, same one-blocker distance,<br>no gate, and a label that claims rather than explains.</div>
+    </div>
+  </div>
+
+  <p class="para" style="margin-top:20px"><b>The difference between those two screens is one classifier and one sentence.</b> The left one names the swap in six words and lets the reader judge it. The right one names <em>them</em>, and asks to be trusted.</p>
+</section>
+
+<!-- ═══════════════ 5. FAILURE MODES ═══════════════ -->
+<section>
+  <h2>05 · The three ways this goes wrong</h2>
+  <p class="h2sub">Treated as constraints on the design, not as caveats after it.</p>
+
+  <div class="split" style="grid-template-columns:1fr">
+    <div class="pane">
+      <div class="pane-t" style="color:var(--peach)">Failure 1 · the catalogue feels smaller than it is</div>
+      <p class="para" style="margin:0 0 10px"><b>The rule: personalisation may only ever ADD to the tail, or REORDER below the fold. It may never remove a row from the head.</b></p>
+      <p class="para" style="margin:0 0 10px">Two kinds of preference are being conflated and they have opposite semantics. A <em>restriction</em> — diet, allergy, blacklist — is a correctness constraint and belongs in the <code>WHERE</code> clause; someone who cannot eat gluten is not being narrowed, they are being served. A <em>taste</em> — cuisine affinity, difficulty, "you always cook Thai" — is inferred, and belongs only in the <code>ORDER BY</code>, below the restriction tiers. <code>find_recipes</code> already draws this line for likes; extend it rather than replacing it.</p>
+      <p class="para" style="margin:0">The near-miss tier is safe on this axis by construction: it is strictly additive. It shows dishes the current filters <em>reject</em>. And the escape hatch already exists — <code>find_recipes</code> returns <code>total_recipes</code> and <code>facets</code> over the whole match, so a header can honestly say <em>"51 vegan dishes · 17 of them with one change"</em> instead of silently presenting a shorter list.</p>
+    </div>
+    <div class="pane">
+      <div class="pane-t" style="color:var(--peach)">Failure 2 · presumption</div>
+      <p class="para" style="margin:0 0 10px"><b>The rule: declared beats revealed, always, and revealed needs repetition before it counts.</b></p>
+      <p class="para" style="margin:0 0 10px">The taste-signal design got this right — <code>TASTE_SIGNAL_MIN_OCCURRENCES = 2</code> exists because "make this one vegetarian" is a fact about a dinner party. Keep that rule and apply it to anything new: cuisine affinity from a single request is noise, and the substitution corpus is explicitly not being read until it has volume.</p>
+      <p class="para" style="margin:0">The concrete guard for the near-miss tier: it fires off the user's <em>declared</em> diet and blacklist only. It must not fire off an inferred preference, because the whole surface says "this dish does not meet a constraint you set" — and that sentence is false if nobody set one.</p>
+    </div>
+    <div class="pane">
+      <div class="pane-t" style="color:var(--peach)">Failure 3 · a label that is a claim</div>
+      <p class="para" style="margin:0 0 10px"><b>The rule: if you cannot print the reason in six words, you may not print the badge.</b></p>
+      <p class="para" style="margin:0 0 10px">"Personalised for you" is a marketing sentence. <em>"Uses soy sauce — we'd use tamari"</em> is a falsifiable one, and the reader can tell instantly whether it is right. Every idea in this document either produces a printable reason or does not ship. Cuisine affinity passes ("You cook a lot of Thai"). Near-miss passes ("one swap: parmesan"). Anything derived from an LLM reading your prompt history does not, which is a large part of why it is ranked last.</p>
+      <p class="para" style="margin:0">This also settles the <b>visible-and-correctable</b> question, and I would argue it strongly: the reason should be a control, not a caption. Tapping "You cook a lot of Thai" should open the thing that decides it, and it should be possible to say <em>no I don't</em>. <code>profile_taste_signals</code> already grants the owner <code>delete</code> and deliberately no <code>insert</code>/<code>update</code> for exactly this — the capability exists and only the screen is missing. <b>Turn that screen on whether or not any of the rest of this ships</b>; §11 already names it as the one undeferrable item, and it becomes more urgent, not less, the moment anything starts acting on inferred data.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 6. RANKING ═══════════════ -->
+<section>
+  <h2>06 · Ranked</h2>
+  <p class="h2sub">What I would build, in order.</p>
+
+  <div class="board">
+    <div class="col ship">
+      <h3>Build</h3>
+      <ul>
+        <li><b>1 · Plug the three leaks</b><span class="why">No new data. Works on day one.</span></li>
+        <li><b>2 · Near miss, blacklist first</b><span class="why">Adaptation half already exists.</span></li>
+        <li><b>3 · Near miss, derivable diets</b><span class="why">Needs the adaptation gate.</span></li>
+        <li><b>4 · Retire the taste profile</b><span class="why">Keep the table, drop the surface.</span></li>
+      </ul>
+    </div>
+    <div class="col hold">
+      <h3>Build the read, hold the surface</h3>
+      <ul>
+        <li><b>5 · Cuisine affinity</b><span class="why">Real signal, n=1 profile.</span></li>
+        <li><b>6 · Substitution retrieval</b><span class="why">Corpus is deliberately still filling.</span></li>
+        <li><b>7 · "New to you" novelty term</b><span class="why">34 views, 1 favourite.</span></li>
+      </ul>
+    </div>
+    <div class="col skip">
+      <h3>Not on this evidence</h3>
+      <ul>
+        <li><b>8 · LLM taste extraction from prompts</b><span class="why">29 rows, all dish requests.</span></li>
+        <li><b>9 · Ingredient-affinity personal ranking</b><span class="why">Already deferred with numbers.</span></li>
+        <li><b>10 · Collaborative filtering</b><span class="why">One profile.</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- idea 1 -->
+  <div class="idea" style="margin-top:26px">
+    <div class="head">
+      <div class="badgerow"><div class="num">1</div><span class="verdict v-ship">Build first</span><span class="cost">~1 day · no new data · no tarball rebuild</span></div>
+      <h4>Make the preferences you already collect reach every query</h4>
+      <p class="body">The three leaks in §02. The home feed gains <code>tags</code> from the store's <code>restrictions</code>; chat's four catalogue stages gain a diet filter; and the ranking gains one term. Nothing here is a feature — it is the difference between a stated preference being honoured and being stored.</p>
+      <p class="body"><b>Why it outranks everything else:</b> it is the only work in this document that improves the experience of a user who has done nothing but complete onboarding. It also has to happen before the near-miss tier, because "one change away from vegan" is meaningless on a screen where the vegan filter was not applied in the first place.</p>
+      <div class="surface"><span>use-base-recipe-filters.ts</span><span>search-recipe-suggestions.ts</span><span>find-catalogue-recipes.ts</span><span>find_recipes ORDER BY</span></div>
+    </div>
+    <div class="foot"><div class="fl">Cold start</div><div>Works for anyone who ticked a diet or added a blacklist entry — i.e. from the first launch. The only idea here with no cold-start problem at all.</div></div>
+  </div>
+
+  <!-- idea 2 -->
+  <div class="idea">
+    <div class="head">
+      <div class="badgerow"><div class="num">2</div><span class="verdict v-ship">Build</span><span class="cost">1 SQL function + 1 rail · retrieval free</span></div>
+      <h4>Near miss on the blacklist — "we'd leave the peanuts out"</h4>
+      <p class="body">Start here rather than with diets, for three reasons. The offending ingredient is <em>named by the user</em>, so the reason sentence writes itself. The adaptation path already exists end to end — <code>decideReuse</code> searches the whole family, <code>adaptRecipeForBlacklist</code> runs the shared modify prompt with its "replace, never drop" rule, and the result lands as a variant. And a blacklist is a personal exclusion rather than a claim about the dish, so a swapped ingredient does not put a false label on a recipe: <em>"peanut-free pad thai"</em> is an honest description of what you were handed even if a purist disagrees.</p>
+      <p class="body">What is new is only the <em>retrieval</em>: a function returning recipes that match every other predicate and contain exactly one blacklisted id, with that id. Same <code>SECURITY DEFINER</code> + visibility-in-the-WHERE-clause shape <code>menu_pairings_for_recipe</code> established.</p>
+      <div class="surface"><span>new: find_near_miss_recipes()</span><span>blacklist.ts · decideReuse</span><span>adapt-recipe-for-blacklist</span><span>recipe_variants</span></div>
+    </div>
+    <div class="foot"><div class="fl">Cold start</div><div>Fires only for users with a blacklist. Zero rows today — but it is a two-tap setup screen that already exists, and the near-miss rail is a good reason to ask.</div></div>
+  </div>
+
+  <!-- idea 3 -->
+  <div class="idea">
+    <div class="head">
+      <div class="badgerow"><div class="num">3</div><span class="verdict v-ship">Build after 2</span><span class="cost">+ 1 LLM call on tap</span></div>
+      <h4>Near miss on derivable diets, behind the adaptation gate</h4>
+      <p class="body">The measurement in §04 is the argument: it roughly doubles the vegan and gluten-free catalogues, and quadruples paleo. The gate is the whole difficulty, and the honest sequencing is to ship the blacklist version first and see whether the rail gets tapped at all before paying to build a classifier for it.</p>
+      <p class="body">Two rules I would hold to. <b>Never adapt a component or a dish whose blocker is in its own name</b> — free, structural, and it kills Beurre Blanc and Cheeseburger before any model is asked. And <b>never relabel the dish</b>: the variant is "Kimchi Fried Rice, your version", not "Gluten-Free Kimchi Fried Rice". The catalogue row keeps the attested name; the family keeps the identity; <code>personalise-recipe.ts</code> already establishes exactly this (<code>name</code> and <code>tags</code> pinned as initial state, "MUST remain constant").</p>
+      <div class="surface"><span>recipe_dietary inverted</span><span>verifySuggestionAuthenticity</span><span>GUTTED_DISHES eval</span><span>name_ascii fold</span></div>
+    </div>
+    <div class="foot"><div class="fl">Cold start</div><div>Fires for anyone with a diet set. Add the near-miss count to the empty state — "3 vegan dishes, 8 more with one change" is a better empty screen than a spinner promising a generation.</div></div>
+  </div>
+
+  <!-- idea 4 -->
+  <div class="idea">
+    <div class="head">
+      <div class="badgerow"><div class="num">4</div><span class="verdict v-ship">Decide now</span><span class="cost">deletion, mostly</span></div>
+      <h4>Retire the taste profile as designed; keep the table, repoint it</h4>
+      <p class="body">§11's own review criteria say: "nothing qualifying outside <code>difficulty</code> → take it out". That is where the data landed, two weeks early, and the <code>difficulty</code> rows are worse than nothing — <code>harder</code> at 3 and <code>easier</code> at 2 would produce a self-contradicting instruction. I would take the third branch §11 anticipated: <b>the honest feature is smaller and is not this one.</b></p>
+      <p class="body">Concretely: delete the <code>difficulty</code> kind (the preference it models already has a first-class home in <code>profile_settings</code>), stop recording free-text <code>modification</code> until there is a vocabulary to canonicalise onto, and keep <code>substitution</code> — which is the one kind that will accumulate, and which belongs beside <code>profile_ingredient_substitutions</code> as a soft blacklist rather than as a taste profile. Then either delete <code>TASTE_PROFILE_ENABLED</code> and the <code>personalise</code> route, or leave them and accept that they are furniture, which the flag's own docstring forbids.</p>
+      <p class="body"><b>Turn the settings screen on regardless.</b> It is the delete affordance for inferred data, the RLS already supports it, and it is the only outstanding pre-launch obligation in §11.</p>
+      <div class="surface"><span>recipes.routes.ts:22</span><span>taste-profile.ts</span><span>20260815000007</span><span>flags.ts</span></div>
+    </div>
+    <div class="foot"><div class="fl">Cold start</div><div>N/A — this is a removal. Worth doing precisely because a dark feature costs nothing to keep and therefore never gets decided.</div></div>
+  </div>
+
+  <!-- idea 5 -->
+  <div class="idea">
+    <div class="head">
+      <div class="badgerow"><div class="num">5</div><span class="verdict v-hold">Build the read, hide the surface</span><span class="cost">1 view · no model</span></div>
+      <h4>Cuisine affinity from prompts and favourites — as a re-rank, below the fold</h4>
+      <p class="body">The one thing prompt history can honestly say today. Resolve <code>profile_prompts.prompt</code> → catalogue dish → cuisine tag (the accent-folded <code>ilike</code> the client's own search already uses), union with the cuisine tags of favourited recipes, and you have a weighted cuisine vector per profile with no NLP and no model call. On the current data it would say "Thai, Japanese, Korean", which is correct.</p>
+      <p class="body"><b>It must enter as an ORDER BY term and nothing else</b> — a tie-break below <code>difficulty_preference_rank</code> and <code>favourite_count</code>, never a filter, or it becomes the filter bubble in §05 within a week. And it must not surface until there are enough profiles to be wrong about someone harmlessly. Build the view now if you want it checkable; put it on a screen later.</p>
+      <div class="surface"><span>profile_prompts</span><span>profile_recipe_interactions</span><span>tags type=cuisine</span><span>fold_accents()</span></div>
+    </div>
+    <div class="foot"><div class="fl">Cold start</div><div>Silent and harmless: no prompts and no favourites means a zero vector, which reorders nothing. That is the correct new-user behaviour and it needs no special case.</div></div>
+  </div>
+
+  <!-- idea 6 -->
+  <div class="idea">
+    <div class="head">
+      <div class="badgerow"><div class="num">6</div><span class="verdict v-hold">Already sequenced</span><span class="cost">deliberately waiting</span></div>
+      <h4>Substitution retrieval — "most cooks used ghee here"</h4>
+      <p class="body">Not my idea and not new: <code>20260824000001</code> designed it, wrote the corpus table, and explicitly declined to build the reader because "a corpus with nothing in it retrieves nothing". I am listing it only to say that the near-miss tier is its natural <b>first consumer</b> — when a near-miss needs a swap, retrieving what real cooks chose for that ingredient in that dish form beats asking a model, at ~40 ms instead of seconds, exactly as <code>menu_pairings_for_recipe</code> does for menus.</p>
+      <p class="body">So build the near-miss adaptation with a seam where the swap is chosen, and the retrieval slots in behind it later without a redesign.</p>
+      <div class="surface"><span>profile_ingredient_substitutions</span><span>menu_pairings_for_recipe (pattern)</span></div>
+    </div>
+    <div class="foot"><div class="fl">Cold start</div><div>Empty corpus → fall through to the model. Same shape compose retrieval already has.</div></div>
+  </div>
+
+  <!-- idea 7 -->
+  <div class="idea">
+    <div class="head">
+      <div class="badgerow"><div class="num">7</div><span class="verdict v-skip">Not on this evidence</span><span class="cost">—</span></div>
+      <h4>Reading preferences out of prompt history with a model</h4>
+      <p class="body">29 rows, one profile, four of them literally the same sentence and two of them the word "Test". The contents are dish requests, not preference statements, so an extractor would be inventing preferences rather than finding them — and its output would fail the §05 test: there is no six-word reason you could print under a card that a reader could check.</p>
+      <p class="body">The threshold to revisit is not a row count on one profile. It is <b>prompts that state intent about ingredients</b> ("what can I do with leftover fennel") arriving from enough distinct people that a wrong inference is a rounding error. <code>INGREDIENT_AFFINITY.md</code> §4.4 put that at order 10⁴ prompts across 10² profiles and that still looks right.</p>
+    </div>
+    <div class="foot"><div class="fl">Cold start</div><div>Total. This is the idea most likely to feel presumptuous, on the least evidence, with the least defensible explanation.</div></div>
+  </div>
+</section>
+
+<!-- ═══════════════ 7. COLD START ═══════════════ -->
+<section>
+  <h2>07 · The person with no history</h2>
+  <p class="h2sub">Which is every user, on the day they matter most.</p>
+
+  <table>
+    <tr><th style="width:30%">Idea</th><th style="width:18%">Day 0</th><th style="width:18%">After onboarding</th><th>What a new user actually sees</th></tr>
+    <tr><td><b>Leak fixes</b></td><td class="mid">no-op</td><td class="yes">full value</td><td>Their diet is honoured on the home feed and in chat. This is the entire cold-start story and it is why it ranks first.</td></tr>
+    <tr><td><b>Near miss · blacklist</b></td><td class="mid">no-op</td><td class="yes">works</td><td>Nothing until they add an exclusion, then a rail that would otherwise have been an empty result.</td></tr>
+    <tr><td><b>Near miss · diets</b></td><td class="mid">no-op</td><td class="yes">works</td><td>Best on a <em>narrow</em> diet, which is where the catalogue is thinnest — the vegan user gets 31 dishes instead of 13 on their first search.</td></tr>
+    <tr><td><b>Cuisine affinity</b></td><td class="no">silent</td><td class="no">silent</td><td>Nothing, correctly. A zero vector reorders nothing; no special case, no "getting to know you" screen.</td></tr>
+    <tr><td><b>Taste profile</b></td><td class="no">silent</td><td class="no">silent</td><td>Nothing for weeks, then possibly nothing ever. This is the finding, not a limitation.</td></tr>
+  </table>
+
+  <div class="callout">
+    <b>The design principle falling out of that column:</b> personalisation should be <em>invisible when it has nothing to say</em>. No onboarding quiz, no "we're learning your taste" interstitial, no empty "Your ideas" section. The two things that fire on day one both fire because the user <em>told</em> the app something — which is also the only kind of personalisation that can be explained in six words.
+  </div>
+</section>
+
+<!-- ═══════════════ 8. SMALLEST VERSION ═══════════════ -->
+<section>
+  <h2>08 · The smallest version worth shipping</h2>
+  <p class="h2sub">Two changes, one of which is a bug fix.</p>
+
+  <ol class="steps">
+    <li><b>The two diet leaks.</b> One line in <code>useBaseRecipeFilters</code> to pass <code>restrictions</code> as tag ids; and in <code>searchRecipeSuggestions</code>, resolve the diet names once and forward them to <code>findCatalogueRecipes</code> plus a <code>recipe_dietary</code> post-filter on stages 1a/1b/2. No migration, no schema, no tarball rebuild, no model call. This is where I would stop and ship.</li>
+    <li><b>One SQL function, one rail.</b> <code>find_near_miss_recipes(p_diets, p_blacklist, …)</code> — same shape and same visibility discipline as <code>menu_pairings_for_recipe</code>, returning the recipe plus the single blocking ingredient. The client renders a "Close, with one change" section under the exact results and above the generate boundary, with the blocker named on each card. <b>Nothing is adapted yet</b> — tapping a card opens the existing recipe with the blocker highlighted.</li>
+    <li><b>Then, and only if the rail is tapped:</b> the adaptation gate and the write into <code>recipe_variants</code>. That is the expensive half and it is the half that can wait for a number.</li>
+  </ol>
+
+  <p class="para" style="margin-top:20px"><b>What that buys, on today's catalogue:</b> a vegan search goes from 13 results to 13 + 18 marked ones; gluten free from 21 to 21 + 24. Both currently fall through to a paid generation the moment the reader scrolls, so the near-miss rail also <em>displaces spend</em> rather than only adding a surface.</p>
+
+  <p class="para"><b>Ship risk.</b> Step 1 is a filter that should always have been applied — the only way it regresses is by making a result set smaller, which is what a restriction is for. Step 2 is a read-only function feeding an additive section; if it disappoints, drop the function and the section and nothing else notices. Step 3 is the only one that writes, and it writes into a family shape that already exists and already has a merge guard.</p>
+
+  <div class="callout">
+    <b>One caveat on step 2 worth knowing before you start.</b> A new RPC means regenerating <code>database.types.ts</code>, which means rebuilding and repacking <code>@fridgeezy/types</code> into the client's <code>vendor/</code> — the manual step <code>CLAUDE.md</code> warns is easy to forget, and a bare <code>npm install</code> will not pick it up. If you want step 2 with no cross-repo dance, type the RPC response locally in the client for the first iteration and fold it into the generated types at the next scheduled refresh.
+  </div>
+</section>
+
+<!-- ═══════════════ 9. NOT COVERED ═══════════════ -->
+<section>
+  <h2>09 · Stated plainly</h2>
+  <p class="h2sub">Where I am confident, and where I am not.</p>
+
+  <table>
+    <tr><th style="width:34%">Claim</th><th style="width:14%">Confidence</th><th>Basis</th></tr>
+    <tr><td>The three leaks are real</td><td class="yes">Certain</td><td>Read in both repos. <code>useBaseRecipeFilters</code> returns two fields; <code>dietaryRestrictions</code> appears at four lines in <code>search-recipe-suggestions.ts</code>, two of which are the declaration and the destructure.</td></tr>
+    <tr><td>Near-miss counts</td><td class="yes">Measured</td><td>Live dev project, read-only, today. 62 catalogue recipes, 1040/1041 ingredients classified.</td></tr>
+    <tr><td>The gutted-dish risk</td><td class="yes">Measured</td><td>The dish lists in §04 are real rows, not illustrations.</td></tr>
+    <tr><td>Category cannot discriminate</td><td class="yes">Measured</td><td>Mozzarella → Noodles, Butter → Baking, in the live <code>categories</code> join.</td></tr>
+    <tr><td>The adaptation gate will work</td><td class="mid">Reasoned</td><td>It is the same judgement <code>verifySuggestionAuthenticity</code> already makes and <code>GUTTED_DISHES</code> already pins — but it has never been run on <em>(dish, proposed swap)</em> pairs. Worth a cheap eval before building the surface on it.</td></tr>
+    <tr><td>Cuisine affinity is extractable</td><td class="mid">Reasoned</td><td>14 of 21 non-test prompts resolve to an East/Southeast Asian dish by eye. I did not build the resolver.</td></tr>
+    <tr><td>Any claim about user behaviour</td><td class="no">Unknown</td><td>One profile, all of it yours. Nothing in this document should be read as evidence about how people use the app, only about what the schema can support.</td></tr>
+  </table>
+
+  <p class="para" style="margin-top:22px"><b>What I did not look at:</b> the paywall implications of any of this (the near-miss adaptation runs a model, so it is premium by the app's own one-sentence rule, but the <em>rail</em> is a database read and should not be); menu-level personalisation, which has its own retrieval story already built and no data yet; and whether the near-miss tier should also apply to the 258 suggestions, which the numbers say is a bigger win and which I left out because a suggestion has no recipe to adapt.</p>
+</section>
+
+<footer>
+  Read against <code>fridgeezy-backend</code> @ <code>1ce6c8a</code> and <code>fridgeezy</code> (client), 30 Aug 2026. Row counts and near-miss measurements taken read-only from the live dev project; no writes were made. Prior analysis this builds on and does not contradict: <code>INGREDIENT_AFFINITY.md</code> §4.4 and §5, <code>TODOS.md</code> §11, <code>RECIPE_VARIANTS.md</code>.
+</footer>
+
+</div>
+</body>
+</html>

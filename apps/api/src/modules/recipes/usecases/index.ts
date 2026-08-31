@@ -1,6 +1,7 @@
 export * from "./generate-recipe";
 export * from "./escalate-difficulty";
 export * from "./compose-recipe";
+export * from "./adapt-recipe";
 export * from "./modify-recipe";
 export * from "./personalise-recipe";
 export * from "./import-recipe";

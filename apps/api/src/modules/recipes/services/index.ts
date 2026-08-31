@@ -1,4 +1,6 @@
 export * from "./adapt-recipe-for-blacklist";
+export * from "./adapt-recipe-for-diet";
+export * from "./adaptation-gate";
 export * from "./blacklist";
 export * from "./create-recipe-stream";
 export * from "./derive-variant-label";

@@ -94,6 +94,12 @@ export async function resolveIngredientIds(
  * answers it exactly, by ingredient id, with no similarity involved, and returns
  * suggestions alongside recipes the same way the search screen sees them.
  *
+ * It also carries the reader's DIET, which is the second thing it shares with
+ * the search screen and the reason this is the cheap half of plugging that
+ * leak: the RPC already takes `tags` and already knows how to answer a
+ * derivable diet from the ingredients. The other catalogue stages read tables
+ * directly and have to post-filter — see `dietary-filter.ts`.
+ *
  * Never throws: an empty list just means chat falls through to generating, which
  * is what it did before this path existed.
  */
@@ -106,10 +112,26 @@ export async function findCatalogueRecipes(options: {
      */
     ingredientIds: string[];
     blacklist?: string[];
+    /**
+     * Dietary TAG IDS, already resolved — see `resolveDietaryFilter`.
+     *
+     * Passed straight into the RPC's own `tags` array, which is the whole
+     * reason this stage needs no post-filter: `find_recipes` applies the
+     * derivable/tag-carried split itself, over recipes and suggestions alike,
+     * and doing it again here would be a second copy of that rule free to
+     * disagree with the one on the search screen.
+     */
+    dietaryTagIds?: string[];
     difficulty?: "easy" | "medium" | "hard";
     limit?: number;
 }): Promise<CatalogueRecipe[]> {
-    const { ingredientIds, blacklist = [], difficulty, limit = 5 } = options;
+    const {
+        ingredientIds,
+        blacklist = [],
+        dietaryTagIds = [],
+        difficulty,
+        limit = 5,
+    } = options;
 
     try {
         // With no resolvable ingredient this degenerates into "any recipe at
@@ -124,6 +146,10 @@ export async function findCatalogueRecipes(options: {
         const { data, error } = await supabaseAdmin.rpc("find_recipes", {
             ingredients: ingredientIds,
             blacklist: blacklistIds,
+            // De-duplicated for the reason the client's own payload is: the RPC
+            // requires a row to satisfy as many DISTINCT tags as the array is
+            // long, so the same id twice makes the filter unsatisfiable.
+            tags: [...new Set(dietaryTagIds)],
             limit_count: limit,
             ...(difficulty ? { p_difficulty: difficulty } : {}),
         });

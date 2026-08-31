@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+    <title>Your Fridgeezy sign-in code</title>
+    <!--
+      The code IS the mail. There is deliberately no magic link in here: a link
+      opens Mail and comes back through a deep link into an app whose sign-in
+      sheet is gone, which is the one thing that flow exists not to do. The app
+      only ever calls `verifyOtp`, so the ConfirmationURL variable has no
+      consumer here — and note a Go template substitutes inside an HTML comment
+      too, so it must not be written with its braces even in this note.
+
+      Table layout and inline styles because Gmail strips <style>; the block
+      below is a progressive enhancement for Apple Mail / iOS Mail, which is
+      where most of these are read. Every colour therefore appears twice — once
+      inline as the light value, once in the dark-mode block by class.
+
+      Palette is src/shared/theme/constants/colors.ts in the app repo. Copied
+      rather than imported, like the Live Activity's, and needs updating by hand
+      if those tokens move.
+    -->
+    <style>
+      @media (prefers-color-scheme: dark) {
+        .page { background-color: #141110 !important; }
+        .card { background-color: #26201c !important; border-color: #423c37 !important; }
+        .ink { color: #efe7dd !important; }
+        .ink-strong { color: #f7f1e8 !important; }
+        .ink-muted { color: #b0a599 !important; }
+        .code-box { background-color: #33241b !important; border-color: #5a3f2c !important; }
+        .code { color: #f0b084 !important; }
+        .rule { background-color: #423c37 !important; }
+      }
+      @media only screen and (max-width: 480px) {
+        .code { font-size: 32px !important; letter-spacing: 8px !important; }
+        .pad { padding-left: 24px !important; padding-right: 24px !important; }
+      }
+    </style>
+  </head>
+
+  <body class="page" style="margin:0; padding:0; width:100%; background-color:#fcfaf6;">
+    <div style="display:none; max-height:0; overflow:hidden; opacity:0;">
+      {{ .Token }} is your Fridgeezy sign-in code.
+    </div>
+
+    <table role="presentation" class="page" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fcfaf6;">
+      <tr>
+        <td align="center" style="padding:40px 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:456px;">
+
+            <tr>
+              <td align="center" style="padding-bottom:24px;">
+                <span class="ink-strong" style="font-family:'Lora',Georgia,'Times New Roman',serif; font-size:20px; font-weight:600; color:#3a332f; letter-spacing:0.2px;">Fridgeezy</span>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="card" style="background-color:#ffffff; border:1px solid #e8e4e0; border-radius:20px; padding:40px 32px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+                  <tr>
+                    <td align="center" class="pad">
+                      <h1 class="ink-strong" style="margin:0; font-family:'Lora',Georgia,'Times New Roman',serif; font-size:26px; line-height:34px; font-weight:600; color:#3a332f;">Your sign-in code</h1>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td align="center" class="pad" style="padding-top:10px;">
+                      <p class="ink-muted" style="margin:0; font-family:'Poppins',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:14px; line-height:22px; color:#8a8380;">Enter these six digits in the app to finish signing in.</p>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td align="center" style="padding-top:28px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                          <td class="code-box" align="center" style="background-color:#fff5ee; border:1px solid #f7d9c4; border-radius:16px; padding:20px 12px 20px 24px;">
+                            <span class="code" style="font-family:'SFMono-Regular',Menlo,Consolas,'Courier New',monospace; font-size:38px; line-height:44px; font-weight:700; color:#a35529; letter-spacing:12px;">{{ .Token }}</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td align="center" style="padding-top:16px;">
+                      <p class="ink-muted" style="margin:0; font-family:'Poppins',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:12px; line-height:18px; color:#8a8380;">The code expires in an hour and can only be used once.</p>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td style="padding-top:28px;">
+                      <div class="rule" style="height:1px; line-height:1px; font-size:0; background-color:#e8e4e0;">&nbsp;</div>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td style="padding-top:20px;">
+                      <p class="ink" style="margin:0; font-family:'Poppins',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:13px; line-height:21px; color:#5c5450;">If you didn’t ask to sign in, you can ignore this email — nothing happens until the code is entered, and it stops working within the hour.</p>
+                    </td>
+                  </tr>
+
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td align="center" style="padding-top:24px;">
+                <p class="ink-muted" style="margin:0; font-family:'Poppins',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:12px; line-height:20px; color:#8a8380;">
+                  <a href="https://d3psawhnc7yxi1.cloudfront.net/terms" class="ink-muted" style="color:#8a8380; text-decoration:underline;">Terms of Use</a>
+                  &nbsp;·&nbsp;
+                  <a href="https://d3psawhnc7yxi1.cloudfront.net/privacy" class="ink-muted" style="color:#8a8380; text-decoration:underline;">Privacy Policy</a>
+                </p>
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

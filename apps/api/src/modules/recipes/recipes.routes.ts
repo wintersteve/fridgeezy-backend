@@ -59,6 +59,22 @@ router.post("/:recipeId/compose", RecipesController.compose);
 router.post("/:recipeId/chat", RecipesController.chat);
 
 /**
+ * Adapt this dish to the caller's diet by swapping the one ingredient in the
+ * way — the tap behind a near-miss card.
+ *
+ * Two segments, so it never competes with the static `/import` and `/modify`
+ * above whatever order Express registers them in.
+ *
+ * The recipe id travels in the BODY as well as the path, and that is not
+ * redundancy to tidy away: `createStreamHandler` validates the body against
+ * `AdaptRecipeRequestSchema` and the handler reads `body.id`, exactly as
+ * `modify` does. The path segment is what makes the route read like its
+ * siblings; a request whose two disagree is refused by the id the schema
+ * validated, which is the one the handler acts on.
+ */
+router.post("/:recipeId/adapt", RecipesController.adapt);
+
+/**
  * Rewrite this dish the way the caller keeps asking for it, as a variant.
  *
  * **Registered only when `TASTE_PROFILE_ENABLED` is set**, which it is not — so

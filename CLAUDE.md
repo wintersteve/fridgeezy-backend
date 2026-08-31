@@ -602,6 +602,7 @@ mount path anyway; the nesting only made every import inside it `../../../`.
 | `POST /rest/recipes/difficulty/escalate` | `modules/recipes` — **premium** |
 | `POST /rest/recipes/modify` | `modules/recipes` — **premium** |
 | `POST /rest/recipes/import` | `modules/recipes` — **premium** |
+| `POST /rest/recipes/:recipeId/adapt` | `modules/recipes` — **premium** |
 | `POST /rest/recipes/:recipeId/compose` | `modules/recipes` — **premium** |
 | `POST /rest/recipes/:recipeId/chat` | `modules/recipes` — **premium** |
 | `GET /rest/recipes/:recipeId/share` | `modules/recipes` — **open** |
@@ -617,7 +618,7 @@ mount path anyway; the nesting only made every import inside it `../../../`.
 | `GET /rest/health` | direct — **open** |
 
 **Premium** means the route additionally requires an active subscription
-(`requireEntitlement`, 402) — 13 of them, applied by mount `tier` except on
+(`requireEntitlement`, 402) — 14 of them, applied by mount `tier` except on
 `/speech`. See the entitlement section below.
 
 **Every route above requires a Supabase access token**
@@ -731,7 +732,7 @@ route inside an `account` mount. Note the asymmetry that leaves — the mount ha
 is a *declaration* the banner echoes, not a derivation from the router stack
 (Express 5 does not expose a mounted router's path, which is why `MOUNTS` exists
 at all), exactly as `isPublic` already works. The per-route half is still a true
-derivation. **After changing any tier, read the banner**: 13 premium routes,
+derivation. **After changing any tier, read the banner**: 14 premium routes,
 3 open, and `/speech/synthesize` plus the four `/prompts` lines unmarked.
 
 The marker is a property rather than the function's name because esbuild may
@@ -1652,6 +1653,107 @@ imported recipe and tries to reach it as a guest AND as a second signed-in
 user, then asserts the opposite half too: that a catalogue-only menu genuinely
 does reach both. Run it after touching `save_menu`, either policy, or
 `menu_is_visible`.
+
+### The near-miss tier: one ingredient away, and why it is narrow
+
+`find_near_miss_recipes` (`20260830000001`) returns catalogue recipes that fail
+a dietary filter by **exactly one swappable ingredient**, with that ingredient
+named. It is the rung between "the catalogue answered" and "pay a model to
+write something new", and it feeds the search screen's *Close, with one change*
+section. **It adapts nothing** — the card names the obstacle and opens the
+recipe as it stands.
+
+**The distance is not the judgement, and that is the whole problem.** Bak Kut
+Teh is one ingredient from vegan and the ingredient is the pork ribs;
+Apfelpfannkuchen is one from dairy-free and the ingredient is the butter. The
+query cannot tell them apart. Measured over the live catalogue on 2026-08-30:
+of the 161 (dish, diet) pairs at distance one, **96 are gutted dishes**, and
+every one of those 96 has a blocker carrying `meat`, `fish`, `shellfish`,
+`slaughter_derived`, `gluten`, `grain`, `legume` or `soy`.
+
+So four structural gates, in SQL, and `check-near-miss` holds one fixture
+against each:
+
+1. the blocker's properties are a subset of `near_miss_swappable_properties`
+   (dairy, egg, honey, sesame, nuts, refined sugar — things a dish is *cooked
+   in*, not *built from*);
+2. the blocker is not named in the dish's own title, folded, across both name
+   columns (this is what kills Beurre Blanc → "French Butter Sauce",
+   Cheeseburger → American Cheese, Yakgwa → "Honey Cookie");
+3. the blocker is not `component_kind = 'dish'`;
+4. the blocker is classified — an unclassified ingredient still counts toward
+   the DISTANCE, but may never be the one we name, because naming it claims a
+   swap nobody has checked.
+
+That takes 161 pairs to 37, and **gluten-free and soy-free correctly produce
+nothing at all**: soy sauce is classified `{gluten, soy, grain}` and is
+therefore refused on the same rule that refuses pasta. Losing soy sauce →
+tamari is the deliberate price — one Vegetarian Bak Kut Teh discredits every
+correct row beside it. **Widening it is an INSERT into that table plus a
+re-measurement**, which is why the list is a table and not an array literal.
+
+One known survivor: **Margherita Pizza / Mozzarella**. Nothing structural says
+mozzarella defines a Margherita. It is kept knowingly and is safe only because
+nothing is adapted — it stops being safe the moment something offers to *write*
+a dairy-free Margherita.
+
+```bash
+npx nx run @fridgeezy/database:check-near-miss
+```
+
+Unlike its two siblings above it is a SEMANTICS check, not a visibility one:
+it builds ingredients and recipes covering each gate and asserts what the
+function returns. Two things it pins that are easy to lose — a reader with no
+dietary restriction gets **nothing** (the client hook disables the query
+outright), and a dish that already satisfies the diet is never offered as one
+change away from itself. Its fixture ingredients and recipes carry
+**different** name prefixes on purpose: share one and gate 2 matches every
+pair, every positive case is refused, and every expect-absent assertion passes
+for the wrong reason. That happened.
+
+### The adaptation gate: the tap the near-miss card leads to
+
+`POST /rest/recipes/:recipeId/adapt` answers the question the rail deliberately
+does not — whether the dish SURVIVES the swap — and writes the result as a
+variant of its own family. `runAdaptationGate` proposes a substitute
+(`gpt-4.1-mini`, strict JSON) and then puts the dish WITH THE SWAP APPLIED
+through `classifySuggestionAuthenticity`, whose `adaptation` status already
+means "a real dish with a defining ingredient removed or swapped".
+
+**It calls the raw classifier, never `verifySuggestionAuthenticity`.** That
+wrapper fails OPEN — right on the generation path, where a fail-open costs one
+questionable row that later layers still inspect, and exactly backwards here,
+where it would hand somebody a dairy-free Beurre Blanc because a request timed
+out. Every throw is a refusal.
+
+**Fail-closed is structural, not a promise.** The only path that writes a row
+and emits an `id` is the one that has already confirmed, in code and by
+canonical id, that the blocker is absent from the GENERATED ingredient list.
+Gate refusal, provider outage, generation failure, persist error and a rewrite
+that quietly kept the ingredient all leave through `saved: false` with no id —
+and an id is the only thing a client can open, so no client can render an
+unadapted recipe as adapted. The prompt is told to replace the ingredient; that
+is a request, and this is the check.
+
+Refusals are FRAMES, not status codes, and only `gate_unavailable` is
+`retryable`. The other four are settled verdicts about the dish and a retry
+button over one spends money to reprint the same sentence — the distinction
+`classifyError` draws (an exhausted quota is `service`/not-retryable, a rate
+limit is `upstream`/retryable) reaching the reader.
+
+**`not_attested` is separate from `defining_ingredient` on purpose.** "A beurre
+blanc without butter is not a beurre blanc" is about the food; "we do not
+recognise this dish" is about the CATALOGUE, and is the honest answer for
+somebody's imported cookbook page, which the gate has never seen.
+
+**The gate answers confidently on poor input rather than erroring**, which is
+the trap the next person testing it will hit. Measured 2026-08-30: with
+fixture-prefixed ingredient names and no tags it REFUSED Apfelpfannkuchen and
+ALLOWED Beurre Blanc — wrong in both directions. With clean names but a thin
+four-ingredient pancake (no egg, no milk) it flipped run to run. With a
+faithful six-ingredient one it was `well_known` 3/3. Read `obscure` on a
+catalogue dish as "this row does not look like its own name", not as model
+noise. Full note on `AdaptationGateInput`.
 
 ## The shape of a chat turn
 

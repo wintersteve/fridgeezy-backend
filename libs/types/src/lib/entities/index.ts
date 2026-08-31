@@ -14,6 +14,7 @@ export * from './ingredient-merge-reviews';
 export * from './ingredients';
 export * from './menu-courses';
 export * from './menus';
+export * from './near-miss-swappable-properties';
 export * from './profile-blacklisted-ingredients';
 export * from './profile-dietary-preferences';
 export * from './profile-entitlements';

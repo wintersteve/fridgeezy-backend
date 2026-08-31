@@ -434,6 +434,7 @@ export type Database = {
           parent_id: string | null
           shelf_life: string | null
           storage_tips: string | null
+          use_count: number
         }
         Insert: {
           canonical_id: string
@@ -456,6 +457,7 @@ export type Database = {
           parent_id?: string | null
           shelf_life?: string | null
           storage_tips?: string | null
+          use_count?: number
         }
         Update: {
           canonical_id?: string
@@ -478,6 +480,7 @@ export type Database = {
           parent_id?: string | null
           shelf_life?: string | null
           storage_tips?: string | null
+          use_count?: number
         }
         Relationships: [
           {
@@ -620,6 +623,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      near_miss_swappable_properties: {
+        Row: {
+          property: Database["public"]["Enums"]["dietary_property"]
+        }
+        Insert: {
+          property: Database["public"]["Enums"]["dietary_property"]
+        }
+        Update: {
+          property?: Database["public"]["Enums"]["dietary_property"]
+        }
+        Relationships: []
       }
       profile_blacklisted_ingredients: {
         Row: {
@@ -1554,7 +1569,9 @@ export type Database = {
           base_recipe_id: string
           created_at: string
           id: string
+          instruction: string | null
           label: string
+          origin: string | null
           profile_id: string
           recipe_id: string
           updated_at: string
@@ -1563,7 +1580,9 @@ export type Database = {
           base_recipe_id: string
           created_at?: string
           id?: string
+          instruction?: string | null
           label: string
+          origin?: string | null
           profile_id: string
           recipe_id: string
           updated_at?: string
@@ -1572,7 +1591,9 @@ export type Database = {
           base_recipe_id?: string
           created_at?: string
           id?: string
+          instruction?: string | null
           label?: string
+          origin?: string | null
           profile_id?: string
           recipe_id?: string
           updated_at?: string
@@ -2027,6 +2048,10 @@ export type Database = {
       }
     }
     Functions: {
+      blocker_named_in_dish: {
+        Args: { p_blocker_text: string; p_dish_text: string }
+        Returns: boolean
+      }
       clear_recipe_family_default: {
         Args: { p_recipe_id: string }
         Returns: boolean
@@ -2047,6 +2072,32 @@ export type Database = {
         Returns: number
       }
       entitlement_is_active: { Args: { p_user_id: string }; Returns: boolean }
+      find_near_miss_recipes: {
+        Args: {
+          p_blacklist?: string[]
+          p_diets?: string[]
+          p_difficulty?: string
+          p_exclude?: string[]
+          p_ingredients?: string[]
+          p_limit?: number
+          p_tags?: string[]
+        }
+        Returns: {
+          blocked_diets: string[]
+          blocker_id: string
+          blocker_name: string
+          description: string
+          difficulty: string
+          favourite_count: number
+          id: string
+          image: string
+          ingredients: Json
+          name: string
+          short_description: string
+          tags: Json
+          total_time_minutes: number
+        }[]
+      }
       find_recipes: {
         Args: {
           blacklist?: string[]
@@ -2336,7 +2387,9 @@ export type Database = {
           base_recipe_id: string
           created_at: string
           id: string
+          instruction: string | null
           label: string
+          origin: string | null
           profile_id: string
           recipe_id: string
           updated_at: string

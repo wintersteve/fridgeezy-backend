@@ -8,6 +8,11 @@ import { findSuggestionByName } from "../../suggestions/services/find-suggestion
 import { generateSuggestionsStream } from "../../suggestions/services/generate-suggestions-stream";
 import { streamSingleSuggestion } from "../../suggestions/services/stream-single-suggestion";
 
+import {
+    qualifyingRecipeIds,
+    qualifyingSuggestionIds,
+    resolveDietaryFilter,
+} from "./dietary-filter";
 import { fetchRecipeSummary } from "./fetch-recipe-summary";
 import {
     findCatalogueRecipes,
@@ -119,7 +124,21 @@ export interface RecipeSuggestionInput {
      * can name up front.
      */
     component?: ComponentTag;
-    /** Dietary tags any generated suggestion must satisfy. */
+    /**
+     * Dietary tag NAMES ("vegan", "gluten free") the answer must satisfy —
+     * whether it is generated or retrieved.
+     *
+     * It used to bind only what was GENERATED, which made it almost inert:
+     * every stage above 3 returns a dish the catalogue already holds, and
+     * retrieval wins by design, so the dish the model would have written was
+     * vegan and the dish the reader got was Carbonara. Now resolved once (see
+     * `resolveDietaryFilter`) and applied to every stage.
+     *
+     * Names rather than tag ids because that is what the client has: it reads
+     * `profile_dietary_preferences` joined to `tags` and sends `tag.name`, and
+     * every generator prompt downstream needs the name anyway — a uuid means
+     * nothing to a model.
+     */
     dietaryRestrictions?: string[];
     /** Ingredients to never suggest (allergies/dislikes). */
     blacklist?: string[];
@@ -453,9 +472,49 @@ export async function searchRecipeSuggestions(
     // named-dish request pay for an embedding it currently skips. So the cheap,
     // decisive early-out keeps its place at the front, and the parallelism goes
     // where the seconds actually are.
-    const namedRecipe = await new RecipesRepository().findBaseRecipes(
-        [query, dish].filter((name): name is string => !!name && !isExcluded(name))
-    );
+    //
+    // The diet is resolved alongside it rather than before it: the two are
+    // independent reads and stage 1a is the one on the critical path, so making
+    // it wait for a vocabulary lookup would add latency to the one stage whose
+    // whole justification is that it is decisive and cheap.
+    const [namedRecipe, dietFilter] = await Promise.all([
+        new RecipesRepository().findBaseRecipes(
+            [query, dish].filter(
+                (name): name is string => !!name && !isExcluded(name)
+            )
+        ),
+        resolveDietaryFilter(dietaryRestrictions),
+    ]);
+
+    /**
+     * How many restrictions were ASKED for, counted off the raw argument rather
+     * than off what resolved — the same construction `find_recipes` uses for
+     * `requested_tag_count`, and for the same reason. A name that resolves to
+     * no tag has to make the filter unsatisfiable rather than being quietly
+     * ignored; for a restriction, failing closed is the only safe direction.
+     */
+    const requestedDietCount = new Set(
+        (dietaryRestrictions ?? [])
+            .map(canonicalizeName)
+            .filter((name): name is string => !!name)
+    ).size;
+
+    /**
+     * Does this catalogue row suit the reader's diet?
+     *
+     * Open when no diet was set, and a hard gate when one was — the same shape
+     * as `isRequestedDish` and `containsRequestedIngredient` above, and applied
+     * at the same three push sites. Stage 1c is deliberately absent from the
+     * list: `find_recipes` applies the diet in SQL, so a second test here would
+     * be a duplicate of a rule that only works if both copies agree.
+     *
+     * Membership is precomputed per stage rather than awaited per row, so a
+     * stage costs one round trip however many candidates it produced.
+     */
+    const suitsDiet = (
+        qualifying: Set<string> | null,
+        id: string
+    ): boolean => !dietFilter || (qualifying?.has(id) ?? false);
 
     if (!namedRecipe.success) {
         console.error(
@@ -470,10 +529,28 @@ export async function searchRecipeSuggestions(
         // stages below still surface the other.
         const summary = await fetchRecipeSummary(namedRecipe.value[0].id);
 
+        // One candidate, so this is one round trip and only when a diet is set.
+        const namedQualifies = dietFilter
+            ? await qualifyingRecipeIds(
+                  [namedRecipe.value[0].id],
+                  dietFilter,
+                  requestedDietCount
+              )
+            : null;
+
         if (
             summary &&
             !isExcluded(summary.name) &&
-            isWantedComponent(summary.tags)
+            isWantedComponent(summary.tags) &&
+            // A dish the reader NAMED is still refused when it does not suit
+            // their diet, and that is deliberate. This is a feed request, not a
+            // reference lookup: chat answers it by COOKING something, so
+            // handing back a dish they have said they cannot eat is not
+            // "showing them the recipe they asked for", it is the one outcome
+            // the restriction exists to prevent. The catalogue search screen
+            // takes the opposite side on the same question, and its own note
+            // says why — there, a name search has one row that IS the answer.
+            suitsDiet(namedQualifies, summary.id)
         ) {
             suggestions.push({
                 id: summary.id,
@@ -558,6 +635,12 @@ export async function searchRecipeSuggestions(
                 ? findCatalogueRecipes({
                       ingredientIds: [...requestedIngredientIds],
                       blacklist,
+                      // Filtered in SQL by the RPC itself, so this stage needs
+                      // no post-filter below. Empty when nothing resolved,
+                      // which is the fail-closed case and is why the guard
+                      // beneath refuses the whole stage rather than trusting an
+                      // unfiltered result.
+                      dietaryTagIds: dietFilter?.tagIds,
                       limit: maxResults,
                   })
                 : Promise.resolve([]),
@@ -575,11 +658,43 @@ export async function searchRecipeSuggestions(
             (result) => !suggestions.some((item) => item.id === result.id)
         );
 
-        // Fetch each hit's summary in parallel (independent reads) rather than
-        // one round-trip per result, then assemble in the original ranked order.
-        const summaries = await Promise.all(
-            vectorResults.map((result) => fetchRecipeSummary(result.id))
-        );
+        /**
+         * The diet, asked once for everything stages 1b and 2 turned up.
+         *
+         * Both read their tables directly rather than through `find_recipes`,
+         * so neither gets the RPC's dietary handling for free. Batching them
+         * together costs two round trips for the whole fan-out (one per table)
+         * instead of one per candidate, and it runs alongside the summary fetch
+         * rather than after it — the two are independent.
+         *
+         * `find_recipes` is what settles the semantics, not this: `derivable`
+         * diets are answered from `recipe_dietary` (i.e. from the ingredients,
+         * failing closed on an unclassified one) and the eight that have no
+         * rule from the tags the row carries. See `dietary-filter.ts`.
+         */
+        const [summaries, vectorQualifies, suggestionQualifies] =
+            await Promise.all([
+                // Fetch each hit's summary in parallel (independent reads)
+                // rather than one round-trip per result, then assemble in the
+                // original ranked order.
+                Promise.all(
+                    vectorResults.map((result) => fetchRecipeSummary(result.id))
+                ),
+                dietFilter
+                    ? qualifyingRecipeIds(
+                          vectorResults.map((result) => result.id),
+                          dietFilter,
+                          requestedDietCount
+                      )
+                    : Promise.resolve(null),
+                dietFilter && canonicalMatch
+                    ? qualifyingSuggestionIds(
+                          [canonicalMatch.id],
+                          dietFilter,
+                          requestedDietCount
+                      )
+                    : Promise.resolve(null),
+            ]);
 
         vectorResults.forEach((result, i) => {
             const recipeSummary = summaries[i];
@@ -594,7 +709,8 @@ export async function searchRecipeSuggestions(
                 !isExcluded(recipeSummary.name) &&
                 isWantedComponent(recipeSummary.tags) &&
                 isRequestedDish(recipeSummary.name, recipeSummary.nameEn) &&
-                containsRequestedIngredient(recipeSummary.ingredients)
+                containsRequestedIngredient(recipeSummary.ingredients) &&
+                suitsDiet(vectorQualifies, recipeSummary.id)
             ) {
                 suggestions.push({
                     id: recipeSummary.id,
@@ -621,7 +737,17 @@ export async function searchRecipeSuggestions(
         });
 
         // Stage 1c results, deduped against 1a/1b by id.
-        if (suggestions.length < maxResults) {
+        //
+        // No diet test in the loop — `find_recipes` applied it. The one thing
+        // that has to be checked here is that it COULD: a restriction that
+        // resolved to no tag reaches the RPC as an empty `tags` array, which
+        // reads as "no filter" rather than as "impossible", so the rows came
+        // back unfiltered. Refuse the whole stage in that case and let
+        // generation answer, where the restriction is honoured in the prompt.
+        const dietResolved =
+            !dietFilter || dietFilter.tagIds.length >= requestedDietCount;
+
+        if (suggestions.length < maxResults && dietResolved) {
             for (const row of catalogueRows) {
                 if (suggestions.some((item) => item.id === row.id)) continue;
                 if (isExcluded(row.name)) continue;
@@ -683,7 +809,12 @@ export async function searchRecipeSuggestions(
         if (
             existingSuggestion &&
             !alreadyListed &&
-            suggestions.length < maxResults
+            suggestions.length < maxResults &&
+            // A suggestion is a dish nobody has paid to generate a recipe for
+            // yet, so it is checked against `recipe_suggestion_dietary` rather
+            // than `recipe_dietary` — the same rule over the other half of the
+            // catalogue, which is exactly how `find_recipes` treats the pair.
+            suitsDiet(suggestionQualifies, existingSuggestion.id)
         ) {
             suggestions.push({
                 id: existingSuggestion.id,

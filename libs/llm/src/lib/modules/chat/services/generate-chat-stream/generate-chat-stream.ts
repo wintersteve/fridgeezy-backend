@@ -1,5 +1,48 @@
+import { chatMessageText } from "@fridgeezy/schemas";
+import type { ChatContentPart, ChatMessage } from "@fridgeezy/schemas";
+
 import { resolveProvider } from "../../../provider";
 import type { ChatStreamEvent, GenerateChatStreamParams } from "../../types";
+
+/**
+ * A message's content as OpenAI wants it: a plain string, or the content-part
+ * array a multimodal turn needs.
+ *
+ * The image goes FIRST and the words after it, matching the Anthropic branch —
+ * a question about a picture reads better to both models with the picture
+ * already in view, and having the two providers disagree about ordering is a
+ * difference that would only ever show up as a quality drift nobody could
+ * attribute.
+ *
+ * Base64 is wrapped as a data URI because that is OpenAI's only base64 form; the
+ * media type it names is the same one Anthropic takes as its own field.
+ * `detail: "high"` has no Anthropic counterpart and is set here alone —
+ * deliberately, since the two providers already decide resolution differently.
+ */
+const toOpenAiContent = (content: ChatMessage["content"]) => {
+    if (!Array.isArray(content)) return content ?? "";
+
+    const images = content.flatMap((part: ChatContentPart) =>
+        part.type === "image"
+            ? [
+                  {
+                      type: "image_url" as const,
+                      image_url: {
+                          url: `data:${part.mimeType};base64,${part.data.replace(/^data:[^;]+;base64,/, "")}`,
+                          detail: "high" as const,
+                      },
+                  },
+              ]
+            : []
+    );
+
+    const text = chatMessageText(content);
+
+    return [
+        ...images,
+        ...(text ? [{ type: "text" as const, text }] : []),
+    ] as never;
+};
 
 /**
  * Multi-turn chat with tool calling, from whichever provider is active, as one
@@ -51,11 +94,15 @@ export async function* generateChatStream(
     try {
         // OpenAI takes the conversation almost as-is; only the tool-call and
         // tool-result turns need their optional fields made concrete.
+        //
+        // A `tool` turn's content is a JSON result and a tool-call turn's is
+        // prose, so both are flattened to text — only a user turn is ever
+        // multimodal, and only the last one of those.
         const messages = params.messages.map((message) => {
             if (message.role === "tool") {
                 return {
                     role: "tool" as const,
-                    content: message.content ?? "",
+                    content: chatMessageText(message.content),
                     tool_call_id: message.tool_call_id ?? "",
                 };
             }
@@ -63,7 +110,7 @@ export async function* generateChatStream(
             if (message.tool_calls?.length) {
                 return {
                     role: "assistant" as const,
-                    content: message.content,
+                    content: chatMessageText(message.content) || null,
                     tool_calls: message.tool_calls.map((call) => ({
                         id: call.id,
                         type: "function" as const,
@@ -77,7 +124,7 @@ export async function* generateChatStream(
 
             return {
                 role: message.role as "system" | "user" | "assistant",
-                content: message.content ?? "",
+                content: toOpenAiContent(message.content),
             };
         });
 

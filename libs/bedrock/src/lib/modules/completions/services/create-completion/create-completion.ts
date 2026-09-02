@@ -1,10 +1,9 @@
-import { toFinishReason } from "../../../chat/services/translate";
+import {
+    toAnthropicImageBlock,
+    toFinishReason,
+} from "../../../chat/services/translate";
 import { bedrock } from "../../../client";
-import type {
-    BedrockCompletionParams,
-    CompletionResult,
-    ImageInput,
-} from "../../types";
+import type { BedrockCompletionParams, CompletionResult } from "../../types";
 import { buildParams, type MessagesCreateParams } from "../request";
 
 /**
@@ -17,35 +16,6 @@ export interface AnthropicContentBlock {
     text?: string;
 }
 
-/**
- * Wrap an image the way Anthropic expects.
- *
- * OpenAI takes one `image_url` string and infers the media type from the data
- * URI; Anthropic wants a `source` object naming the type separately. A base64
- * payload arriving *with* a `data:` prefix is stripped rather than rejected —
- * callers reasonably have it either way, and sending the prefix inside the
- * base64 field fails server-side with an opaque error.
- *
- * **No `detail` equivalent.** OpenAI's `detail: "high"` has no counterpart:
- * Anthropic decides resolution itself, and Sonnet 4.6 caps the long edge at
- * 1568px where Sonnet 5 allows 2576px. Extraction accuracy on detailed images
- * is therefore a per-model question, not something this translation preserves —
- * re-measure it rather than assuming it carries over.
- */
-export function toAnthropicImageBlock(image: ImageInput) {
-    if (image.kind === "url") {
-        return { type: "image" as const, source: { type: "url" as const, url: image.data } };
-    }
-
-    return {
-        type: "image" as const,
-        source: {
-            type: "base64" as const,
-            media_type: image.mimeType ?? "image/jpeg",
-            data: image.data.replace(/^data:[^;]+;base64,/, ""),
-        },
-    };
-}
 
 /**
  * Concatenate the visible text of a completed message.

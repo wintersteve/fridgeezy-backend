@@ -1,6 +1,7 @@
 import { generateEmbedding } from "@fridgeezy/openai";
 import {
     ChatRequestSchema,
+    chatMessageText,
     type ChatMessage,
     type ToolCall,
 } from "@fridgeezy/schemas";
@@ -19,10 +20,13 @@ import type {
     SpeculativeEmbedding,
 } from "../../../recipes/services/search-recipe-suggestions";
 import {
+    attachImageToLastUserMessage,
     buildIntentLine,
     buildUnsatisfiedLine,
     convertToolsToOpenAiTools,
     createChatCompletion,
+    describeAttachment,
+    emitAttachment,
     endSseStream,
     handleToolCalls,
     initSseStream,
@@ -260,9 +264,10 @@ export async function processChat(req: Request, res: Response): Promise<void> {
         // array would rewrite the entire conversation into history on each
         // request. Fire-and-forget — it never delays the first token and cannot
         // fail this request.
-        const latestPrompt = request.messages
-            .filter((message) => message.role === "user")
-            .at(-1)?.content;
+        const latestPrompt = chatMessageText(
+            request.messages.filter((message) => message.role === "user").at(-1)
+                ?.content
+        );
 
         if (latestPrompt) {
             recordPrompt(req, "chat", latestPrompt, {
@@ -310,10 +315,25 @@ export async function processChat(req: Request, res: Response): Promise<void> {
 
         const openaiTools = convertToolsToOpenAiTools(tools);
 
+        /**
+         * The caption for the attached photograph — see `describeAttachment`.
+         * Started here and written to the stream just before `done`, so it costs
+         * the turn no latency it would otherwise not have spent.
+         */
+        const describing = request.attachment
+            ? describeAttachment(request.attachment)
+            : null;
+
         // Add system message if not present
         let messages = trimHistory([...request.messages]);
         if (messages.length === 0 || messages[0].role !== "system") {
             messages = [{ role: "system", content: SYSTEM_PROMPT }, ...messages];
+        }
+
+        // The photograph goes on the last user turn, and only for this request
+        // — it is never part of the transcript the client re-sends.
+        if (request.attachment) {
+            messages = attachImageToLastUserMessage(messages, request.attachment);
         }
 
         // Buffers for whatever the search returns. Either shape can land here:
@@ -354,7 +374,11 @@ export async function processChat(req: Request, res: Response): Promise<void> {
 
         // --- 1. Route the request -------------------------------------------
 
-        const cacheKey = cacheKeyFor(request.messages);
+        // A turn carrying a photograph is never cached or served from cache: the
+        // key is built from the message TEXT, and "what can I make with this?"
+        // routes on the picture rather than on the sentence. Two different
+        // photographs under one sentence would otherwise share a decision.
+        const cacheKey = request.attachment ? null : cacheKeyFor(request.messages);
         const cached = cacheKey ? readRoutingCache(cacheKey) : null;
 
         let currentContent = "";
@@ -432,6 +456,8 @@ export async function processChat(req: Request, res: Response): Promise<void> {
 
         if (!currentToolCalls?.length) {
             timer.label("outcome", "no_tool");
+            // Before `done`, never after — see `emitAttachment`.
+            await emitAttachment(res, describing);
             writeSseEvent(res, {
                 type: "done",
                 data: { finish_reason: finishReason },
@@ -615,7 +641,7 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                     // assertion about our own tool, not a validated parse.
                     // Fields are read defensively below.
                     const parsedResult = JSON.parse(
-                        toolResult.content
+                        chatMessageText(toolResult.content)
                     ) as Partial<RecipeSuggestionResult>;
 
                     if (
@@ -908,6 +934,9 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                     : "empty"
         );
         timer.count("suggestions", resultSuggestions.length);
+
+        // Before `done`, never after — see `emitAttachment`.
+        await emitAttachment(res, describing);
 
         writeSseEvent(res, { type: "done", data: { finish_reason: "stop" } });
 

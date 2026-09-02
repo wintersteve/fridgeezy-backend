@@ -1,6 +1,18 @@
 import { z } from "zod/v4";
 
 /**
+ * The ceiling on one attached photo, in base64 characters — roughly 3 MB of
+ * image.
+ *
+ * The real limit is the Lambda Function URL's 6 MB *request* cap, which this
+ * shares with the whole transcript. Rejecting at 4 M characters leaves the
+ * conversation room and, more importantly, turns "the send silently failed" into
+ * a 400 that names the problem. The client compresses well below this
+ * (`quality: 0.5`, long edge resized) and should never reach it.
+ */
+const MAX_ATTACHMENT_BASE64 = 4_000_000;
+
+/**
  * Schema for tool call functions
  */
 export const ToolCallFunctionSchema = z.object({
@@ -17,16 +29,68 @@ export const ToolCallSchema = z.object({
     function: ToolCallFunctionSchema,
 });
 
+/** The image formats both providers accept. */
+export const ChatImageMimeSchema = z.enum([
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+]);
+
+/**
+ * One piece of a multimodal message.
+ *
+ * **Assembled server-side, not sent by the client.** A turn carrying a photo
+ * arrives with `attachment` at the top level of the request and an ordinary
+ * string `content`; the route moves the image onto the last user message. That
+ * is deliberate — see {@link ChatAttachmentSchema} — and it is why every client
+ * shipping today still parses against this schema unchanged.
+ */
+export const ChatContentPartSchema = z.discriminatedUnion("type", [
+    z.object({ type: z.literal("text"), text: z.string() }),
+    z.object({
+        type: z.literal("image"),
+        /** Raw base64, no `data:` prefix. */
+        data: z.string().min(1),
+        mimeType: ChatImageMimeSchema.default("image/jpeg"),
+    }),
+]);
+
+export type ChatContentPart = z.infer<typeof ChatContentPartSchema>;
+
 /**
  * Schema for individual chat messages
  */
 export const ChatMessageSchema = z.object({
     role: z.enum(["system", "user", "assistant", "tool"]),
-    content: z.string().nullable(),
+    content: z
+        .union([z.string(), z.array(ChatContentPartSchema)])
+        .nullable(),
     name: z.string().optional(),
     tool_call_id: z.string().optional(),
     tool_calls: z.array(ToolCallSchema).optional(),
 });
+
+/**
+ * The visible words of a message, whatever shape its content is in.
+ *
+ * Every existing reader of `content` assumed a string — the prompt recorder, the
+ * routing cache key, the speculative embedding — and each of them wants the text
+ * and nothing else. Widening the type without this would have turned three
+ * silent `string` reads into `[object Object]` written to the history table.
+ */
+export const chatMessageText = (
+    content: string | ChatContentPart[] | null | undefined
+): string => {
+    if (!content) return "";
+    if (typeof content === "string") return content;
+
+    return content
+        .filter((part) => part.type === "text")
+        .map((part) => (part.type === "text" ? part.text : ""))
+        .join("\n")
+        .trim();
+};
 
 /**
  * Schema for chat request
@@ -85,8 +149,42 @@ export const ChatRequestSchema = z.object({
      * does not send it, and its prompts are worth keeping anyway.
      */
     conversationId: z.uuid().optional(),
+    /**
+     * A photograph the reader attached to THIS turn.
+     *
+     * ## Why it is a top-level field and not part of the message
+     *
+     * The obvious shape — an image inside `messages[].content` — puts the
+     * payload in the array the client re-sends on every turn, and that array is
+     * three things at once on the app side: the request body, the SSE
+     * `dependencies`, and (on the chat tab) what gets persisted to disk. A
+     * conversation would re-upload every earlier photo on every later turn, the
+     * client's `JSON.stringify(dependencies)` would run over megabytes of base64
+     * on every render of a streaming reply, and the fourth attachment in a
+     * thread would simply exceed the Function URL's 6 MB request limit.
+     *
+     * At the top level all three problems are gone by construction: **one image
+     * per request, maximum, and never in the history.** The route moves it onto
+     * the last user message just before the provider call, and the client keeps
+     * the model's own description of it for the turns that follow — see the
+     * `attachment` SSE frame.
+     *
+     * Applies to the last USER message. A request whose messages end with an
+     * assistant turn carries no attachment anywhere the model would see it, so
+     * the route drops it rather than guessing.
+     */
+    attachment: z
+        .object({
+            /** Raw base64, no `data:` prefix. */
+            data: z.string().min(1).max(MAX_ATTACHMENT_BASE64),
+            mimeType: ChatImageMimeSchema.default("image/jpeg"),
+        })
+        .optional(),
 });
 
 // Export types
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+export type ChatAttachment = NonNullable<
+    z.infer<typeof ChatRequestSchema>["attachment"]
+>;
 export type ToolCall = z.infer<typeof ToolCallSchema>;

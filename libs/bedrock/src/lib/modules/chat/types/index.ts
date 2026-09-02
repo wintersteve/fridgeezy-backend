@@ -44,7 +44,14 @@ export interface AnthropicTool {
 export type AnthropicContentBlockParam =
     | { type: "text"; text: string }
     | { type: "tool_use"; id: string; name: string; input: unknown }
-    | { type: "tool_result"; tool_use_id: string; content: string };
+    | { type: "tool_result"; tool_use_id: string; content: string }
+    /** A photograph on a user turn — see `toAnthropicImageBlock`. */
+    | {
+          type: "image";
+          source:
+              | { type: "url"; url: string }
+              | { type: "base64"; media_type: string; data: string };
+      };
 
 export interface AnthropicMessage {
     role: "user" | "assistant";

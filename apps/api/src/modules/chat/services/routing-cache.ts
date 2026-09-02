@@ -1,4 +1,5 @@
-import type { ToolCall } from "@fridgeezy/schemas";
+import { chatMessageText } from "@fridgeezy/schemas";
+import type { ChatMessage, ToolCall } from "@fridgeezy/schemas";
 import { canonicalizeName } from "@fridgeezy/toolkit";
 
 /**
@@ -51,7 +52,12 @@ const entries = new Map<string, CacheEntry>();
 
 export interface RoutableMessage {
     role: string;
-    content: string | null;
+    /**
+     * Widened with `ChatMessage.content` — a routable turn is always plain text
+     * (a turn carrying a photograph is not cached at all, see `process-chat`),
+     * but the type it is fed from no longer says so.
+     */
+    content: ChatMessage["content"];
 }
 
 /**
@@ -70,7 +76,7 @@ export function cacheKeyFor(messages: RoutableMessage[]): string | null {
     const [only] = conversational;
     if (only.role !== "user") return null;
 
-    const key = canonicalizeName(only.content ?? "");
+    const key = canonicalizeName(chatMessageText(only.content));
 
     return key || null;
 }

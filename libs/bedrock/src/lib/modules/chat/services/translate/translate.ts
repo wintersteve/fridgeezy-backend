@@ -1,13 +1,49 @@
-import type { ChatMessage, ToolCall } from "@fridgeezy/schemas";
+import { chatMessageText } from "@fridgeezy/schemas";
+import type { ChatContentPart, ChatMessage, ToolCall } from "@fridgeezy/schemas";
+
+import type { ImageInput } from "../../../completions/types";
 
 import type {
     AnthropicChatEvent,
+    AnthropicContentBlockParam,
     AnthropicMessage,
     AnthropicTool,
     ChatStreamEvent,
     OpenAiShapedTool,
     TranslatedConversation,
 } from "../../types";
+
+/**
+ * A multimodal message's parts as Anthropic content blocks.
+ *
+ * Images first, then the text, regardless of the order the parts arrived in —
+ * Anthropic's own guidance for a question about a picture, and the only case
+ * this app produces. Empty text parts are dropped rather than sent: an empty
+ * `text` block is rejected outright, and an attachment with no sentence beside
+ * it is a shape the client deliberately allows.
+ */
+function toAnthropicBlocks(
+    parts: ChatContentPart[]
+): AnthropicContentBlockParam[] {
+    const images = parts.flatMap((part) =>
+        part.type === "image"
+            ? [
+                  toAnthropicImageBlock({
+                      kind: "base64",
+                      data: part.data,
+                      mimeType: part.mimeType,
+                  }),
+              ]
+            : []
+    );
+
+    const text = parts
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("\n")
+        .trim();
+
+    return [...images, ...(text ? [{ type: "text" as const, text }] : [])];
+}
 
 /**
  * Anthropic takes the system prompt as a **top-level field**, not as a message
@@ -25,7 +61,8 @@ export function toAnthropicMessages(
 
     for (const message of messages) {
         if (message.role === "system") {
-            if (message.content) system.push(message.content);
+            const text = chatMessageText(message.content);
+            if (text) system.push(text);
             continue;
         }
 
@@ -39,7 +76,7 @@ export function toAnthropicMessages(
             const block = {
                 type: "tool_result" as const,
                 tool_use_id: message.tool_call_id ?? "",
-                content: message.content ?? "",
+                content: chatMessageText(message.content),
             };
 
             if (
@@ -63,9 +100,9 @@ export function toAnthropicMessages(
             // than throwing mid-conversation.
             const blocks: AnthropicMessage["content"] = [];
 
-            if (message.content) {
-                blocks.push({ type: "text", text: message.content });
-            }
+            const text = chatMessageText(message.content);
+
+            if (text) blocks.push({ type: "text", text });
 
             for (const call of message.tool_calls) {
                 let input: unknown = {};
@@ -90,6 +127,22 @@ export function toAnthropicMessages(
 
         // Anthropic rejects empty-string content, which OpenAI tolerates.
         if (!message.content) continue;
+
+        // A multimodal turn: the route put an image part on the last user
+        // message. Anthropic wants the picture BEFORE the words — its own
+        // guidance, and it measurably changes what the model attends to when
+        // the text is a question about the picture, which here it always is.
+        if (Array.isArray(message.content)) {
+            const blocks = toAnthropicBlocks(message.content);
+
+            if (blocks.length === 0) continue;
+
+            out.push({
+                role: message.role === "assistant" ? "assistant" : "user",
+                content: blocks,
+            });
+            continue;
+        }
 
         out.push({
             role: message.role === "assistant" ? "assistant" : "user",
@@ -207,4 +260,34 @@ export async function* toChatStreamEvents(
     }
 
     yield { type: "done", finish_reason: finishReason };
+}
+
+/**
+ * Wrap an image the way Anthropic expects.
+ *
+ * OpenAI takes one `image_url` string and infers the media type from the data
+ * URI; Anthropic wants a `source` object naming the type separately. A base64
+ * payload arriving *with* a `data:` prefix is stripped rather than rejected —
+ * callers reasonably have it either way, and sending the prefix inside the
+ * base64 field fails server-side with an opaque error.
+ *
+ * **No `detail` equivalent.** OpenAI's `detail: "high"` has no counterpart:
+ * Anthropic decides resolution itself, and Sonnet 4.6 caps the long edge at
+ * 1568px where Sonnet 5 allows 2576px. Extraction accuracy on detailed images
+ * is therefore a per-model question, not something this translation preserves —
+ * re-measure it rather than assuming it carries over.
+ */
+export function toAnthropicImageBlock(image: ImageInput) {
+    if (image.kind === "url") {
+        return { type: "image" as const, source: { type: "url" as const, url: image.data } };
+    }
+
+    return {
+        type: "image" as const,
+        source: {
+            type: "base64" as const,
+            media_type: image.mimeType ?? "image/jpeg",
+            data: image.data.replace(/^data:[^;]+;base64,/, ""),
+        },
+    };
 }

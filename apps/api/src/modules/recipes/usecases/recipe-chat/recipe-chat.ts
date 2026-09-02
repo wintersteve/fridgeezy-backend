@@ -1,4 +1,8 @@
-import { ChatRequestSchema, GenerateRecipeResponseDto } from "@fridgeezy/schemas";
+import {
+    ChatRequestSchema,
+    GenerateRecipeResponseDto,
+    chatMessageText,
+} from "@fridgeezy/schemas";
 import {
     logRequestAnomaly,
     logRequestError,
@@ -8,7 +12,10 @@ import { canonicalizeName } from "@fridgeezy/toolkit";
 import type { Request, Response } from "express";
 
 import {
+    attachImageToLastUserMessage,
     createChatCompletion,
+    describeAttachment,
+    emitAttachment,
     endSseStream,
     initSseStream,
     parseJsonBody,
@@ -125,6 +132,11 @@ export const buildRecipeChatPrompt = (
         "",
         "SUBSTITUTION QUESTIONS ARE NOT REQUESTS:",
         "'what can I use instead of buttermilk?', 'is there a substitute for saffron?', 'can I use margarine?' are QUESTIONS. Answer them in prose with the best alternatives and what they cost in flavour or texture. Only a request to actually REWRITE the recipe around a swap ('swap the cream for coconut milk', 'make it with margarine instead') is a MODIFY.",
+        "",
+        "PHOTOGRAPHS:",
+        "The user may attach a photograph — a product they already own, the pan mid-cook, the finished dish, a piece of equipment. Read it and answer about what is actually in it. Name what you see specifically: brands, printed weights, and any ingredient list you can read off a label.",
+        "The rules above are unchanged by a photograph. A picture with 'can I use this instead?' is still a MODIFY; a picture with 'is this done?' is still an ordinary question.",
+        "**If you output a MODIFY or NEWDISH line for a request about a photograph, the line is all that survives — the step that writes the new recipe never sees the picture.** So put everything it needs into the instruction: name the product and what it replaces ('MODIFY: use shop-bought Old Bay seasoning instead of making the spice blend, and cut the added salt'), never 'MODIFY: use the thing in the photo'.",
         "",
         "For ANY other message — questions about the existing recipe, tips, techniques, storage, pairings, whether something is possible — answer normally and NEVER output NEWDISH, MODIFY or DIFFICULTY.",
         "",
@@ -400,9 +412,10 @@ export async function recipeChat(req: Request, res: Response): Promise<void> {
         // on every turn, so recording the array would rewrite the entire
         // conversation into history on each request. Cook-mode questions land
         // here too — same endpoint, same surface, deliberately not split out.
-        const latestPrompt = request.messages
-            .filter((message) => message.role === "user")
-            .at(-1)?.content;
+        const latestPrompt = chatMessageText(
+            request.messages.filter((message) => message.role === "user").at(-1)
+                ?.content
+        );
 
         if (latestPrompt) {
             recordPrompt(req, "recipe_chat", latestPrompt, {
@@ -411,14 +424,32 @@ export async function recipeChat(req: Request, res: Response): Promise<void> {
             });
         }
 
+        /**
+         * The caption for the attached photograph, started now and written to
+         * the stream at the end of the turn.
+         *
+         * Started here rather than awaited here: it is a second model call, and
+         * nothing about the reply depends on it — it is what the CLIENT keeps in
+         * place of the image once this turn is over. Making the first token wait
+         * on it would charge every attached turn a full round trip for a
+         * sentence nobody reads until later.
+         */
+        const describing = request.attachment
+            ? describeAttachment(request.attachment)
+            : null;
+
         // Own the system message — drop any the client sent and prepend ours.
-        const messages = [
+        const baseMessages = [
             {
                 role: "system" as const,
                 content: buildRecipeChatPrompt(recipe, request.focusedStep),
             },
             ...request.messages.filter((message) => message.role !== "system"),
         ];
+
+        const messages = request.attachment
+            ? attachImageToLastUserMessage(baseMessages, request.attachment)
+            : baseMessages;
 
         const stream = createChatCompletion(messages, [], {
             stream: request.stream,
@@ -510,6 +541,9 @@ export async function recipeChat(req: Request, res: Response): Promise<void> {
                     });
                     buffer = "";
                 }
+
+                // Before `done`, never after — see `emitAttachment`.
+                await emitAttachment(res, describing);
 
                 writeSseEvent(res, {
                     type: "done",

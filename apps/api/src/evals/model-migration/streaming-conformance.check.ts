@@ -12,6 +12,7 @@ import {
 import {
     GenerateSuggestionResponseSchema,
     HeaderSchema,
+    chatMessageText,
     IngredientSchema,
     InstructionSchema,
     NutritionSchema,
@@ -827,12 +828,93 @@ function checkImageTranslation(): void {
     );
 }
 
+/**
+ * A chat turn carrying a photograph, translated for Anthropic.
+ *
+ * The image never arrives inside `messages` from the client — the route puts it
+ * on the last user turn from `ChatRequestSchema.attachment` — so this is the
+ * shape `attachImageToLastUserMessage` produces, checked against what Anthropic
+ * accepts. The failure it guards is not an exception: a text block emitted with
+ * an empty string, or the words placed before the picture, are both accepted by
+ * the API and only show up as answers that are subtly worse.
+ */
+function checkMultimodalTranslation(): void {
+    console.log("\nVision — a chat turn carrying a photograph:");
+
+    const { messages } = toAnthropicMessages([
+        { role: "system", content: "be helpful" },
+        { role: "user", content: "what is this?" },
+        { role: "assistant", content: "a jar" },
+        {
+            role: "user",
+            content: [
+                { type: "image", data: "AAAB", mimeType: "image/png" },
+                { type: "text", text: "use this instead" },
+            ],
+        },
+    ]);
+
+    const last = messages[messages.length - 1];
+    const blocks = Array.isArray(last.content) ? last.content : [];
+
+    check(
+        `${"image turn".padEnd(17)} becomes content blocks`,
+        last.role === "user" && blocks.length === 2,
+        JSON.stringify(last)
+    );
+
+    check(
+        `${"picture first".padEnd(17)} then the words`,
+        blocks[0]?.type === "image" && blocks[1]?.type === "text",
+        blocks.map((block) => block.type).join(", ")
+    );
+
+    check(
+        `${"earlier turns".padEnd(17)} stay plain strings`,
+        typeof messages[0]?.content === "string",
+        JSON.stringify(messages[0])
+    );
+
+    // The composer lets an attachment be sent with nothing typed, so this is a
+    // real shape rather than a defensive one. Anthropic rejects an empty text
+    // block outright.
+    const { messages: silent } = toAnthropicMessages([
+        {
+            role: "user",
+            content: [{ type: "image", data: "AAAB", mimeType: "image/jpeg" }],
+        },
+    ]);
+
+    const silentBlocks = Array.isArray(silent[0]?.content)
+        ? silent[0].content
+        : [];
+
+    check(
+        `${"no sentence".padEnd(17)} sends the image alone`,
+        silentBlocks.length === 1 && silentBlocks[0]?.type === "image",
+        JSON.stringify(silent[0])
+    );
+
+    // Every reader of `content` predates the widening and wanted the words.
+    check(
+        `${"chatMessageText".padEnd(17)} reads through parts`,
+        chatMessageText([
+            { type: "image", data: "AAAB", mimeType: "image/jpeg" },
+            { type: "text", text: "use this instead" },
+        ]) === "use this instead" &&
+            chatMessageText("plain") === "plain" &&
+            chatMessageText(null) === "",
+        "the prompt recorder and the routing cache key both read this"
+    );
+}
+
 async function main() {
     console.log(
         "Phase 1 streaming-shape conformance — offline, deterministic, no spend\n" +
             "=".repeat(72)
     );
 
+    checkMultimodalTranslation();
     await checkThinkingFiltered();
     await checkJsonlParity(
         "Suggestions",

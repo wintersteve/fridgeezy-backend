@@ -238,6 +238,13 @@
                     "cwd": "apps/database"
                 }
             },
+            "check-pantry-ranking": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/check-pantry-ranking.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "check-menu-visibility": {
                 "executor": "nx:run-commands",
                 "options": {

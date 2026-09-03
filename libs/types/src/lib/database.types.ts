@@ -34,6 +34,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_quota_limits: {
+        Row: {
+          bucket: Database["public"]["Enums"]["ai_quota_bucket"]
+          first_period: number
+          per_period: number
+          tier: string
+        }
+        Insert: {
+          bucket: Database["public"]["Enums"]["ai_quota_bucket"]
+          first_period: number
+          per_period: number
+          tier: string
+        }
+        Update: {
+          bucket?: Database["public"]["Enums"]["ai_quota_bucket"]
+          first_period?: number
+          per_period?: number
+          tier?: string
+        }
+        Relationships: []
+      }
+      ai_usage_events: {
+        Row: {
+          bucket: Database["public"]["Enums"]["ai_quota_bucket"]
+          created_at: string
+          id: string
+          route: string
+          user_id: string
+        }
+        Insert: {
+          bucket: Database["public"]["Enums"]["ai_quota_bucket"]
+          created_at?: string
+          id?: string
+          route: string
+          user_id: string
+        }
+        Update: {
+          bucket?: Database["public"]["Enums"]["ai_quota_bucket"]
+          created_at?: string
+          id?: string
+          route?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           canonical_id: string
@@ -633,6 +678,18 @@ export type Database = {
         }
         Update: {
           property?: Database["public"]["Enums"]["dietary_property"]
+        }
+        Relationships: []
+      }
+      pantry_staples: {
+        Row: {
+          canonical_id: string
+        }
+        Insert: {
+          canonical_id: string
+        }
+        Update: {
+          canonical_id?: string
         }
         Relationships: []
       }
@@ -2048,6 +2105,32 @@ export type Database = {
       }
     }
     Functions: {
+      ai_quota_period_start: {
+        Args: { p_anchor: string; p_now?: string }
+        Returns: string
+      }
+      ai_quota_status: {
+        Args: never
+        Returns: {
+          allowance: number
+          bucket: Database["public"]["Enums"]["ai_quota_bucket"]
+          period_end: string
+          period_start: string
+          tier: string
+          used: number
+        }[]
+      }
+      ai_quota_status_for: {
+        Args: { p_user_id: string }
+        Returns: {
+          allowance: number
+          bucket: Database["public"]["Enums"]["ai_quota_bucket"]
+          period_end: string
+          period_start: string
+          tier: string
+          used: number
+        }[]
+      }
       blocker_named_in_dish: {
         Args: { p_blocker_text: string; p_dish_text: string }
         Returns: boolean
@@ -2071,6 +2154,7 @@ export type Database = {
         Args: { difficulty: string; pref: string }
         Returns: number
       }
+      display_name_from_identity: { Args: { meta: Json }; Returns: string }
       entitlement_is_active: { Args: { p_user_id: string }; Returns: boolean }
       find_near_miss_recipes: {
         Args: {
@@ -2105,6 +2189,7 @@ export type Database = {
           limit_count?: number
           p_difficulty?: string
           p_offset?: number
+          p_pantry?: string[]
           tags?: string[]
         }
         Returns: Database["public"]["CompositeTypes"]["find_recipes_result"][]
@@ -2125,6 +2210,7 @@ export type Database = {
       }
       has_user: { Args: { email: string }; Returns: boolean }
       ingredient_canonical_id: { Args: { input_text: string }; Returns: string }
+      ingredient_identity_ids: { Args: { p_ids: string[] }; Returns: string[] }
       menu_by_id: {
         Args: { p_menu_id: string }
         Returns: {
@@ -2522,6 +2608,7 @@ export type Database = {
       title_case_name: { Args: { input: string }; Returns: string }
     }
     Enums: {
+      ai_quota_bucket: "recipes" | "photos" | "questions"
       component_kind: "dish" | "prep" | "bought"
       dietary_property:
         | "meat"
@@ -2561,6 +2648,9 @@ export type Database = {
         total_recipes: number | null
         total_suggestions: number | null
         facets: Json | null
+        pantry_have: number | null
+        pantry_missing: number | null
+        pantry_missing_ingredients: Json | null
       }
     }
   }
@@ -2689,6 +2779,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      ai_quota_bucket: ["recipes", "photos", "questions"],
       component_kind: ["dish", "prep", "bought"],
       dietary_property: [
         "meat",

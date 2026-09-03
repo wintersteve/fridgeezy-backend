@@ -1,0 +1,1050 @@
+<title>Fridgeezy Build Order</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+:root {
+  --ground:      #F4F6F6;
+  --surface:     #FFFFFF;
+  --surface-2:   #E9EEED;
+  --ink:         #131E1D;
+  --ink-2:       #4E5C5A;
+  --ink-3:       #788785;
+  --rule:        #D3DAD9;
+  --rule-soft:   #E3E8E7;
+  --accent:      #0A6C6C;
+  --accent-ink:  #064F4F;
+  --accent-soft: #DCEDEB;
+  --live:        #1C7147;
+  --live-soft:   #DCEBE2;
+  --pending:     #9A5300;
+  --pending-soft:#F6E8D6;
+  --cut:         #7E5462;
+  --cut-soft:    #EDE3E6;
+  --shadow:      0 1px 2px rgba(19,30,29,.05), 0 8px 24px -16px rgba(19,30,29,.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:      #0D1413;
+    --surface:     #151E1D;
+    --surface-2:   #1D2726;
+    --ink:         #E4EBE9;
+    --ink-2:       #98A7A4;
+    --ink-3:       #74837F;
+    --rule:        #2A3634;
+    --rule-soft:   #202B29;
+    --accent:      #45BEB1;
+    --accent-ink:  #7FD6CB;
+    --accent-soft: #10302E;
+    --live:        #56C08A;
+    --live-soft:   #122E21;
+    --pending:     #E0A44A;
+    --pending-soft:#31240F;
+    --cut:         #C293A3;
+    --cut-soft:    #2B1F24;
+    --shadow:      0 1px 2px rgba(0,0,0,.3), 0 8px 24px -16px rgba(0,0,0,.6);
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground:      #0D1413;
+  --surface:     #151E1D;
+  --surface-2:   #1D2726;
+  --ink:         #E4EBE9;
+  --ink-2:       #98A7A4;
+  --ink-3:       #74837F;
+  --rule:        #2A3634;
+  --rule-soft:   #202B29;
+  --accent:      #45BEB1;
+  --accent-ink:  #7FD6CB;
+  --accent-soft: #10302E;
+  --live:        #56C08A;
+  --live-soft:   #122E21;
+  --pending:     #E0A44A;
+  --pending-soft:#31240F;
+  --cut:         #C293A3;
+  --cut-soft:    #2B1F24;
+  --shadow:      0 1px 2px rgba(0,0,0,.3), 0 8px 24px -16px rgba(0,0,0,.6);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.62;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 24px 120px;
+}
+
+.prose { max-width: 68ch; }
+
+h1, h2, h3 {
+  font-family: Newsreader, ui-serif, Georgia, serif;
+  font-weight: 500;
+  text-wrap: balance;
+  margin: 0;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+p { margin: 0 0 1em; }
+p:last-child { margin-bottom: 0; }
+
+a { color: var(--accent-ink); text-decoration-color: var(--rule); text-underline-offset: 2px; }
+a:focus-visible, .toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+code, .mono {
+  font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: .86em;
+}
+code {
+  background: var(--surface-2);
+  padding: .1em .35em;
+  border-radius: 3px;
+  color: var(--ink);
+}
+
+/* ---------- masthead ---------- */
+
+.masthead {
+  padding: 72px 0 40px;
+  border-bottom: 1px solid var(--ink);
+  margin-bottom: 48px;
+}
+.masthead h1 {
+  font-size: clamp(2.6rem, 6vw, 4.1rem);
+  margin-bottom: .3em;
+}
+.masthead .standfirst {
+  font-family: Newsreader, ui-serif, Georgia, serif;
+  font-size: clamp(1.12rem, 2.1vw, 1.34rem);
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 60ch;
+  margin-bottom: 1.8em;
+}
+.byline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 26px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .72rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ---------- sections ---------- */
+
+section { margin-bottom: 80px; scroll-margin-top: 24px; }
+
+.sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 12px;
+  margin-bottom: 28px;
+}
+.sec-head .num {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .74rem;
+  font-weight: 600;
+  letter-spacing: .1em;
+  color: var(--accent);
+  padding-top: .35em;
+  flex: none;
+}
+.sec-head h2 { font-size: clamp(1.6rem, 3.2vw, 2.05rem); }
+
+.lede {
+  font-size: 1.05rem;
+  color: var(--ink-2);
+  max-width: 66ch;
+  margin-bottom: 32px;
+}
+.lede strong { color: var(--ink); font-weight: 600; }
+
+/* ---------- chips ---------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .66rem;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 3px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.chip.live    { background: var(--live-soft);    color: var(--live);    border-color: color-mix(in srgb, var(--live) 25%, transparent); }
+.chip.pending { background: var(--pending-soft); color: var(--pending); border-color: color-mix(in srgb, var(--pending) 30%, transparent); }
+.chip.todo    { background: var(--surface-2);    color: var(--ink-2);   border-color: var(--rule); }
+.chip.cut     { background: var(--cut-soft);     color: var(--cut);     border-color: color-mix(in srgb, var(--cut) 25%, transparent); }
+.chip.you     { background: var(--accent-soft);  color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* ---------- callout ---------- */
+
+.callout {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--pending);
+  border-radius: 4px;
+  padding: 22px 26px;
+  box-shadow: var(--shadow);
+  margin-bottom: 32px;
+}
+.callout.accent { border-left-color: var(--accent); }
+.callout h3 {
+  font-size: 1.18rem;
+  margin-bottom: .5em;
+}
+.callout p { color: var(--ink-2); max-width: 64ch; }
+.callout p strong { color: var(--ink); }
+
+/* ---------- the stale-reviews ledger ---------- */
+
+.ledger {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.ledger > div {
+  background: var(--surface);
+  padding: 18px 20px 20px;
+}
+.ledger .src {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .68rem;
+  letter-spacing: .05em;
+  color: var(--ink-3);
+  display: block;
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+.ledger .verdict {
+  font-family: Newsreader, serif;
+  font-size: 1.14rem;
+  line-height: 1.25;
+  margin-bottom: 8px;
+  display: block;
+}
+.ledger p { font-size: .87rem; color: var(--ink-2); line-height: 1.5; margin: 0; }
+
+/* ---------- deploy table ---------- */
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; }
+th {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .66rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  text-align: left;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface-2);
+}
+td {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+  font-size: .92rem;
+  color: var(--ink-2);
+}
+tr:last-child td { border-bottom: none; }
+td strong { color: var(--ink); font-weight: 600; }
+td .mono { color: var(--ink); }
+
+/* ---------- diagram ---------- */
+
+.figure {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 28px 24px 20px;
+  box-shadow: var(--shadow);
+  margin-bottom: 28px;
+}
+.figure .scroll { overflow-x: auto; }
+.figure svg { display: block; width: 100%; min-width: 620px; height: auto; }
+.figcaption {
+  font-size: .84rem;
+  color: var(--ink-3);
+  border-top: 1px solid var(--rule-soft);
+  margin-top: 18px;
+  padding-top: 14px;
+  max-width: 70ch;
+}
+
+.node-box  { fill: var(--surface-2); stroke: var(--ink); stroke-width: 1.5; }
+.node-name { fill: var(--ink); font-family: Newsreader, serif; font-size: 21px; }
+.node-sub  { fill: var(--ink-3); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .06em; }
+.flow      { stroke: var(--accent); stroke-width: 1.75; fill: none; }
+.flow-dash { stroke: var(--ink-3); stroke-width: 1.25; fill: none; stroke-dasharray: 3 4; }
+.flow-label{ fill: var(--accent-ink); font-family: "IBM Plex Mono", monospace; font-size: 11px; }
+.base-box  { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+.base-name { fill: var(--accent-ink); font-family: Newsreader, serif; font-size: 20px; }
+.base-sub  { fill: var(--accent-ink); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .05em; opacity: .8; }
+
+/* ---------- ranked items ---------- */
+
+.rank { display: flex; flex-direction: column; gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+
+.item {
+  background: var(--surface);
+  display: grid;
+  grid-template-columns: 34px 1fr 190px;
+  gap: 0 20px;
+  padding: 20px 22px;
+  align-items: start;
+}
+.item .idx {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--ink-3);
+  padding-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.item h3 { font-size: 1.16rem; margin-bottom: 6px; }
+.item .why { font-size: .91rem; color: var(--ink-2); max-width: 60ch; margin: 0; }
+.item .why + .why { margin-top: .6em; }
+.item .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+.meter { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+.meter .row { display: flex; align-items: center; gap: 10px; }
+.meter .lbl {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .62rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  width: 42px;
+  flex: none;
+}
+.bar { flex: 1; height: 7px; border-radius: 2px; background: var(--surface-2); display: flex; overflow: hidden; }
+.bar i { display: block; height: 100%; }
+.bar .solid { background: var(--accent); }
+.bar .solid.v { background: var(--live); }
+.bar .fuzzy {
+  background: repeating-linear-gradient(115deg, var(--accent) 0 3px, transparent 3px 7px);
+  opacity: .55;
+}
+.est { font-family: "IBM Plex Mono", monospace; font-size: .68rem; color: var(--ink-2); white-space: nowrap; }
+
+.item.blocked { background: linear-gradient(to right, var(--pending-soft) 0 3px, var(--surface) 3px); }
+
+/* ---------- small items ---------- */
+
+.smalls { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
+.small {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 18px 20px;
+}
+.small h3 { font-size: 1.04rem; margin-bottom: 6px; }
+.small p { font-size: .875rem; color: var(--ink-2); line-height: 1.52; margin: 0 0 10px; }
+.small .foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid var(--rule-soft); padding-top: 10px; }
+
+/* ---------- critical path ---------- */
+
+.path { display: flex; flex-direction: column; gap: 0; margin-bottom: 28px; }
+.step { display: grid; grid-template-columns: 26px 1fr; gap: 18px; }
+.step .spine { position: relative; display: flex; flex-direction: column; align-items: center; }
+.step .dot {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--accent);
+  margin-top: 8px; flex: none;
+}
+.step.gate .dot { background: var(--pending); border-color: var(--pending); }
+.step .line { flex: 1; width: 1.5px; background: var(--rule); margin: 4px 0; }
+.step:last-child .line { display: none; }
+.step .body { padding-bottom: 24px; }
+.step h3 { font-size: 1.06rem; margin-bottom: 4px; }
+.step p { font-size: .89rem; color: var(--ink-2); margin: 0; max-width: 62ch; }
+.step .tags { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---------- cuts ---------- */
+
+.cuts { display: flex; flex-direction: column; gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+.cutrow {
+  background: var(--surface);
+  display: grid;
+  grid-template-columns: minmax(180px, 250px) 1fr;
+  gap: 4px 24px;
+  padding: 16px 22px;
+}
+.cutrow .what { font-family: Newsreader, serif; font-size: 1.08rem; color: var(--ink); line-height: 1.3; }
+.cutrow .reason { font-size: .89rem; color: var(--ink-2); max-width: 62ch; }
+
+/* ---------- closing ---------- */
+
+.close {
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  padding: 32px 34px;
+}
+.close h2 { font-size: 1.7rem; margin-bottom: 18px; }
+.close ol { margin: 0; padding-left: 1.3em; }
+.close li { margin-bottom: .7em; color: var(--ink-2); max-width: 64ch; }
+.close li strong { color: var(--ink); }
+.close li:last-child { margin-bottom: 0; }
+
+.footnote {
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid var(--rule);
+  font-size: .8rem;
+  color: var(--ink-3);
+  max-width: 78ch;
+}
+
+@media (max-width: 720px) {
+  .item { grid-template-columns: 26px 1fr; }
+  .item .meter { grid-column: 2; margin-top: 16px; }
+  .cutrow { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="page">
+
+<header class="masthead">
+  <h1>What to build next</h1>
+  <p class="standfirst">One build order across both repos, assembled from seven separate reviews and then checked against the working tree — because most of what those reviews recommended was implemented today, and a plan that lists finished work as pending is worse than no plan.</p>
+  <div class="byline">
+    <span>2 September 2026 · revised 18:0<span>0</span></span>
+    <span>backend @ 78d27f3 · client working tree</span>
+    <span>19 items in · 14 out · 2 cleared</span>
+  </div>
+</header>
+
+<div class="callout accent" style="margin-bottom:56px">
+  <h3>Revised after a second pass over the tree.</h3>
+  <p>Two items have been completed since this was first written and are struck through below: <strong>the sign-out leak</strong> — fixed far more thoroughly than specified — and <strong>the taste-profile delete screen</strong>. One claim has been corrected: the near-miss endpoint's absence from production is inferred from the deployed function's timestamp, and cannot be confirmed by probing it, for a reason worth knowing. There is also a new section 04: <a href="#quick">the quick-win shortlist</a>.</p>
+</div>
+
+<!-- ============================================================ -->
+<section id="stale">
+  <div class="sec-head">
+    <span class="num">00</span>
+    <h2>The reviews are mostly spent</h2>
+  </div>
+
+  <p class="lede">Before anything else: four of the seven source documents have been substantially implemented since they were written. Nothing below repeats a recommendation that is already in the tree. This is what happened to each, so you can stop reading them.</p>
+
+  <div class="ledger">
+    <div>
+      <span class="src">motion-review.html</span>
+      <span class="verdict">All six shipped.</span>
+      <p>Determinate stall-aware generation arc, the pill→banner morph, staggered skeletons, Skeleton ported to Reanimated with its leak closed, the timer rail off the JS thread, and the hero-image retry surfaced. Both “found on the way” fixes too. No 3D was added, which was the recommendation.</p>
+    </div>
+    <div>
+      <span class="src">design/menu-picker-redesign.html</span>
+      <span class="verdict">Fully built.</span>
+      <p><code>DishPicker</code> merged with both routes kept, the compose gate moved off the home card, the community rail relocated into <code>features/menu</code>, the two blocks stripped from the home feed. Including the correctness bug it warned about.</p>
+    </div>
+    <div>
+      <span class="src">PERSONALISATION_REVIEW.html</span>
+      <span class="verdict">Two of three leaks closed. Tier built.</span>
+      <p>The home feed now passes the diet; every catalogue stage in chat now honours it. The near-miss tier and the adaptation gate exist in both repos — refusal copy, per-reason retry, the lot. Leak 3 (ranking) is open, and is item 05 below.</p>
+    </div>
+    <div>
+      <span class="src">INGREDIENT_IDENTITY.md</span>
+      <span class="verdict">Cleanup largely run.</span>
+      <p>Alias collisions are down from 50 to <strong>11</strong>; the catalogue went 1067 → 1041 rows. <code>ingredient_merge_reviews</code> was built and holds the 10 contradictions. Dietary classification is at 1040/1041. What remains is one short finishing pass.</p>
+    </div>
+    <div>
+      <span class="src">ERROR_STRATEGY.md</span>
+      <span class="verdict">Half done.</span>
+      <p>Server-side classification and CloudWatch alarms are live. The wire contract and the honest error screen are not — the two things a cook would actually see during an outage. Item 02.</p>
+    </div>
+    <div>
+      <span class="src">MEAL_PLANNING_REVIEW.html</span>
+      <span class="verdict">Untouched — and correct.</span>
+      <p>Nothing here is built. Its central finding holds: the week is nearly free, the fridge is the product, and the cost of both sits in retrieval rather than storage. Section 03.</p>
+    </div>
+    <div>
+      <span class="src">INGREDIENT_AFFINITY.md</span>
+      <span class="verdict">Correctly deferred.</span>
+      <p>Its own verdict was “defer”, and the conditions it named have not changed. See the cuts.</p>
+    </div>
+    <div>
+      <span class="src">TODOS.md §6</span>
+      <span class="verdict">One item resolved itself.</span>
+      <p><code>pantry_items</code> is gone from the live database. The ledger and the database now agree, so a new pantry table will not land on a survivor.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="notlive">
+  <div class="sec-head">
+    <span class="num">01</span>
+    <h2>Built, and not live</h2>
+  </div>
+
+  <div class="callout">
+    <h3>The deployed Lambda is seven days behind the repo.</h3>
+    <p><code>fridgeezy-dev-api</code> was last modified <strong>2026-08-26 11:47 UTC</strong> and is unchanged as of this revision. Three commits of API work have landed since. The most serious consequence is that <strong>the client already ships the near-miss rail, and the endpoint it taps is almost certainly not in production</strong> — the card renders, the reader taps, and the request 404s.</p>
+    <p>Everything in this section is an afternoon, not a fortnight. It is the highest ratio of value to effort on the page by a wide margin, and none of it is a decision.</p>
+  </div>
+
+  <div class="callout" style="border-left-color: var(--accent)">
+    <h3>How that is known, and the check that does not work</h3>
+    <p>The evidence is the function's <code>LastModified</code> timestamp, which <code>UpdateFunctionCode</code> bumps — so code committed on 31 August cannot be in a function last written on 26 August. That is solid, but it is an inference rather than an observation, and it is worth saying which.</p>
+    <p><strong>The obvious way to confirm it does not work.</strong> An unauthenticated <code>POST</code> to <code>/rest/recipes/:id/adapt</code> returns <strong>401, not 404</strong> — and so does <code>POST</code> to a path that has never existed under that prefix. Auth is applied at the <em>mount</em> in the <code>MOUNTS</code> loop, so it answers before Express ever tries to match a route, and a missing route is indistinguishable from a present one. Confirming this needs a real bearer token, at which point an absent route falls through the recipes router and 404s properly. Verified against the live function URL, both cases.</p>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>What is waiting</th><th>Landed</th><th>What being undeployed costs</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>The adaptation gate</strong><br><span class="mono">POST /recipes/:id/adapt</span></td>
+          <td class="mono">31 Aug</td>
+          <td>The whole near-miss feature. The rail retrieves fine — it reads Supabase directly — but the tap that adapts the dish reaches nothing. This is a visible broken feature, not a missing one.</td>
+        </tr>
+        <tr>
+          <td><strong>Diet across catalogue retrieval</strong><br><span class="mono">dietary-filter.ts</span></td>
+          <td class="mono">31 Aug</td>
+          <td>Leak 2 is fixed in the repo and open in production. A vegan asking chat for dinner is still served Carbonara, because retrieval wins before generation and only generation was told the diet.</td>
+        </tr>
+        <tr>
+          <td><strong>Chat photo attachment</strong><br><span class="mono">describe-attachment/</span></td>
+          <td class="mono">2 Sep</td>
+          <td>Both halves are written — server route and client composer. It has never run. Worth an explicit smoke test rather than a deploy-and-hope, since it is the only genuinely new capability in the batch.</td>
+        </tr>
+        <tr>
+          <td><strong>Unit and prompt rules, promote, speech routes</strong></td>
+          <td class="mono">28 Aug</td>
+          <td>Quality changes to generation. Silent when absent, which is exactly why they have gone unnoticed for a week.</td>
+        </tr>
+        <tr>
+          <td><strong>One migration</strong><br><span class="mono">20260831000001_display_name_from_oauth</span></td>
+          <td class="mono">31 Aug</td>
+          <td>Remote stops at <code>20260830000002</code>. The trigger that reads a name out of the Apple/Google identity payload is not there, so accounts created in production keep a null <code>display_name</code>. Needs <code>up-remote</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>The client working tree</strong></td>
+          <td class="mono">uncommitted</td>
+          <td>~60 modified files and 10 new directories: the cook-step redesign, the onboarding restructure, the new <code>preferences</code> feature, paywall changes. None of it is committed, so none of it is in a build. Commit before anything else, so the deploy above has a client to match.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="lede" style="margin-top:28px">One thing to check on the way past, rather than assume: the vendored schema tarballs in the client are dated <span class="mono">30 Aug</span>. <code>adapt-recipe.schema</code> is in them. Today's <code>chat.schema</code> attachment changes are not — the client defines its own attachment types, so it may not need them, but a bare <code>npm install</code> will not tell you either way.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="loop">
+  <div class="sec-head">
+    <span class="num">02</span>
+    <h2>The loop, and what sits under it</h2>
+  </div>
+
+  <p class="lede">The fridge, the week and cooked history are usually costed as three features. They are one feature with three entry points, because <strong>each one supplies the next one's hardest input</strong> — and all three are unreachable until <code>find_recipes</code> can rank by ingredient rather than filter by it.</p>
+
+  <div class="figure">
+    <div class="scroll">
+      <svg viewBox="0 0 920 430" role="img" aria-label="Fridge supplies the week, the week supplies cooked history, cooked history supplies the fridge; overlap ranking sits underneath all three">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"></path>
+          </marker>
+        </defs>
+
+        <!-- return arc -->
+        <path class="flow" d="M 780 160 C 780 62, 140 62, 140 158" marker-end="url(#ah)"></path>
+        <text class="flow-label" x="460" y="76" text-anchor="middle">what got eaten — so decay is right instead of a guess</text>
+
+        <!-- nodes -->
+        <rect class="node-box" x="30" y="160" width="220" height="92" rx="3"></rect>
+        <text class="node-name" x="140" y="197" text-anchor="middle">The fridge</text>
+        <text class="node-sub" x="140" y="220" text-anchor="middle">PANTRY, WITH CONFIDENCE</text>
+        <text class="node-sub" x="140" y="237" text-anchor="middle" opacity="0.7">decays, never deletes</text>
+
+        <rect class="node-box" x="350" y="160" width="220" height="92" rx="3"></rect>
+        <text class="node-name" x="460" y="197" text-anchor="middle">The week</text>
+        <text class="node-sub" x="460" y="220" text-anchor="middle">PLAN AS AN ANNOTATION</text>
+        <text class="node-sub" x="460" y="237" text-anchor="middle" opacity="0.7">slots, not dates</text>
+
+        <rect class="node-box" x="670" y="160" width="220" height="92" rx="3"></rect>
+        <text class="node-name" x="780" y="197" text-anchor="middle">Cooked history</text>
+        <text class="node-sub" x="780" y="220" text-anchor="middle">A CONSUMPTION SIGNAL</text>
+        <text class="node-sub" x="780" y="237" text-anchor="middle" opacity="0.7">emitted at cook-finish</text>
+
+        <!-- forward arrows -->
+        <path class="flow" d="M 250 206 L 340 206" marker-end="url(#ah)"></path>
+        <text class="flow-label" x="300" y="230" text-anchor="middle"><tspan x="300" dy="0">what to plan</tspan><tspan x="300" dy="13">around</tspan></text>
+
+        <path class="flow" d="M 570 206 L 660 206" marker-end="url(#ah)"></path>
+        <text class="flow-label" x="620" y="230" text-anchor="middle"><tspan x="620" dy="0">which dish, and</tspan><tspan x="620" dy="13">in what order</tspan></text>
+
+        <!-- risers -->
+        <path class="flow-dash" d="M 140 252 L 140 330"></path>
+        <path class="flow-dash" d="M 460 252 L 460 330"></path>
+        <path class="flow-dash" d="M 780 252 L 780 330"></path>
+
+        <!-- foundation -->
+        <rect class="base-box" x="30" y="330" width="860" height="74" rx="3"></rect>
+        <text class="base-name" x="460" y="362" text-anchor="middle">Overlap ranking in find_recipes</text>
+        <text class="base-sub" x="460" y="385" text-anchor="middle">SCORE BY COVERAGE — NEVER WIDEN THE AND-ALL FILTER IN PLACE</text>
+      </svg>
+    </div>
+    <p class="figcaption">Every ingredient path in this database is a conjunctive filter: a recipe qualifies only if it contains <em>every</em> id passed in. Point a fridge at that and it inverts — ten items returns almost nothing, thirty returns zero, and it gets worse the more the user invests. A fridge is a ranking input, and nothing here can consume one.</p>
+  </div>
+
+  <div class="callout accent">
+    <h3>Which is why overlap ranking is the safest expensive thing on the list.</h3>
+    <p>It is the precondition for all three loop items, and it independently closes a defect that is already costing you: of 1041 ingredients only about a third are referenced by any dish, so two thirds of the ingredient picker is a trapdoor that empties the results. <code>20260830000002</code> sorted the picker to route around that hole. It did not close it. This does — <strong>even if you never build the planner.</strong></p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="rank">
+  <div class="sec-head">
+    <span class="num">03</span>
+    <h2>The ranking</h2>
+  </div>
+
+  <p class="lede">Ordered by value against effort. The <strong>effort bar is hatched where the estimate is genuinely uncertain</strong> — hatching means I could not bound it from reading the code, not that it is merely large.</p>
+
+  <div class="rank">
+
+    <div class="item blocked">
+      <span class="idx">01</span>
+      <div>
+        <h3>Deploy, and commit the client</h3>
+        <p class="why">Section 01 in one action. It turns a visibly broken near-miss feature into a working one and closes Leak 2 in production. No decisions, no design, no new code.</p>
+        <div class="tags"><span class="chip pending">built · not live</span><span class="chip todo">both repos</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:100%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:8%"></i></span><span class="est">½ day</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">02</span>
+      <div>
+        <h3>The honest error state</h3>
+        <p class="why">Send <code>code</code>, <code>fault</code> and <code>retryable</code> alongside the existing error string, then branch on them client-side: a <code>serviceDown</code> screen that says the problem is ours and temporary, and a retry button that renders <em>only</em> when pressing it could work.</p>
+        <p class="why">Today an outage tells a cook to reinstall the app, offers a button that fails identically forever, and can render OpenAI's billing URL to them verbatim. The classification already exists server-side; nothing puts it on the wire. The adaptation gate already proves the pattern works — its refusals carry per-reason retry and read as the app knowing something.</p>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip you">2 decisions</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:82%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:20%"></i></span><span class="est">1–2 days</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">03</span>
+      <div>
+        <h3>Backfill the shelf-life numbers</h3>
+        <p class="why">A regex over <code>ingredients.shelf_life</code> into <code>expires_by_default</code> and <code>default_shelf_life_days</code>. Both columns already exist and 45 rows are already populated; <strong>360 rows carry the text and no number</strong>. “Indefinite” maps to <code>false</code>, which is the case the original trigger was written for.</p>
+        <p class="why">No model, no spend, no calibration — the same dry-run shape as <code>merge-spelling-variants</code>. It is the cheapest item here and it unblocks everything fridge-shaped. Do it whatever you decide about the week.</p>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip live">no LLM spend</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:58%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:10%"></i></span><span class="est">½ day</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">04</span>
+      <div>
+        <h3>Overlap ranking</h3>
+        <p class="why">A scoring path beside the AND-all filter: <code>p_pantry uuid[]</code> ordering by coverage and counting what is missing, or a sibling function. Nothing is excluded; a dish needing one thing you lack appears lower with the gap named — the shape <code>find_near_miss_recipes</code> already returns for diets.</p>
+        <p class="why"><strong>Do not widen the existing <code>ingredients</code> parameter.</strong> Its AND-all semantics are relied on by the fridge picker and the search screen's entity strip, and changing them in place silently changes what every existing filter means.</p>
+        <p class="why">Hatched because the query is easy and the <em>ranking</em> is not: the weights need measuring against a real catalogue, and there is no <code>calibrate</code> target for it yet.</p>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip live">fixes picker trapdoor</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:88%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:26%"></i><i class="fuzzy" style="width:34%"></i></span><span class="est">1–2 wk</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">05</span>
+      <div>
+        <h3>The week — plan as an annotation</h3>
+        <p class="why"><code>plan_id</code> + <code>plan_slot</code> + a title on <code>shopping_lists</code>, mirroring <code>20260819000001</code> exactly, then a filter parameter on <code>useEverythingToBuy</code>. That is the whole first version.</p>
+        <p class="why">It is cheap because the hard part is shipped: the aggregated list already merges any number of recipes, keyed on ingredient id, grouped by aisle, scaled by servings, ticked across dishes, offline. <strong>A plan must not be a menu</strong> — menus are shared community rows unique on <code>(main_recipe_id, dish_signature)</code>, so two users planning the same five dinners would silently share a plan, and it would surface on the home feed.</p>
+        <p class="why">Slots, not dates. Cook Thursday's dish on Tuesday and a dated plan is wrong in two places; an ordered set does not notice. Deviation then costs nothing by construction rather than by design.</p>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip live">smallest real slice</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:72%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:22%"></i></span><span class="est">3–5 days</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">06</span>
+      <div>
+        <h3>Sum amounts within a unit family</h3>
+        <p class="why">The one thing that genuinely degrades from three dishes to twelve. <code>200 ml + 1 tbsp</code> is honest at three courses and unreadable at twelve. Collapse g/kg, ml/l and countables; keep the existing “+” across families, because that <em>is</em> still the honest answer.</p>
+        <p class="why">Lands in one function — the client already funnels every amount through a single formatter — and the units table exists. Only worth doing if item 05 ships.</p>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip todo">client only</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:38%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:9%"></i></span><span class="est">½ day</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">07</span>
+      <div>
+        <h3>The fridge, with confidence</h3>
+        <p class="why"><code>pantry_items</code> roughly as it was — it was dropped for disuse, not on a design objection, and the substrate survived the consolidation — plus a <code>source</code> (shopped · cooked · scanned · declared) and a decaying confidence. <strong>Decay to low, never to absent</strong>, and drop the nightly cron: a deleted onion and an onion you are unsure about are different states, and only one of them can be shown to the user for correction.</p>
+        <p class="why">Wholesale resync is nearly free — <code>/ingredients/extract</code> already returns catalogue ids with a match type. Two honest gaps in it: confidence is per response rather than per item, and there are no quantities at all.</p>
+        <p class="why">Copy the <code>profile_taste_signals</code> contract verbatim for the writer: observed rather than declared, fire-and-forget, never between the user and their first token.</p>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip pending">needs 03 + 04</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:76%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:24%"></i><i class="fuzzy" style="width:18%"></i></span><span class="est">1 wk+</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">08</span>
+      <div>
+        <h3>A consumption signal at cook-finish</h3>
+        <p class="why">Finishing a cook currently <em>deletes</em> the recipe's shopping list. That is the closest thing to a consumption event the app has, and it is thrown away rather than emitted.</p>
+        <p class="why">Emit there, where the intent is unambiguous, rather than trying to disambiguate the merged tick store — one tick already means “bought” or “measured out” and nothing distinguishes them. The call site exists; only the signal does not.</p>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip pending">needs 07</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:52%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:16%"></i></span><span class="est">2–3 days</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">09</span>
+      <div>
+        <h3>Paid plan generation</h3>
+        <p class="why">Pick five dishes that fit the diet, the skill level and the weeknight time band, chosen partly for what they share so the shopping list is short. <strong>Catalogue-first</strong> — a plan assembled from <code>find_recipes</code> hits costs nothing to fill; generation is the fallback for slots retrieval cannot answer. Same instinct as compose's retrieval-before-generation, which turned a multi-second paid stream into ~40 ms.</p>
+        <p class="why">This is the subscription product, and it is the honest paywall line: the plan and its list are the user's own data and stay free, filling it for you runs a model and is paid. The cost note that matters — <code>shopping_lists.recipe_id</code> is a foreign key to <code>recipes</code>, so a five-dish plan of catalogue suggestions is five promotes before the list is complete. Price it against someone planning every week, not against someone composing twice a year.</p>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip pending">needs 04 + 05</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:68%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:20%"></i><i class="fuzzy" style="width:40%"></i></span><span class="est">unbounded</span></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="quick">
+  <div class="sec-head">
+    <span class="num">04</span>
+    <h2>Quick wins, ranked by effort</h2>
+  </div>
+
+  <p class="lede">An afternoon or less, where the value is out of proportion to the cost. Nothing here is on the fridge–week–cooked-history path. <strong>Three items at the bottom look like they belong on this list and do not</strong> — they are named rather than omitted, because an estimate that turns out wrong is worse than one that declines to guess.</p>
+
+  <div class="callout" style="border-left-color: var(--live)">
+    <h3>Two cleared since this was written</h3>
+    <p><strong>The sign-out leak is fixed, and more thoroughly than this document asked for.</strong> All 16 persisted stores are audited: 11 now clear and 5 deliberately survive, each with its reason recorded. Three the sweep found were not in my list — <em>legacy menus</em>, which drains into whichever account signs in next; <em>ingredient substitutions</em>; and <em>recipe servings</em>. Beyond the ask, it also purges the AsyncStorage key rather than merely overwriting it, closes the rehydrate race (hydration lands as a <em>replace</em>, so a clear mid-read was being undone), and adds a sign-in owner check as a second line of defence for sessions that end without announcing it. Guarded by <code>npm run check:session-clear</code> — a mechanism test plus a coverage script that fails on any new persisted store with no answer. Run and passing.</p>
+    <p><strong>The taste-profile delete screen is on.</strong> <code>TASTE_PROFILE_VISIBLE</code> was split from <code>TASTE_PROFILE_ENABLED</code> and turned on alone, which is exactly right: seeing and deleting inferred data is not a reward for the inference being good enough to act on. That closes the one item TODOS called not deferrable before launch.</p>
+  </div>
+
+  <div class="rank">
+
+    <div class="item">
+      <span class="idx">A</span>
+      <div>
+        <h3>Deploy the API</h3>
+        <p class="why">Still the biggest, and still true — production is a week behind and the near-miss rail is live against an endpoint that is almost certainly not there. Unchanged since this morning: <code>LastModified</code> is still 26 August, and no new migrations have landed.</p>
+        <p class="why"><strong>What it actually takes:</strong> <code>build-artifact.sh</code>, which already asserts the cold-start contract; a terraform apply; <code>up-remote</code> for the single pending migration; and a smoke test of the chat photo attachment, which is the only genuinely new capability in the batch and has never run. Everything else in the batch is a fix to a path that already works, so it fails quietly rather than loudly if the deploy is wrong.</p>
+        <div class="tags"><span class="chip pending">built · not live</span><span class="chip live">no decisions</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:100%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:14%"></i></span><span class="est">an afternoon</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">B</span>
+      <div>
+        <h3>Send <code>code</code> / <code>fault</code> / <code>retryable</code> on the wire</h3>
+        <p class="why">The <em>additive</em> half of the error contract, on its own. The classification already exists server-side and reaches nothing but CloudWatch; adding the three fields alongside the existing <code>error</code> string is backward compatible, needs no client change to ship, and needs neither of the two decisions the rest of that work is blocked on.</p>
+        <p class="why">It also closes a live leak on its own: today the raw provider sentence — including OpenAI's billing URL — is what goes on the wire, and the compose hook already surfaces a frame error's message to the reader. Send a safe generic string in <code>error</code> and the real copy is chosen client-side later.</p>
+        <p class="why">Doing this now is what makes the honest error screen a client-only job afterwards, rather than a two-repo one.</p>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip live">unblocks item 02</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:74%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:16%"></i></span><span class="est">an afternoon</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">C</span>
+      <div>
+        <h3>Merge the 11 alias collisions</h3>
+        <p class="why">Down from 50, and the remainder are duplicates by construction — no embedding, no model, no judgement — so they should be merged directly rather than entering the LLM audit at ~5 calls each. <code>merge_ingredient</code> already exists. Re-run <code>embed-ingredients</code> afterwards or a merged row's stale vector degrades matching silently instead of failing.</p>
+        <p class="why"><strong>Do not act on the <code>Red Bell Pepper → Green Bell Pepper</code> alias.</strong> It is wrong, learned at runtime by the old single-candidate adjudicator, and the correct cleanup is to delete it.</p>
+        <p class="why"><em>One honest caveat:</em> if the database wipe is close, this is work you will do twice. The durable version is teaching <code>seed-ingredients</code> not to reintroduce them.</p>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip pending">check the wipe date</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:46%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:10%"></i></span><span class="est">~2 hours</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">D</span>
+      <div>
+        <h3>Adjudicate the 10 pending merge reviews</h3>
+        <p class="why">Judgement, not code. <code>ingredient_merge_reviews</code> was built and holds the 10 contradictions the identity sweep surfaced; a <code>distinct</code> verdict is sticky, which is the whole point — without a verdict the nightly check re-raises the same pairs forever, somebody learns to ignore the report, and the one row that genuinely needs attention is buried under nine that do not.</p>
+        <p class="why">Ten pairs is a screen. It is the cheapest possible defence of a check you have already paid to build.</p>
+        <div class="tags"><span class="chip todo">not done</span><span class="chip live">no code</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:42%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:8%"></i></span><span class="est">~1 hour</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">E</span>
+      <div>
+        <h3>Wire or delete “Recommend” in Settings</h3>
+        <p class="why">An empty <code>onPress</code> on a row a user can tap, still there. A control that does nothing is worse than an absent one, and it is five minutes either way.</p>
+        <div class="tags"><span class="chip todo">not built</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:20%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:3%"></i></span><span class="est">minutes</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="idx">F</span>
+      <div>
+        <h3>Backfill the shelf-life numbers</h3>
+        <p class="why">Item 03 from the ranking, repeated here because it is genuinely cheap: 360 rows carry the text and no number, 45 are already done, and it needs no model and no spend.</p>
+        <p class="why"><strong>The reason it is at the bottom of an afternoon list rather than the top:</strong> the regex is quick and the ~16 rows that will not parse need a rule rather than a pattern, and a dry run over 360 rows deserves reading before it is applied. Call it a day rather than an afternoon and be pleasantly surprised. The durable version writes the numbers in <code>seed-ingredients</code> so a wipe does not undo it.</p>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip live">no LLM spend</span></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:58%"></i></span></div>
+        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:12%"></i><i class="fuzzy" style="width:10%"></i></span><span class="est">½–1 day</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="callout" style="margin-top:32px">
+    <h3>Three that look like quick wins and are not</h3>
+    <p><strong>Turning on Sentry.</strong> It reads as setting an environment variable, and it is not: <code>@sentry/react-native</code> is a native module in a CNG project with <code>ios/</code> gitignored, so it costs a prebuild, a full native rebuild and fresh EAS credentials — and that price recurs for every contributor. Real work, worth doing, but never schedule it for an afternoon and never for release day.</p>
+    <p><strong>The purchase-to-webhook fallback.</strong> I estimated half a day in the first version of this document and I would not stand behind that. It puts a new outbound network dependency inside the middleware that gates every paid route, which today reads only Postgres — so it inherits RevenueCat's availability on the auth path. The code is small; the design is not. The actual work is the bounding rule: what stops it calling RevenueCat on every 402 for every non-payer, forever. Budget a day, and decide the bound before writing anything.</p>
+    <p><strong>Committing the client working tree.</strong> 111 changed files across a dozen features — the cook-step redesign, the onboarding restructure, the new preferences feature, the storage module. That is a review problem, not a build problem, and it does not compress into an afternoon. It also does not block the deploy above; the two are independent. What it blocks is the next EAS build.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="you">
+  <div class="sec-head">
+    <span class="num">05</span>
+    <h2>Only you can do these</h2>
+  </div>
+
+  <p class="lede">Console work and product judgement. The first is on the critical path for everything about the subscription, and it is the slowest thing in this document because it waits on someone else's clock.</p>
+
+  <div class="path">
+
+    <div class="step gate">
+      <div class="spine"><span class="dot"></span><span class="line"></span></div>
+      <div class="body">
+        <h3>Sign the Paid Applications agreement</h3>
+        <p>This is the gate. Until Apple has your banking and tax details and their verification completes, no subscription product can be created, no sandbox purchase can be made, and <strong>nothing about the paywall can be tested end to end</strong> — not the offering, not the webhook, not the entitlement gate, not the restore flow. All of it is built and none of it has ever run against a real transaction.</p>
+        <p>Verification is days to weeks and is entirely outside your control, which is the argument for starting it today regardless of where the rest of this list lands.</p>
+        <div class="tags"><span class="chip you">yours alone</span><span class="chip pending">blocks 5 steps</span></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="spine"><span class="dot"></span><span class="line"></span></div>
+      <div class="body">
+        <h3>App Store Connect and RevenueCat</h3>
+        <p>Subscription group and two products; then the entitlement, an offering <strong>identified <code>default</code></strong>, its packages, and the App Store shared secret. Downstream of the agreement in both consoles.</p>
+        <div class="tags"><span class="chip you">yours alone</span></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="spine"><span class="dot"></span><span class="line"></span></div>
+      <div class="body">
+        <h3>The webhook secret, in two places</h3>
+        <p>RevenueCat does not HMAC-sign the way Stripe does — it echoes back whatever <code>Authorization</code> value you configure. That shared secret is the entire protection on a route that grants subscriptions, and it must match in the dashboard and in SSM with nothing to report drift but every event failing.</p>
+        <div class="tags"><span class="chip you">yours alone</span></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="spine"><span class="dot"></span><span class="line"></span></div>
+      <div class="body">
+        <h3>Flip <code>REQUIRE_ENTITLEMENT</code>, then delete the flag</h3>
+        <p>It is opt-in, deliberately, so that forgetting does not paywall routes the product gives away. Ship the flip in the same release as purchasing and then make the gate unconditional, so it cannot end up off in production quietly. A sandbox purchase and restore on a real device is the only thing that proves it.</p>
+        <div class="tags"><span class="chip you">yours alone</span></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="spine"><span class="dot"></span><span class="line"></span></div>
+      <div class="body">
+        <h3>Three decisions I cannot make for you</h3>
+        <p><strong>503 vs 500</strong> for provider failures — a behaviour change on a live endpoint, though the client's default branch already treats them identically, so it is safe server-first. <strong>The <code>serviceDown</code> copy</strong> — the voice is yours, and item 02 is blocked on it rather than on effort. <strong>When the database gets wiped</strong> — several deferred items are waiting on that date rather than on work.</p>
+        <div class="tags"><span class="chip you">yours alone</span><span class="chip pending">blocks item 02</span></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="cut">
+  <div class="sec-head">
+    <span class="num">06</span>
+    <h2>Deliberately not building</h2>
+  </div>
+
+  <p class="lede">A roadmap that recommends everything recommends nothing. Each of these was in a source document; each is out, and the reason matters more than the verdict.</p>
+
+  <div class="cuts">
+
+    <div class="cutrow">
+      <div class="what">Gamification</div>
+      <div class="reason">Out, your call. Nothing in this app's design argues for it — the product is careful never to promise what it cannot keep, and streaks are a promise about the user rather than about the food.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">The ingredient affinity view</div>
+      <div class="reason">Waits on two things: the dedupe finishing, and a database you intend to wipe. Affinity is computed <em>over</em> the corpus — building it now means measuring a catalogue that is about to be deleted and keeping the answer. Cheap to build later; the migration and the read are a day. Not now.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">“Buy this, unlock N dishes”</div>
+      <div class="reason">Measured: the best possible purchase unlocks <strong>two dishes</strong>, and only 7 dishes in the whole catalogue sit one ingredient away. That is a catalogue-size problem, not a query problem. The same query read the other way — “3 dishes are one ingredient away” — is the honest version and it is what item 04 gives you for free.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">Multi-hop substitution</div>
+      <div class="reason">There is no substitution graph to walk, and both ways of manufacturing one were tested and failed. Embedding kNN on <code>Butter</code> returns <code>Butter Bean</code>, a legume. Don't build it on this evidence.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">Reading prompt history as preference</div>
+      <div class="reason">29 rows, one profile, and they are dish requests — nobody has typed “I don't like coriander” and nobody will, because that is what the blacklist screen is for. Cuisine affinity is the one honest signal in there, and its threshold is <em>profile</em> count, not row count. Three orders of magnitude away.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">Turning on the taste profile</div>
+      <div class="reason">The review date is 2026-09-13 and the data already answers it. Two signals clear the threshold and <strong>they are the same axis pointing both ways</strong> — harder ×3 and easier ×2 — which reads back as “take the technique further; keep it plain”. Difficulty was never a standing preference; it is a per-dish decision with a first-class home in settings already. Recording it as a taste signal was the design error, not the threshold.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">Leak 3 as a “taste” ranking term</div>
+      <div class="reason">Real, but the fix is not a new signal. <code>find_recipes</code> ranks on skill level and everyone's favourite count, and there is nothing revealed worth adding (see above). The right first addition to that ORDER BY is overlap — declared, explainable, and item 04 already builds it.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">Dates on the plan</div>
+      <div class="reason">A calendar creates the failure it is meant to prevent. This is a deviation argument, not a shortcut — and it is why the week is cheap.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">Skia, three.js, any 3D</div>
+      <div class="reason">All six motion items shipped without a new dependency. The identity is painted, <code>ios/</code> is gitignored, and a native add costs a prebuild and fresh credentials for every contributor forever. Settled.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">The deep health-check probe</div>
+      <div class="reason">Proposed when there were zero alarms. The metric-filter alarms on <code>fault=service</code> are live and verified firing, so a token-spending probe now duplicates coverage you already have. The real prevention is auto-recharge on the OpenAI billing page, which no amount of AWS alarming replaces.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">Automatic failover to Bedrock</div>
+      <div class="reason">It has never run end to end — Anthropic models are gated on the account. Failing over to an untested path during an incident is how one outage becomes two. Worth making real as its own work; never worth an automatic trigger.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">A drinks taxonomy</div>
+      <div class="reason">The gate is done and covered by evals. Giving drinks a home needs a <code>drink</code> course tag and a <code>dish_form</code> value — a migration and a seed change, not a prompt edit. Nothing is asking for it.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">Sharing an imported recipe</div>
+      <div class="reason">Would need a signed, expiring token through an authenticated route. <code>/share</code> is open <em>because its caller is not the app</em>, so there is no session to compare an owner against. Real work, no demand.</div>
+    </div>
+
+    <div class="cutrow">
+      <div class="what">The SNS email subscription</div>
+      <div class="reason">Excluded at your request — you are aware and it is yours.</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="close" style="margin-bottom:0">
+  <div class="close">
+    <h2>If you did nothing else this week</h2>
+    <ol>
+      <li><strong>Deploy the API.</strong> An afternoon, and it is the difference between a near-miss feature that works and one that 404s in front of a user. It does not wait on the client tree.</li>
+      <li><strong>Start the Apple Paid Applications agreement.</strong> It is not work, it is waiting, and nothing about the subscription can be verified until it clears.</li>
+      <li><strong>Take quick wins B through E</strong> — the error fields on the wire, the 11 alias merges, the 10 merge verdicts, the dead Settings row. Well under a day together, and B is what turns the honest error screen into a client-only job later.</li>
+      <li><strong>Then decide between item 04 and item 05.</strong> They are the fork. Item 05 is the smallest honest week — two columns and a filter over a shopping list that already works — and it will tell you whether anyone plans a week in this app before you pay for the rest. Item 04 is the larger bet, and the one that pays off even if the answer is no.</li>
+    </ol>
+  </div>
+
+  <p class="footnote"><strong>Revision, 2 September, evening.</strong> Re-checked against both trees. The sign-out fix verified by reading <code>shared/storage/</code> and by running <code>npm run check:session-clear</code>, which passes and accounts for all 16 persisted stores; the taste screen verified from <code>flags.ts</code>, <code>settings-screen.tsx</code> and <code>taste-screen/</code>. The deploy gap re-confirmed unchanged, and the 401-masks-404 behaviour established by probing the live function URL with both a real route and an invented one. Row counts re-read and unchanged. Nothing else on the list had moved.</p>
+
+  <p class="footnote" style="margin-top:20px">Checked against the working tree on 2 September 2026, not taken from the reviews. Deploy state read from the live Lambda's last-modified timestamp; migration gap from the linked project's applied list against <code>apps/database/supabase/migrations/</code>; row counts (1041 ingredients, 11 alias collisions, 360 unbackfilled shelf-life strings, 45 already populated, 1 unclassified ingredient, 10 merge reviews, 29 prompts, 6 taste signals) read read-only from the dev project. Client claims verified by reading the files named. Sources: <code>ERROR_STRATEGY.md</code>, <code>INGREDIENT_AFFINITY.md</code>, <code>INGREDIENT_IDENTITY.md</code>, <code>PERSONALISATION_REVIEW.html</code>, <code>MEAL_PLANNING_REVIEW.html</code>, <code>TODOS.md</code> in both repos, and the client's <code>motion-review.html</code> and <code>design/menu-picker-redesign.html</code>. No code was written and nothing was run against a database beyond the read-only counts above.</p>
+</section>
+
+</div>

@@ -1,5 +1,5 @@
-import type { ChatAttachment } from "@fridgeezy/schemas";
 import { generateCompletion } from "@fridgeezy/llm";
+import type { ChatAttachment } from "@fridgeezy/schemas";
 import type { Response } from "express";
 
 import { writeSseEvent } from "../sse";

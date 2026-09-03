@@ -23,6 +23,15 @@ export interface RouteInfo {
      * point — it means the banner cannot disagree with the routing.
      */
     requiresEntitlement?: boolean;
+    /**
+     * Which quota bucket the path spends, when it is metered rather than paid.
+     *
+     * Derived here for the same reason as {@link requiresEntitlement} — the gate
+     * is attached to the route, so it is in this router's own stack — and it is
+     * what `assertMeteredMountsAreGated` proves every route under a `metered`
+     * mount carries one of.
+     */
+    quotaBucket?: string;
 }
 
 /**
@@ -40,7 +49,13 @@ interface RouterLayer {
         path: string | string[];
         methods?: Record<string, boolean>;
         /** The route's own handler chain — its per-route middleware, then the handler. */
-        stack?: { handle?: { isEntitlementGate?: boolean } }[];
+        stack?: {
+            handle?: {
+                isEntitlementGate?: boolean;
+                isQuotaGate?: boolean;
+                quotaBucket?: string;
+            };
+        }[];
     };
     handle?: { stack?: RouterLayer[] };
 }
@@ -85,11 +100,16 @@ export function collectRoutes(router: Router, prefix = ""): RouteInfo[] {
             (handler) => handler.handle?.isEntitlementGate === true
         );
 
+        const quotaBucket = (layer.route.stack ?? []).find(
+            (handler) => handler.handle?.isQuotaGate === true
+        )?.handle?.quotaBucket;
+
         for (const path of [layer.route.path].flat()) {
             routes.push({
                 methods,
                 path: joinPath(prefix, path),
                 ...(requiresEntitlement ? { requiresEntitlement } : {}),
+                ...(quotaBucket ? { quotaBucket } : {}),
             });
         }
     }

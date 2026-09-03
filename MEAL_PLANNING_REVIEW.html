@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fridgeezy — the week, and the fridge that forgets</title>
+<style>
+:root{
+  color-scheme: light;
+  --bg:#FCFAF2;
+  --card:#FFFFFF;
+  --ink:#1B150E;
+  --ink-2:#4A4136;
+  --muted:#847867;
+  --line:#E7DFD0;
+  --line-soft:#F0E9DC;
+  --peach:#E07A45;
+  --peach-soft:#FBEDE3;
+  --ship:#3F7D58;
+  --ship-soft:#E8F2EB;
+  --hold:#B5822A;
+  --hold-soft:#FAF0DC;
+  --skip:#B04A30;
+  --skip-soft:#FAEAE5;
+  --code:#F4EFE4;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1020px;margin:0 auto;padding:48px 28px 100px}
+code,.mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.86em}
+code{background:var(--code);padding:1px 5px;border-radius:4px;color:#5A4B36;white-space:nowrap}
+
+header{border-bottom:2px solid var(--ink);padding-bottom:26px;margin-bottom:38px}
+.kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--peach);font-weight:700;margin-bottom:14px}
+h1{font-size:39px;line-height:1.1;margin:0 0 16px;letter-spacing:-.022em;font-weight:700;max-width:17ch}
+.thesis{font-size:17.5px;line-height:1.55;color:var(--ink-2);max-width:68ch;margin:0}
+.thesis strong{color:var(--ink);font-weight:650;background:linear-gradient(transparent 62%, #FBE3D2 62%)}
+.thesis + .thesis{margin-top:13px}
+
+section{margin:58px 0 0}
+h2{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 6px;display:flex;align-items:center;gap:10px}
+h2::after{content:"";flex:1;height:1px;background:var(--line)}
+.h2sub{font-size:22px;font-weight:660;letter-spacing:-.015em;margin:0 0 10px}
+.lede{font-size:14.6px;line-height:1.62;color:var(--ink-2);max-width:74ch;margin:0 0 22px}
+h3.sub{font-size:15px;font-weight:660;margin:30px 0 10px;letter-spacing:-.008em}
+p.para{font-size:14.3px;line-height:1.62;color:var(--ink-2);max-width:74ch;margin:0 0 12px}
+p.para b{color:var(--ink);font-weight:640}
+
+/* verdict cards for the premise test */
+.verdicts{display:flex;flex-direction:column;gap:12px}
+.vd{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:17px 20px;border-left:3px solid var(--line)}
+.vd.wrong{border-left-color:var(--skip)}
+.vd.right{border-left-color:var(--ship)}
+.vd.part{border-left-color:var(--hold)}
+.vd .vtag{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;padding:2.5px 8px;border-radius:20px;margin-bottom:10px}
+.vd.wrong .vtag{background:var(--skip-soft);color:var(--skip)}
+.vd.right .vtag{background:var(--ship-soft);color:var(--ship)}
+.vd.part .vtag{background:var(--hold-soft);color:var(--hold)}
+.vd .claim{font-size:14px;color:var(--muted);font-style:italic;margin:0 0 10px;line-height:1.5;padding-left:12px;border-left:2px solid var(--line-soft)}
+.vd p{margin:0 0 9px;font-size:13.7px;line-height:1.62;color:var(--ink-2)}
+.vd p:last-child{margin-bottom:0}
+.vd p b{color:var(--ink);font-weight:640}
+
+.callout{margin-top:20px;background:var(--peach-soft);border-left:3px solid var(--peach);border-radius:0 10px 10px 0;padding:15px 18px;font-size:14.3px;line-height:1.62;color:#6B4426}
+.callout b{color:#4C2E17}
+.callout + .callout{margin-top:11px}
+.callout.q{background:var(--ship-soft);border-left-color:var(--ship);color:#2F5F42}
+.callout.q b{color:#22462F}
+
+/* inventory grid */
+.inv{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:11px}
+.iv{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 15px;display:flex;flex-direction:column}
+.iv.dim{background:transparent;border-style:dashed;border-color:#DCD3C2}
+.iv .nm{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11.4px;color:var(--ink);font-weight:600;line-height:1.4;word-break:break-word}
+.iv .what{font-size:12.3px;color:var(--ink-2);margin-top:7px;line-height:1.5}
+.iv .flow{font-size:11px;color:var(--muted);margin-top:9px;padding-top:8px;border-top:1px solid var(--line-soft);line-height:1.5}
+.iv .flow b{color:var(--ink-2);font-weight:640}
+.st{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;padding:2.5px 7px;border-radius:20px;margin-bottom:9px;align-self:flex-start}
+.s-live{background:var(--ship-soft);color:var(--ship)}
+.s-leak{background:var(--hold-soft);color:var(--hold)}
+.s-dark{background:var(--skip-soft);color:var(--skip)}
+.s-idle{background:#EFE9DD;color:#7A6E5C}
+
+/* pipes */
+.pipe{display:flex;align-items:stretch;gap:0;margin:15px 0;flex-wrap:wrap;font-size:11.3px}
+.pipe .node{background:#F4EFE4;border:1px solid #E9E0CE;padding:7px 11px;border-radius:7px;font-family:"SF Mono",ui-monospace,Menlo,monospace;color:#5A4B36;white-space:nowrap;display:flex;align-items:center}
+.pipe .node.ok{background:var(--ship-soft);border-color:#BFD9C9;color:#2F5F42}
+.pipe .node.new{background:var(--peach-soft);border-color:#EFCDB4;color:#8A4A22;font-weight:700}
+.pipe .node.dead{background:var(--skip-soft);border-color:#E5C9C0;color:#8C3A22;text-decoration:line-through;text-decoration-thickness:1.5px}
+.pipe .arrow{display:flex;align-items:center;padding:0 9px;color:var(--muted);font-size:13px}
+.pipe .wall{width:4px;background:repeating-linear-gradient(45deg,#E5C9C0,#E5C9C0 3px,transparent 3px,transparent 6px);border-radius:2px;margin:0 9px}
+
+/* split panes */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pane{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 17px}
+.pane.good{border-color:#BFD9C9;box-shadow:0 0 0 3px rgba(63,125,88,.07)}
+.pane.bad{border-color:#E5C9C0;box-shadow:0 0 0 3px rgba(176,74,48,.05)}
+.pane-t{font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;margin-bottom:12px}
+.pane.bad .pane-t{color:var(--skip)}
+.pane.good .pane-t{color:var(--ship)}
+.pane p{margin:0 0 9px;font-size:13.2px;line-height:1.6;color:var(--ink-2)}
+.pane p:last-child{margin-bottom:0}
+.pane .mono-line{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11.5px;background:var(--code);padding:9px 11px;border-radius:7px;color:#5A4B36;line-height:1.6;margin-bottom:10px;white-space:pre-wrap}
+
+/* bars */
+.bars{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:20px 22px}
+.barrow{display:grid;grid-template-columns:158px 1fr 96px;align-items:center;gap:13px;margin-bottom:9px}
+.barrow .lb{font-size:12.3px;color:var(--ink-2);font-weight:560;text-align:right}
+.bartrack{height:19px;background:#F4EFE4;border-radius:5px;overflow:hidden;display:flex}
+.bartrack i{display:block;height:100%}
+.b-have{background:var(--ship)}
+.b-near{background:repeating-linear-gradient(45deg,var(--peach),var(--peach) 4px,#EB9A6E 4px,#EB9A6E 8px)}
+.b-none{background:#DED5C4}
+.barrow .vl{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11px;color:var(--muted)}
+.barrow .vl b{color:var(--peach);font-weight:700}
+.legend{display:flex;gap:18px;margin-top:15px;padding-top:13px;border-top:1px solid var(--line-soft);font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:7px}
+.legend i{width:13px;height:13px;border-radius:3px;display:block}
+
+/* ladder */
+.ladder{display:flex;flex-direction:column}
+.rung{background:var(--card);border:1px solid var(--line);padding:15px 18px;display:grid;grid-template-columns:34px 1fr 168px;gap:16px;align-items:center}
+.rung:first-child{border-radius:12px 12px 0 0}
+.rung:last-child{border-radius:0 0 12px 12px}
+.rung + .rung{border-top:none}
+.rung.newwork{border-left:3px solid var(--peach);background:#FFFBF7}
+.rung.cheap{border-left:3px solid var(--ship)}
+.rung .num{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:18px;font-weight:700;color:var(--line);text-align:center}
+.rung.cheap .num{color:#A9CBB6}
+.rung.newwork .num{color:#EFB894}
+.rung .desc{font-size:13.4px;line-height:1.52;color:var(--ink-2)}
+.rung .desc b{color:var(--ink);font-weight:640;display:block;margin-bottom:3px;font-size:14px}
+.rung .cost{font-size:11px;font-family:"SF Mono",ui-monospace,Menlo,monospace;color:var(--muted);line-height:1.5;text-align:right}
+.rung .cost b{display:block;font-weight:700;margin-bottom:2px}
+.rung.cheap .cost b{color:var(--ship)}
+.rung.newwork .cost b{color:var(--peach)}
+
+/* table */
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13px}
+th{background:#F7F2E7;text-align:left;padding:11px 14px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:800;border-bottom:1px solid var(--line)}
+td{padding:11px 14px;border-bottom:1px solid var(--line-soft);color:var(--ink-2);line-height:1.5;vertical-align:top}
+tr:last-child td{border-bottom:none}
+td b{color:var(--ink);font-weight:640}
+td.y{color:var(--ship);font-weight:700}
+td.n{color:var(--skip);font-weight:700}
+td.p{color:var(--hold);font-weight:700}
+
+/* week strip */
+.week{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:16px 0}
+.day{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 11px;min-height:96px;display:flex;flex-direction:column}
+.day .dl{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:800;margin-bottom:8px}
+.day .dish{font-size:12.4px;color:var(--ink);font-weight:600;line-height:1.35;margin-bottom:6px}
+.day .tagn{font-size:10.5px;color:var(--muted);margin-top:auto;line-height:1.4}
+.day.swap{border-color:#EFCDB4;background:#FFFBF7}
+.day.swap .dl{color:var(--peach)}
+
+.foot{margin-top:64px;padding-top:22px;border-top:1px solid var(--line);font-size:12.3px;color:var(--muted);line-height:1.7}
+.foot b{color:var(--ink-2)}
+@media (max-width:760px){
+  .split{grid-template-columns:1fr}
+  .week{grid-template-columns:repeat(2,1fr)}
+  .rung{grid-template-columns:28px 1fr;gap:12px}
+  .rung .cost{grid-column:2;text-align:left}
+  h1{font-size:31px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Feasibility · 2 September 2026 · no code written</div>
+  <h1>The week, and the fridge that forgets</h1>
+  <p class="thesis">Three of the premises behind the question are worth testing before costing anything. Two of them are <strong>wrong in your favour</strong>, and the third is right in a way that is worse than stated.</p>
+  <p class="thesis">The short version: <strong>the weekly shopping list already exists and already works</strong>. The week is a cheap annotation on tables you have. The expensive half is the fridge — and not for the reason you would expect. It is expensive because every retrieval path in this database is a <strong>conjunctive filter</strong>, and a fridge is a ranking input. That mismatch is the whole cost.</p>
+</header>
+
+<!-- ============================ PREMISES ============================ -->
+<section>
+  <h2>Premises</h2>
+  <div class="h2sub">What I checked, and what turned out to be true</div>
+  <p class="lede">You asked for corrections over agreement. Here are three, in order of how much they change the estimate.</p>
+
+  <div class="verdicts">
+
+    <div class="vd wrong">
+      <div class="vtag">Wrong — and this is the big one</div>
+      <p class="claim">“Shopping lists hold text rather than ingredient ids, which is a problem for aggregating a week.”</p>
+      <p>There are no shopping-list <em>items</em> at all. I grepped the whole migration set: no <code>shopping_list_items</code>, no line table, nothing. A <code>shopping_lists</code> row is <code>(profile_id, recipe_id, name, menu_main_recipe_id, menu_title)</code> — <b>a list is a set of recipe references</b>, and the lines are derived at read time by joining <code>recipe_ingredients</code>.</p>
+      <p>Which means the merge is already keyed on ingredient identity. <code>mergeMenuIngredients</code> in the client keys its map on <code>ingredient.id</code>, with the comment <em>“the ingredient's own id, so one line stands for every dish that wants it.”</em> There is no text matching anywhere in the path.</p>
+      <p><b>The aggregation you were about to spec is already shipped.</b> <code>EverythingToBuyScreen</code> merges every recipe on every list into one shop: deduplicated by ingredient id, grouped by aisle from <code>ingredients.category</code>, scaled per-recipe by servings target, ticked by <code>recipe_ingredients</code> row id so one tick clears the item in every dish that wants it, and usable offline. It does not care whether the recipes behind it are three courses of one meal or twelve dishes across seven days.</p>
+    </div>
+
+    <div class="vd part">
+      <div class="vtag">Partly wrong — there is already a persistent memory</div>
+      <p class="claim">“The app holds no state between sessions — every open is a cold start where the user re-tells it what they have.”</p>
+      <p>True of the basket, false of the app. There are deliberately <b>two</b> ingredient stores. <code>useIngredientStore</code> is the basket — in memory, cleared on home focus, and the comment says that is correct and must stay. <code>useRecentIngredientsStore</code> is <b>persisted to disk</b>, capped at 12, described as <em>“the ingredients this user actually reaches for, across sessions… the only thing in the picker that knows you have been here before.”</em></p>
+      <p>And it already draws the exact distinction the forgiving fridge needs. It refuses to record camera scans, because a scan writes eight items at once and would evict the list — <em>“an inventory of what is in the fridge today, not what this cook keeps buying.”</em> Somebody has already thought about staples-versus-today and picked the staples half.</p>
+      <p>Two real gaps, though: it is <b>device-local AsyncStorage</b>, not per-profile, so it does not survive a reinstall or reach a second device; and it is capped at 12 by design. It is a memory of habits, not an inventory.</p>
+    </div>
+
+    <div class="vd right">
+      <div class="vtag">Right — and worse than you said</div>
+      <p class="claim">“Menus are courses within a single meal, not meals across days, so there is no concept of a week.”</p>
+      <p>Correct, and I found no date anywhere: no <code>planned_for</code>, <code>plan_date</code>, <code>day_of_week</code>, <code>scheduled_for</code> or <code>week_start</code> column in any of the 84 migrations. The course vocabulary is closed at three — <code>MENU_COURSE_SLOTS = ["appetizer", "side", "dessert"]</code> — plus the main.</p>
+      <p>But the model does not merely fail to stretch. <b>It actively fights a week</b>, for a reason that would not show up until you shipped it: since <code>20260821000001</code>, <code>menus</code> is <b>shared community content</b>, unique on <code>(main_recipe_id, dish_signature)</code>. Two people who compose the same dishes get <em>one row</em>. Model a week as a menu and two users who plan the same five dinners silently share a plan — and unowned menus surface on the home feed and in the community sheet.</p>
+      <p>Two more structural refusals. A menu <em>has a main</em>; a week does not. And <code>saved_menus</code> is unique on <code>(profile_id, main_recipe_id)</code>, so a profile could hold exactly one plan per main dish, forever.</p>
+    </div>
+
+  </div>
+
+  <div class="callout"><b>Net effect on the estimate.</b> The week gets cheaper than you assumed and the fridge gets dearer. If you were budgeting the plan as the big build and the fridge as a bolt-on, that is inverted.</div>
+</section>
+
+<!-- ============================ PANTRY ============================ -->
+<section>
+  <h2>Exhibit A</h2>
+  <div class="h2sub">What happened to <code>pantry_items</code>, and whether the reason still applies</div>
+  <p class="lede">It was not dropped on a design objection. The drop migration says so in one line.</p>
+
+  <div class="pane bad" style="margin-bottom:18px">
+    <div class="pane-t">20260727000007_drop_pantry_items.sql</div>
+    <div class="mono-line">-- Remove the pantry_items feature (unused by client and backend).
+delete from cron.job where jobname = 'delete-expired-pantry-items';
+drop table if exists pantry_items cascade;</div>
+    <p>The stated reason is <b>disuse</b>, not that inventory is a bad idea. That reason does not survive the feature being used. It is not a precedent against you.</p>
+  </div>
+
+  <p class="para">What was there was more complete than the drop suggests. <code>pantry_items</code> was keyed <code>(profile_id, ingredient_id)</code> unique — <b>ingredient ids, not text</b> — with <code>quantity</code>, a <code>unit_id</code> FK, and <code>expires_at</code>. A <code>before insert or update</code> trigger computed the expiry from the ingredient's own shelf life. A <code>delete_expired_pantry_items()</code> function and a nightly <code>pg_cron</code> job at midnight UTC swept it.</p>
+
+  <h3 class="sub">The substrate survived the consolidation</h3>
+  <p class="para">This is the part worth knowing. The 111-migration rewrite in <code>ac88a47</code> dropped the table but <b>kept the columns it read from</b>. Still in <code>20260801000005_ingredients.sql</code> today:</p>
+
+  <div class="inv">
+    <div class="iv"><span class="st s-live">present · empty</span><div class="nm">ingredients.expires_by_default</div><div class="what">boolean not null default false</div><div class="flow"><b>Guarded</b> by a check constraint pairing it with the days column</div></div>
+    <div class="iv"><span class="st s-live">present · empty</span><div class="nm">ingredients.default_shelf_life_days</div><div class="what">integer, must be &gt; 0 when the flag is true</div><div class="flow"><b>Never written</b> — the seed does not populate it</div></div>
+    <div class="iv"><span class="st s-live">present · populated</span><div class="nm">ingredients.shelf_life</div><div class="what">Free text: “1 week refrigerated”, “2-3 years”</div><div class="flow"><b>384 of 466</b> seed rows carry one</div></div>
+    <div class="iv"><span class="st s-live">present · populated</span><div class="nm">ingredients.storage_tips</div><div class="what">“Keep dry”, “Refrigerate after opening”</div><div class="flow">Useful copy for a decayed item's explanation</div></div>
+  </div>
+
+  <p class="para" style="margin-top:20px">So the decay model has a home already built, and the numeric half is unpopulated only because <code>seed-ingredients.ts</code> writes the text and skips the numbers. I measured how far apart those two are:</p>
+
+  <div class="bars">
+    <div class="barrow">
+      <div class="lb">Shelf-life text present</div>
+      <div class="bartrack"><i class="b-have" style="width:82.4%"></i><i class="b-none" style="width:17.6%"></i></div>
+      <div class="vl"><b>384</b> / 466</div>
+    </div>
+    <div class="barrow">
+      <div class="lb">Parses with one regex</div>
+      <div class="bartrack"><i class="b-have" style="width:95.8%"></i><i class="b-near" style="width:4.2%"></i></div>
+      <div class="vl"><b>368</b> / 384</div>
+    </div>
+    <div class="barrow">
+      <div class="lb">Remainder</div>
+      <div class="bartrack"><i class="b-near" style="width:100%"></i></div>
+      <div class="vl">16 rows</div>
+    </div>
+    <div class="legend">
+      <span><i class="b-have"></i> Deterministic</span>
+      <span><i class="b-near"></i> Needs a rule, not a model</span>
+      <span><i class="b-none"></i> Absent</span>
+    </div>
+  </div>
+
+  <p class="para" style="margin-top:18px">The 16 that do not parse are dominated by the literal string <b>“Indefinite”</b>, which maps cleanly onto <code>expires_by_default = false</code> — the exact case the original trigger was written to handle (“like water, salt”). A handful of “Several months refrigerated” need a judgement call.</p>
+
+  <div class="callout q"><b>So the shelf-life backfill is a deterministic script.</b> No LLM, no spend, no calibration, lives in <code>operations/</code> beside <code>merge-spelling-variants</code>. It is the cheapest item in this entire document and it unblocks everything fridge-shaped. Do it first regardless of what you decide about the week.</div>
+
+  <div class="callout"><b>One loose end, already logged.</b> <code>TODOS.md</code> §6 says <code>pantry_items</code> <em>still exists in the live database</em> despite the drop being recorded as applied — the ledger and the database disagree. Worth resolving before you write a new table with that name, or the migration will land on a table that is already there.</div>
+</section>
+
+<!-- ============================ THE WALL ============================ -->
+<section>
+  <h2>The wall</h2>
+  <div class="h2sub">Every retrieval path is a conjunctive filter, and a fridge is a ranking input</div>
+  <p class="lede">This is the real obstacle, and it is not where you were looking. It is not that the fridge is hard to store. It is that nothing here can consume one.</p>
+
+  <p class="para">The ingredient filter in <code>find_recipes</code> is <b>AND-all</b>:</p>
+
+  <div class="pane bad">
+    <div class="pane-t">20260823000001_find_recipes_totals_facets.sql — line 140</div>
+    <div class="mono-line">(select count(distinct ri.ingredient_id)
+   from recipe_ingredients ri
+  where ri.ingredient_id = any (ingredients))
+= array_length(ingredients, 1)</div>
+    <p>A recipe qualifies only if it contains <b>every</b> ingredient passed in. <code>find_near_miss_recipes</code> uses the identical clause at line 285. So does the suggestion half of the same function at line 334.</p>
+  </div>
+
+  <p class="para" style="margin-top:18px">Point a fridge at that and it inverts: <b>the more complete the inventory, the fewer results</b>. Ten items returns almost nothing. Thirty returns zero, always. The failure mode is an empty feed that reads as a broken catalogue, and it gets worse precisely as the user invests more in the feature.</p>
+
+  <p class="para">This is not a hypothetical. The repo already measured this exact trapdoor from the other direction. From <code>20260830000002_ingredient_use_count.sql</code>: picking any of the eight unused tomato rows <em>“empties the result outright: Gazpacho, which lists plain Tomato, is unreachable from a search for tomatoes”</em> — and of 1041 ingredients, only ~345 are referenced by anything, so <em>“two thirds of the picker is a trapdoor.”</em> That migration sorted the picker to route around the hole. It did not close it.</p>
+
+  <div class="split" style="margin-top:20px">
+    <div class="pane bad">
+      <div class="pane-t">What exists — filter</div>
+      <p><code>ingredients uuid[]</code> → dish must contain all of them.</p>
+      <p>Correct for the picker, where the user names two or three things deliberately and means “both”.</p>
+      <p>Catastrophic for a fridge, where the list is long, passive, and partly wrong.</p>
+    </div>
+    <div class="pane good">
+      <div class="pane-t">What a fridge needs — score</div>
+      <p><code>p_pantry uuid[]</code> → order by overlap, coverage, and how few items are missing.</p>
+      <p>Nothing is excluded. A dish needing one thing you lack still appears, ranked lower, with the gap named.</p>
+      <p>Which is exactly the shape <code>find_near_miss_recipes</code> already returns for diets.</p>
+    </div>
+  </div>
+
+  <div class="callout"><b>Do not overload the existing parameter.</b> Its AND-all semantics are relied on by the fridge picker and the search screen's entity strip. A pantry score is a second, additive parameter, or a sibling function. Widening <code>ingredients</code> in place would silently change what every existing filter means.</div>
+
+  <div class="callout q"><b>The consolation is that this work pays for itself twice.</b> An overlap-ranking path is the fix for the documented picker trapdoor as well as the precondition for the fridge. Even if you shelved the whole planner, this is a defensible piece of work on its own — which makes it the safest expensive thing on the list.</div>
+</section>
+
+<!-- ============================ THE FRIDGE ============================ -->
+<section>
+  <h2>The forgiving fridge</h2>
+  <div class="h2sub">Taking it as a constraint, not a feature</div>
+  <p class="lede">Your framing is right and the codebase already agrees with it in two places. The question is what it costs.</p>
+
+  <p class="para">The design you described — infer from shopping and cooking, decay by shelf life, resync wholesale by photo, rank rather than filter — has a near-exact precedent here in <code>profile_taste_signals</code>: observed rather than declared, counted rather than logged, thresholded before it is acted on, written fire-and-forget through <code>trackBackgroundTask</code> so it never sits between the user and their first token. That is the contract a fridge writer should copy verbatim. It is proven and it is in this repo.</p>
+
+  <p class="para">Taking your four properties in turn:</p>
+
+  <table>
+    <thead><tr><th style="width:23%">Property</th><th style="width:11%">Buildable</th><th>What it rests on, and where it gets expensive</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Infer from what was shopped</b></td>
+        <td class="p">Partly</td>
+        <td>The tick store is the obvious signal and it is <b>ambiguous by construction</b>. <code>useIngredientCheckStore</code> was deliberately merged from two stores — <code>SHOPPING_CHECK_STORE</code> and <code>COOK_CHECKLIST_STORE</code> — so one tick means “bought” <em>or</em> “measured out” and nothing distinguishes them. It is also device-local AsyncStorage, never sent to the server. Adding a shopped signal means either splitting that store again or inferring from the surface the tick happened on.</td>
+      </tr>
+      <tr>
+        <td><b>Infer from what was cooked</b></td>
+        <td class="n">New</td>
+        <td>Cooking is not recorded anywhere. Finishing a cook currently <em>deletes</em> the recipe's shopping list (<code>steps-finish.tsx</code>) — which is the closest thing to a consumption event in the app, and it is thrown away rather than emitted. The cheap version is to write a signal at that exact call site, where the intent is already unambiguous.</td>
+      </tr>
+      <tr>
+        <td><b>Decay by shelf life</b></td>
+        <td class="y">Cheap</td>
+        <td>The columns exist and the backfill is a regex over 384 strings. The one thing to <b>change</b> from the old design: the original deleted expired rows nightly by cron. Decay to <em>low confidence</em>, never to absent — a deleted onion and an onion you are unsure about are different states, and only one of them can be shown to the user for correction.</td>
+      </tr>
+      <tr>
+        <td><b>Resync by fridge photo</b></td>
+        <td class="y">Mostly there</td>
+        <td><code>POST /rest/ingredients/extract</code> already returns <b>catalogue ingredient ids</b> with a <code>matchType</code> of <code>exact_name | alias | vector | created</code>. One call replaces the inventory wholesale. Two honest gaps: confidence is reported <em>per response</em>, not per item, so you cannot tell which of twelve items was the shaky one; and there are no quantities at all — it answers “what”, never “how much”.</td>
+      </tr>
+      <tr>
+        <td><b>Rank, don't filter</b></td>
+        <td class="n">New</td>
+        <td>The wall above. This is the single largest piece of genuinely new work in the whole direction.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout"><b>One risk that a planner amplifies.</b> <code>CLAUDE.md</code> is explicit that an unclassified ingredient makes its dish UNKNOWN for dietary purposes and silently withdraws it from every dietary filter and from <code>recipe_display_tags</code>, with nothing to report it. Today that costs one missing card. In a week plan it costs a <em>slot</em>, and the user sees a plan that quietly refuses to include anything they can eat on Thursday. Same for the ingredient-identity split (<code>brussels_sprout</code> vs <code>brussel_sprout</code>) — a fridge item on the losing side of a split simply never matches. Both are existing, known, logged issues; the planner is what makes them visible.</div>
+</section>
+
+<!-- ============================ THE WEEK ============================ -->
+<section>
+  <h2>The week</h2>
+  <div class="h2sub">The smallest honest version, and why it is not a menu</div>
+  <p class="lede">Given that menus are shared, deduplicated, main-anchored community rows, a plan must not be one. The good news is that the right model is already demonstrated in this schema.</p>
+
+  <p class="para">The precedent is <code>20260819000001_shopping_list_menu_group.sql</code>, and its header argues the case better than I can: it added <code>menu_main_recipe_id</code> and <code>menu_title</code> as columns on rows that already existed rather than creating a <code>shopping_list_groups</code> table — <em>“zero new rows for a feature that is, from the database's point of view, a GROUP BY.”</em></p>
+
+  <p class="para"><b>A week is the same move, one level up.</b> A plan is an annotation grouping shopping-list rows, not a new entity that owns them:</p>
+
+  <div class="pipe">
+    <div class="node ok">recipes</div><div class="arrow">←</div>
+    <div class="node ok">shopping_lists</div>
+    <div class="arrow">+</div>
+    <div class="node new">plan_id</div>
+    <div class="arrow">+</div>
+    <div class="node new">plan_slot</div>
+    <div class="arrow">→</div>
+    <div class="node ok">mergeMenuIngredients()</div>
+    <div class="arrow">→</div>
+    <div class="node ok">Everything to Buy</div>
+  </div>
+
+  <p class="para">Everything green there is shipped. The two orange columns are the entire schema change for a first version, and they mirror a migration you have already written once and were happy with.</p>
+
+  <h3 class="sub">Slots, not dates</h3>
+  <p class="para">I would not put a date on it in v1, and this is the deviation argument rather than a shortcut. <b>A calendar creates the failure it is meant to prevent.</b> Cook Thursday's dish on Tuesday and a dated plan is now wrong in two places and needs reconciling; an ordered set of five dishes does not notice, because nothing asserted which day anything belonged to. <code>plan_slot</code> as a position gives you ordering for display and costs nothing when reality disagrees.</p>
+
+  <div class="week">
+    <div class="day"><div class="dl">1</div><div class="dish">Ragù alla Bolognese</div><div class="tagn">shares onion, carrot</div></div>
+    <div class="day"><div class="dl">2</div><div class="dish">Gazpacho</div><div class="tagn">shares tomato</div></div>
+    <div class="day swap"><div class="dl">3 · swapped</div><div class="dish">Tortilla Española</div><div class="tagn">was Ribollita</div></div>
+    <div class="day"><div class="dl">4</div><div class="dish">Dal Tadka</div><div class="tagn">pantry only</div></div>
+    <div class="day"><div class="dl">5</div><div class="dish">Roast Chicken</div><div class="tagn">→ stock, day 6</div></div>
+  </div>
+
+  <h3 class="sub">Deviation is free, by construction</h3>
+  <p class="para">This falls out of the model rather than needing to be designed. A plan is a set of references; a <code>shopping_lists</code> row is already independently deletable and the client already handles removing one. Swapping day 3 is a delete and an insert. Nothing cascades, nothing is invalidated, and there is <b>no adherence state to be wrong about</b> — which is the property you wanted, arrived at by not building the thing that would have broken it.</p>
+
+  <p class="para">One consequence to accept deliberately: if a plan is only an annotation, then <b>deleting the last dish deletes the plan</b>. That is correct. A plan with nothing in it is not a plan the user is failing at, it is a plan they abandoned, and keeping the husk around to report emptiness is how planners start nagging.</p>
+
+  <h3 class="sub">The one thing that genuinely degrades at weekly scale</h3>
+  <p class="para">Amounts are listed per dish, never summed. That is a deliberate decision with a good argument behind it — <em>“Two dishes wanting 200 ml cream and 1 tbsp cream have no common unit to add in, and a total that silently drops one of them is worse than two lines.”</em> At three courses, <code>400 ml + 1 tbsp</code> is genuinely the honest answer.</p>
+
+  <div class="split">
+    <div class="pane good">
+      <div class="pane-t">Three courses — reads well</div>
+      <div class="mono-line">Cream        200 ml + 1 tbsp
+Onion        1 + 2</div>
+      <p>Two contributions, both legible at a glance. You can hold this in your head at the counter.</p>
+    </div>
+    <div class="pane bad">
+      <div class="pane-t">Twelve dishes — falls over</div>
+      <div class="mono-line">Onion    1 + 2 + 1 + 1 + 2 + 1 + 3
+Olive oil  2 tbsp + 1 tbsp + 60 ml
+            + 1 tbsp + 2 tbsp</div>
+      <p>The rule that was honest at three is unreadable at twelve. This is the one place the existing code needs real work for a week rather than a parameter.</p>
+    </div>
+  </div>
+
+  <p class="para" style="margin-top:16px">The fix is narrow and does not overturn the decision: <b>sum within a unit family, list across families</b>. <code>g/kg</code> and <code>ml/l</code> collapse; <code>2 tbsp + 60 ml</code> stays two terms, because that is still the honest answer. Countables collapse to a number. The <code>units</code> table exists and the client already has <code>formatScaledAmount</code> as the single place an amount becomes text, so this lands in one function with the existing rule intact as the fallback.</p>
+</section>
+
+<!-- ============================ SUBSCRIPTION ============================ -->
+<section>
+  <h2>Opinion</h2>
+  <div class="h2sub">Is this a better anchor than compose?</div>
+  <p class="lede">Yes — and the repo has already written down why compose failed, in enough detail that you do not have to take my word for it.</p>
+
+  <p class="para">From <code>core/access/constants/features.ts</code>, on <code>compose</code>: it <em>“was the only paid entry here until 2026-08-26, which was the problem: a subscription that unlocks one surface, several taps deep, is not one anybody reaches.”</em> That is your own diagnosis, dated, and it generalises to exactly the argument you are making — recurrence beats occasion.</p>
+
+  <p class="para">How the tiers sit today, and where a planner would land:</p>
+
+  <table>
+    <thead><tr><th style="width:20%">Tier</th><th style="width:26%">Holds today</th><th>Where a planner belongs</th></tr></thead>
+    <tbody>
+      <tr><td><b>guest</b></td><td>Browse; <code>personalize</code> — moved here <b>today</b>, 2026-09-02</td><td>Seeing that planning exists. Nothing more.</td></tr>
+      <tr><td><b>account</b></td><td><code>save</code> — favourites, collections, <b>shopping lists</b>, saved menus</td><td><b>The plan itself and its list.</b> This is the user's own data and it is already free at this tier. Do not move it.</td></tr>
+      <tr><td><b>subscription</b></td><td>Every model call — <code>generate</code>, <code>suggest</code>, <code>chat</code>, <code>extract</code>, <code>compose</code>, <code>import</code>…</td><td><b>Filling the plan for you.</b> The selection, the ranking, the fridge photo. Anything that runs a model.</td></tr>
+    </tbody>
+  </table>
+
+  <p class="para" style="margin-top:18px">That split is not a compromise, it is the honest line and it matches the existing rule (“if a model runs, it is paid”) without amendment. It also gives the paywall the placement the file says converts: it lands on somebody who has already assembled part of a week by hand and is being offered the rest.</p>
+
+  <div class="callout"><b>The cost caveat, which is real.</b> <code>shopping_lists.recipe_id</code> is a foreign key to <code>recipes</code>, so <b>only generated recipes can go on a list</b> — a suggestion cannot. You already hit this with menus and solved it with <code>usePendingShoppingListStore</code> (“add this course too, once it exists”), which is directly reusable. But it means a five-dish plan of catalogue suggestions is <b>five promote calls</b> before the shopping list is complete. Compose is occasional; a week recurs — which is the whole argument for it as an anchor and simultaneously the whole risk. Price it against someone planning five dishes every week, not against someone composing a dinner party twice a year.</p></div>
+
+  <div class="callout q"><b>Which is an argument for catalogue-first planning, not just a cost note.</b> A plan assembled from <code>find_recipes</code> hits costs nothing to fill, because those recipes already exist. Generation is the fallback for slots the catalogue cannot fill. That is better product <em>and</em> cheaper, and it is the same instinct as compose's retrieval-before-generation, which turned a multi-second paid stream into ~40 ms.</div>
+</section>
+
+<!-- ============================ COLD START ============================ -->
+<section>
+  <h2>Cold start</h2>
+  <div class="h2sub">The honest first week</div>
+  <p class="lede">A new user has no fridge, no history, no cooked dishes, and no saved meals. That is the state every user is in exactly once, and it is the state the feature is most likely to be judged in.</p>
+
+  <p class="para">What they <em>do</em> have on day one is more than it sounds: a catalogue with dietary filtering, difficulty preference, cuisine and <code>total_time_minutes</code> banded into quick/moderate/long; the near-miss tier; and the onboarding answers, which as of today are <code>guest</code>-tier and so are available before anyone signs in.</p>
+
+  <p class="para">So the honest first-week plan is a <b>catalogue plan</b> — five real dishes that fit the diet, the skill level and the weeknight time band, chosen partly for what they share so the shopping list is short. Notably that needs <em>no</em> fridge and <em>no</em> history. The overlap ranking it wants is the same function the fridge needs, just seeded from the plan's own dishes instead of an inventory.</p>
+
+  <p class="para">The fridge photo is the right first-run invitation because it is this app's signature interaction and it converts an empty inventory into a full one in a single tap. But it is <code>extract</code>, which is <code>subscription</code>-tier — so on day one, for a non-payer, it is a paywall. That is defensible, but it means <b>the free cold start must be genuinely good without it</b>, and the catalogue plan above is what has to carry that.</p>
+
+  <div class="callout"><b>The failure to avoid.</b> The <code>personalize</code> reversal earlier today put the argument well: <em>“Gates convert in proportion to the investment already made, and this one fires before any exists.”</em> A planner that asks a first-run user to fill a fridge before it will show them anything fires exactly that gate. The plan should exist and be useful before the fridge does — which the ordering below reflects.</div>
+</section>
+
+<!-- ============================ ORDER ============================ -->
+<section>
+  <h2>Build order</h2>
+  <div class="h2sub">Cheapest first, and the two that are genuinely new</div>
+
+  <div class="ladder">
+    <div class="rung cheap">
+      <div class="num">1</div>
+      <div class="desc"><b>Backfill the shelf-life numbers</b>Regex over <code>ingredients.shelf_life</code> into <code>expires_by_default</code> / <code>default_shelf_life_days</code>. 368 of 384 parse; “Indefinite” → false. A dry-run script in <code>operations/</code>, same shape as <code>merge-spelling-variants</code>.</div>
+      <div class="cost"><b>Cheap</b>no LLM · no spend<br>columns already exist</div>
+    </div>
+    <div class="rung cheap">
+      <div class="num">2</div>
+      <div class="desc"><b>Plan as an annotation on <code>shopping_lists</code></b><code>plan_id</code> + <code>plan_slot</code> + a title snapshot, mirroring <code>20260819000001</code> exactly. Not a menu, for the three structural reasons above.</div>
+      <div class="cost"><b>Cheap</b>one migration<br>precedent to copy</div>
+    </div>
+    <div class="rung cheap">
+      <div class="num">3</div>
+      <div class="desc"><b>Scope “Everything to Buy” to a plan</b>The screen, the merge, the aisle grouping, the ticks and the offline behaviour all exist. This is a filter parameter on <code>useEverythingToBuy</code>.</div>
+      <div class="cost"><b>Cheap</b>already built<br>needs a predicate</div>
+    </div>
+    <div class="rung cheap">
+      <div class="num">4</div>
+      <div class="desc"><b>Sum amounts within a unit family</b>The one thing that genuinely degrades from three dishes to twelve. Collapse <code>g/kg</code>, <code>ml/l</code> and countables; keep the existing “+” across families.</div>
+      <div class="cost"><b>Small</b>one function<br><code>units</code> table exists</div>
+    </div>
+    <div class="rung newwork">
+      <div class="num">5</div>
+      <div class="desc"><b>Overlap ranking</b>A scoring path beside the AND-all filter — order by coverage and count what is missing. <b>The largest new piece, and the one everything else rests on.</b> Independently fixes the documented picker trapdoor, so it is defensible even if the planner stops here.</div>
+      <div class="cost"><b>New</b>new SQL function<br>needs measuring</div>
+    </div>
+    <div class="rung newwork">
+      <div class="num">6</div>
+      <div class="desc"><b>The fridge, with confidence</b><code>pantry_items</code> restored roughly as it was, plus <code>source</code> (shopped · cooked · scanned · declared) and a decayed confidence. <b>Decay to low, never delete</b> — drop the nightly cron. Wholesale resync from <code>/ingredients/extract</code>.</div>
+      <div class="cost"><b>Moderate</b>prior art to copy<br>endpoint exists</div>
+    </div>
+    <div class="rung newwork">
+      <div class="num">7</div>
+      <div class="desc"><b>A consumption signal</b>Emit at cook-finish, where intent is unambiguous, rather than trying to disambiguate the merged tick store. Fire-and-forget on the <code>recordTasteSignal</code> contract.</div>
+      <div class="cost"><b>Moderate</b>call site exists<br>signal does not</div>
+    </div>
+    <div class="rung newwork">
+      <div class="num">8</div>
+      <div class="desc"><b>Paid plan generation</b>Pick five dishes that fit the diet and the time band <em>and</em> share ingredients. Catalogue-first, generation only for slots retrieval cannot fill. This is the subscription product.</div>
+      <div class="cost"><b>New</b>genuinely novel<br>selection problem</div>
+    </div>
+  </div>
+
+  <div class="callout" style="margin-top:24px"><b>Smallest shippable slice: 2 + 3.</b> A named, ordered set of dishes with one aggregated shopping list behind it. No fridge, no dates, no generation, no ranking, no new screens beyond a plan header. That is a real week, built almost entirely from code that is already written and already works offline — and it is enough to find out whether anyone plans a week in this app before you pay for items 5 through 8.</div>
+</section>
+
+<!-- ============================ VERDICT ============================ -->
+<section>
+  <h2>Verdict</h2>
+  <div class="h2sub">Is the direction wrong for this app?</div>
+  <p class="lede">No. But the shape of the bet is different from the one implied by the question, in two ways worth stating plainly.</p>
+
+  <p class="para"><b>The week is nearly free and the fridge is the product.</b> You have an ingredient-id-keyed, aisle-grouped, servings-scaled, offline-capable aggregated shopping list that already merges an arbitrary number of recipes. The planner is a label on top of it. If the value is “one shopping list for the week”, you are two columns and a filter away, and you should find that out in a fortnight rather than a quarter.</p>
+
+  <p class="para"><b>The fridge's cost is in retrieval, not storage.</b> Everyone assumes pantry inventory is expensive because maintaining it is a UX problem — and your forgiving design is the right answer to that, and it is buildable, with the decay substrate already in the schema and the observed-signal pattern already proven in <code>profile_taste_signals</code>. The cost is elsewhere: this database can filter by ingredient and cannot rank by ingredient, and every existing path assumes the former. That is real work, it is unavoidable, and it is the thing to scope carefully.</p>
+
+  <p class="para">The one caution I would hold onto: a plan is a promise about the future, and this app has been careful — in the slot ledger, in <code>onAdmit</code>, in withdrawing nothing that was never announced — not to show the user anything it cannot keep. A weekly plan is the largest promise the product would have made. The forgiving fridge and the undated slot are both ways of making it a smaller one, which is why they are the right instincts, and why I would build the version that promises least first.</p>
+</section>
+
+<div class="foot">
+  <b>Sources.</b> Backend at <code>/Users/steve/WebstormProjects/fridgeezy-backend</code> @ <code>78d27f3</code>; client at <code>/Users/steve/Projects/fridgeezy</code>. Pantry history recovered from <code>03f65ec</code>, <code>ac88a47</code> and the pre-consolidation tree at <code>5759eaa</code>. Shelf-life figures measured over the 466 rows in <code>operations/data/ingredient-seed.json</code>. Filter semantics read from <code>20260823000001</code> line 140 and <code>20260830000001</code> line 285. Aggregation behaviour read from <code>collect-menu-ingredients.ts</code>, <code>use-everything-to-buy.ts</code> and <code>use-ingredient-check-store.ts</code>. Tiering from <code>core/access/constants/features.ts</code>. <b>No code was written and nothing was run against a database.</b>
+</div>
+
+</div>
+</body>
+</html>

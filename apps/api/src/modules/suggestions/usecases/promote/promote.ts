@@ -12,6 +12,7 @@ import { RecipesRepository, SuggestionsRepository } from "@fridgeezy/supabase";
 import { Request } from "express";
 
 import { trackBackgroundTask } from "../../../../background-tasks";
+import { waiveQuota } from "../../../../middleware/require-quota";
 import {
     adaptRecipeForBlacklist,
     compileBlacklist,
@@ -249,6 +250,13 @@ export const promoteSuggestion = createStreamHandler({
                 console.log(
                     `Suggestion ${id} was already promoted to recipe ${decision.serve}`
                 );
+
+                // No model runs on this path — the recipe already existed, and a
+                // client that dropped out mid-stream is asking for it a second
+                // time. Charging a quota for it is the single thing that would
+                // make the allowance feel dishonest, and it is invisible to the
+                // middleware: only this branch knows it took the shortcut.
+                waiveQuota(req);
 
                 return {
                     type: "stream" as const,

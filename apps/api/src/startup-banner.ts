@@ -69,14 +69,20 @@ function describeEntitlement(routes: RouteInfo[]): string {
     // on `requireEntitlement`. Zero is worth shouting about while any route is
     // meant to be paid.
     const premium = routes.filter((route) => route.requiresEntitlement).length;
-    const scope = `${premium} premium route${premium === 1 ? "" : "s"}`;
+    // Metered routes are counted separately because they are a different claim:
+    // a premium route is closed to a free account, a metered one is open to it N
+    // times. A drop in either number between boots means a gate came off.
+    const metered = routes.filter((route) => route.quotaBucket).length;
+    const scope =
+        `${premium} premium route${premium === 1 ? "" : "s"}` +
+        (metered > 0 ? `, ${metered} metered` : "");
 
     if (!isEntitlementRequired()) {
         return `⚠ NOT ENFORCED — ${scope} open to every signed-in user (REQUIRE_ENTITLEMENT unset)`;
     }
 
-    if (premium === 0) {
-        return "⚠ enforced, but NO route carries requireEntitlement — nothing is actually paid";
+    if (premium === 0 && metered === 0) {
+        return "⚠ enforced, but NO route carries requireEntitlement or requireQuota — nothing is paid or metered";
     }
 
     return process.env.REVENUECAT_WEBHOOK_SECRET
@@ -109,7 +115,9 @@ function formatRoutes(routes: RouteInfo[]): string[] {
             ? "  ← open"
             : route.requiresEntitlement
               ? "  ← premium"
-              : "";
+              : route.quotaBucket
+                ? `  ← metered (${route.quotaBucket})`
+                : "";
         const path = mark ? route.path.padEnd(pathWidth) : route.path;
 
         return `  ${method(route).padEnd(width)}  ${path}${mark}`;

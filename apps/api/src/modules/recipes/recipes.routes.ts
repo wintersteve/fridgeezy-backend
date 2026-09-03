@@ -1,5 +1,8 @@
 import { Router } from "express";
 
+import { requireEntitlement } from "../../middleware/require-entitlement";
+import { requireQuota } from "../../middleware/require-quota";
+
 import { RecipesController } from "./recipes.controller";
 
 /**
@@ -23,9 +26,15 @@ const TASTE_PROFILE_ENABLED = process.env.TASTE_PROFILE_ENABLED === "true";
 
 const router = Router();
 
-router.post("/generate", RecipesController.generate);
-router.post("/difficulty/escalate", RecipesController.escalate);
-router.post("/modify", RecipesController.modify);
+// Everything that WRITES a recipe spends the same bucket, whatever the reader
+// called it on the way in — generating, escalating a rung, or asking for a
+// version. Three counters for three doors into one outcome would be a
+// spreadsheet, and the reader thinks of all of it as "a recipe".
+router.post("/generate", requireQuota("recipes"), RecipesController.generate);
+router.post("/difficulty/escalate", requireQuota("recipes"), RecipesController.escalate);
+// `modify` returns an existing variant without running a model when it finds
+// one; that path waives the charge — see `QuotaHandle.waive`.
+router.post("/modify", requireQuota("recipes"), RecipesController.modify);
 
 /**
  * Read a recipe off a photograph and save it as the caller's own.
@@ -41,7 +50,7 @@ router.post("/modify", RecipesController.modify);
  * call. See the use case for why the route is SSE despite the read itself being
  * a single blocking call.
  */
-router.post("/import", RecipesController.import);
+router.post("/import", requireQuota("photos"), RecipesController.import);
 
 /**
  * Compose a menu around this dish.
@@ -49,14 +58,18 @@ router.post("/import", RecipesController.import);
  * It carried the app's only `requireEntitlement` until 2026-08-26, back when the
  * free/paid line ran *through* this module. It no longer does — every route here
  * is paid — so the gate moved to the mount (`MOUNTS` in `rest/index.ts`) and
- * this is an ordinary line again. **Do not re-add it here**: the middleware is
- * not idempotent in any useful way, it would cost a second entitlement lookup
- * per request, and a second place to declare the tier is a second place for it
- * to disagree with the banner.
+ * this is an ordinary line again. **Do not re-add `requireEntitlement` here**:
+ * it would cost a second entitlement lookup per request, and a second place to
+ * declare the tier is a second place for it to disagree with the banner.
+ *
+ * It carries a quota gate instead, since 2026-09-03 — a menu is several recipes
+ * and spends one, which is generous on purpose: composing is the capability
+ * most worth having somebody experience once.
  */
-router.post("/:recipeId/compose", RecipesController.compose);
+router.post("/:recipeId/compose", requireQuota("recipes"), RecipesController.compose);
 
-router.post("/:recipeId/chat", RecipesController.chat);
+// A conversation about a dish, not a rewrite of it — `questions`, like `/chat`.
+router.post("/:recipeId/chat", requireQuota("questions"), RecipesController.chat);
 
 /**
  * Adapt this dish to the caller's diet by swapping the one ingredient in the
@@ -72,7 +85,7 @@ router.post("/:recipeId/chat", RecipesController.chat);
  * siblings; a request whose two disagree is refused by the id the schema
  * validated, which is the one the handler acts on.
  */
-router.post("/:recipeId/adapt", RecipesController.adapt);
+router.post("/:recipeId/adapt", requireQuota("recipes"), RecipesController.adapt);
 
 /**
  * Rewrite this dish the way the caller keeps asking for it, as a variant.
@@ -96,7 +109,11 @@ router.post("/:recipeId/adapt", RecipesController.adapt);
  * route is.
  */
 if (TASTE_PROFILE_ENABLED) {
-    router.post("/:recipeId/personalise", RecipesController.personalise);
+    // `requireEntitlement`, not a quota: this is the paid half of
+    // personalisation — preferences the app LEARNS rather than ones the cook
+    // sets — and the client's `tasteProfile` tier says the same thing. Free
+    // accounts get no allowance of it at all, so there is nothing to meter.
+    router.post("/:recipeId/personalise", requireEntitlement, RecipesController.personalise);
 }
 
 export const RecipesRoutes = router;

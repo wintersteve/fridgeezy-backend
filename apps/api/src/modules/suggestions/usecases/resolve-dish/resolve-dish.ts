@@ -1,6 +1,7 @@
 import { createStreamHandler } from "@fridgeezy/streaming-server";
 import { z } from "zod/v4";
 
+import { waiveQuota } from "../../../../middleware/require-quota";
 import { searchRecipeSuggestions } from "../../../recipes/services/search-recipe-suggestions";
 
 /**
@@ -72,7 +73,7 @@ export const resolveDish = createStreamHandler({
     requestSchema: RequestSchema,
     responseSchema: ResponseSchema,
 
-    handler: async ({ body }) => {
+    handler: async ({ body, req }) => {
         const result = await searchRecipeSuggestions(
             {
                 query: body.dish,
@@ -95,12 +96,27 @@ export const resolveDish = createStreamHandler({
 
         const item = result.suggestions[0];
 
+        // Only a dish the model had to WRITE costs a recipe. `existing_recipe`
+        // and `suggestion` are both catalogue hits — the whole point of
+        // resolving through here rather than generating — and the reader gets
+        // the same answer either way, so the price must not depend on which of
+        // the two it happened to be.
+        if (item && item.source !== "new_suggestion") {
+            waiveQuota(req);
+        }
+
         if (!item) {
             // Nothing found and nothing written. Almost always the notability
             // gate refusing an invented name — the chat is told never to make
             // one up, and this is what happens when it does anyway. Reported as
             // a normal 200 with `kind: "none"` rather than an error, because
             // nothing failed: the answer is that this dish does not exist.
+            //
+            // A 200 with nothing in it must not spend a recipe. This is the
+            // reason charging is on the way out and waivable rather than at the
+            // door: the middleware sees a success either way.
+            waiveQuota(req);
+
             return {
                 type: "raw" as const,
                 statusCode: 200,

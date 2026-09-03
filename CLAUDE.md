@@ -617,9 +617,14 @@ mount path anyway; the nesting only made every import inside it `../../../`.
 | `POST /rest/billing/revenuecat` | `modules/billing` — **open** |
 | `GET /rest/health` | direct — **open** |
 
-**Premium** means the route additionally requires an active subscription
-(`requireEntitlement`, 402) — 14 of them, applied by mount `tier` except on
-`/speech`. See the entitlement section below.
+**Premium** means the route requires an active subscription
+(`requireEntitlement`, 402); **metered** means a free account may reach it a
+fixed number of times a month and then gets the same 402 (`requireQuota`). As of
+2026-09-03 the split is 2 premium (`/suggestions/generate`, `/speech/command`)
+and 12 metered — the table above still says "premium" throughout and is the one
+place that has not been reworded, so **read the startup banner rather than that
+column**: it derives both marks from the handler stacks. See the entitlement and
+allowance sections below.
 
 **Every route above requires a Supabase access token**
 (`Authorization: Bearer <access_token>`), checked by `requireSupabaseUser` in
@@ -693,14 +698,79 @@ self-hosted rather than Google-CDN'd on purpose (GDPR — LG München).
 401 — "you are who you say you are, and this needs a subscription", which is what
 tells the client to show the paywall rather than the login screen.
 
-**It is attached per MOUNT, via `tier`** (2026-08-26). The product's rule is one
-sentence — **if a model runs, it is paid** — and the three tiers are:
+**It is attached per MOUNT, via `tier`** (2026-08-26). The product's rule was one
+sentence — **if a model runs, it is paid** — and since 2026-09-03 it is two:
+**if a model runs it is paid, but a free account gets an allowance of it first.**
+The tiers are:
 
 | Tier | Gets |
 | --- | --- |
 | **guest** | the catalog, read straight from Supabase — never reaches this API |
 | **account** | `POST /speech/synthesize` and `/prompts`. Nothing else |
-| **subscriber** | every AI route: generate, promote, chat, extract, substitutes, modify, escalate, import, compose, `/speech/command` |
+| **metered** | reachable N times a month by a free account, then 402 — every route under it carries `requireQuota` (see below) |
+| **subscriber** | `/suggestions/generate` and `/speech/command`, plus `/recipes/:id/personalise` when it lights up |
+
+## The allowance (`require-quota.ts`, 2026-09-03)
+
+Enforcing "no model call without a subscription" is correct and converts badly:
+nobody who has not paid can experience a single one, so the paywall is a *claim*
+rather than a demonstration. `requireQuota` turns the same gate into "here is
+your recipe, four left", and moves the ask onto somebody who has already had
+value out of us — which is the moment this file's own note on the teaser
+boundary says is the most persuasive in the app.
+
+**Three buckets, not one per route** — `recipes`, `photos`, `questions`. Eight
+counters is a spreadsheet; these are three nouns a cook recognises, and the
+client says them in those words. They run ACROSS the modules rather than along
+them, which is why the gate is per ROUTE while the tier is per mount:
+`/recipes/import` is a photo and `/recipes/:id/chat` is a question.
+
+**`/suggestions/generate` is deliberately not metered.** The feed generates dish
+ideas ambiently as the reader scrolls, so nobody experiences it as an action
+they took — "you are out of ideas" would point at nothing on screen. The
+catalogue already holds hundreds of stored suggestions free to read, which is
+what makes the split work: the IDEAS are free, and what costs money is turning
+one into a recipe.
+
+Things that bite:
+
+- **`metered` gives up the fail-closed default, so it is bought back at boot.**
+  `assertMeteredMountsAreGated` (`rest/index.ts`) walks every route under a
+  metered mount and **throws** if one carries neither `requireQuota` nor
+  `requireEntitlement`. It throws rather than warning: a failed boot is loud and
+  identical in dev and prod, where a warning on a Lambda cold start is a line
+  nobody reads while an AI route serves itself for free. Verified by removing a
+  gate and watching it refuse to build the router.
+- **The arithmetic is ONE SQL function.** `ai_quota_status_for(uuid)` is what the
+  middleware reads; `ai_quota_status()` is its caller-scoped twin, which the app
+  reads for the rows in Settings. There is no second copy, deliberately — a
+  client promising two more recipes while the server answers 402 is this
+  feature's worst failure, and it is exactly what `entitlement_is_active` /
+  `isEntitlementActive` live with because they have to.
+- **Charging happens on the way OUT, on a 2xx**, never on arrival: a quota that
+  bills for failures feels like a swindle. The honest limit is that an SSE route
+  writes its 200 before the first model call, so a generation that dies
+  mid-stream still counts — the lesser evil, since the call was made and did cost
+  us. What is not left to chance is the **reuse shortcuts**, which take a
+  recipe's price for no model call at all: `promote`'s already-promoted branch
+  and `resolve`'s catalogue hits and notability refusals call
+  `waiveQuota(req)`.
+- **Limits live in `ai_quota_limits`, a table**, so the numbers can be tuned
+  without a deploy — they are the part most likely to be wrong, and the honest
+  answer only comes from watching conversion. Free: 5 recipes then 3/month, 5
+  photos then 2, 20 questions then 10. Subscribers get a silent fair-use ceiling
+  (150/100/1000) that a real cook must never meet — **the client draws no ceiling
+  for that tier**, because telling somebody on an unlimited plan that it is
+  limited is worse than saying nothing.
+- **The period is the SIGNUP ANNIVERSARY, not the calendar month.** A calendar
+  reset hands somebody who joins on the 28th three days of allowance; it also
+  stacks every renewal onto the 1st.
+- **It stands down with `REQUIRE_ENTITLEMENT`.** Metering while purchasing is not
+  shipped would wall every user at five recipes with no way to buy more.
+- **Revoke function grants BY NAME.** Supabase's base setup grants EXECUTE on new
+  functions to `anon` and `authenticated` directly, so `revoke ... from public`
+  does not touch it — the first cut of this migration left the shipped anon key
+  able to read any user's quota by id.
 
 So a mount declares what it costs and the loop applies both gates:
 
@@ -1710,6 +1780,128 @@ change away from itself. Its fixture ingredients and recipes carry
 **different** name prefixes on purpose: share one and gate 2 matches every
 pair, every positive case is refused, and every expect-absent assertion passes
 for the wrong reason. That happened.
+
+### `p_pantry`: what can I cook from what I already have
+
+`find_recipes` takes an optional `p_pantry uuid[]` that **ranks and never
+filters** (`20260902000001`). It exists because every ingredient path here is a
+conjunctive filter and an inventory inverts one: measured on the dev catalogue
+with a 26-item fridge fed in the most generous order, `ingredients` returns 100
+rows at one item, 29 at three, 2 at four and **0 from five onward, forever**.
+Adding food to your fridge could only ever hurt.
+
+**`ingredients` keeps its AND-all semantics** and the two live side by side.
+Three callers rely on the conjunction as a *filter*, and the one that would
+break silently is the client's: a SHORT PAGE is what tells the search screen the
+catalogue is exhausted and it is time to generate (`getNextPageParam` in
+`use-find-recipes`). Widen that filter in place and every page is full, so the
+app quietly stops generating — a behaviour change that costs money in the
+direction nobody would look. The other two are `use-suggestion-regeneration`,
+which passes exactly ONE id and reads a hit as "another dish built on the same
+thing", and chat's stage 1c.
+
+**The ranking is fewest-missing, not most-used**, and the two are different
+orders because dishes differ in size. Same fridge, top of each: fewest-missing
+leads with Pan de Mallorca (have 3, buy 1); most-used leads with Palak Paneer
+(have 5, **buy 6**) and Chili con Carne (have 4, **buy 9**). The second is a
+shopping list, not dinner. The keys are
+
+```
+(pantry_have = 0), pantry_missing asc, pantry_have desc
+```
+
+and that first clause is not decoration — it closes both cases pure
+missing-ascending gets wrong. A dish of nothing but staples scores (0, 0) and
+would **top** the feed while using nothing you own; a two-ingredient dish you
+have neither half of would outrank a twelve-ingredient dish you are one item
+short of. Both are dishes the fridge did not reach, and one clause sinks both.
+`pantry_have desc` is used rather than coverage because inside a fixed `missing`
+tier they are the same order.
+
+There is deliberately **no weighted score**. A weight would be a fitted constant
+with no distribution to fit it against and no `calibrate` target to fit it with,
+and it could not be printed on a card. This is a stated policy, like
+`TIME_BAND_MAX_MINUTES`, and every key in it is an integer the reader can be
+shown — which is what `pantry_missing_ingredients` is for. The client cannot
+compute that list itself: it holds neither the staples list nor the alias
+identity groups, so its own difference would disagree with the count beside it.
+
+It sits below `difficulty_preference_rank` and above `favourite_count`. Skill is
+a standing stated preference; a like count is inferred taste about everybody;
+the fridge is what THIS reader said about TONIGHT. With no difficulty preference
+set that rank is 0 for every row and the pantry becomes the primary key.
+
+**Two things it would be easy to undo.** The pantry keys are in
+`candidate_recipes`' truncation as well as in the final ORDER BY, and they have
+to be — that LIMIT decides which dishes reach the page at all, so a pantry order
+applied only at the end would reorder the alphabetically-first twelve and
+nothing else. And the stats CTEs are guarded on `not pantry_empty`, which is
+what makes a call with no pantry byte-identical to the previous ordering:
+compute `missing` as "everything, since you have nothing" and the home feed, the
+search screen and the dish picker — none of which pass a pantry — silently
+reorder by ingredient count.
+
+`pantry_staples` is a table of **canonical ids** for the same reasons
+`near_miss_swappable_properties` is one, plus a forced one: ingredient uuids
+differ between local and the dev project, so a uuid-keyed seed could not be
+written in a migration at all. Staples are 17.7% of all ingredient rows and are
+spread **0 to 4 per dish** against a mean dish size of 8.6 — a constant penalty
+would be harmless, that variance is most of the signal. Category was measured
+and rejected (this catalogue files Salt under `herbs_spices` beside saffron,
+Water under `vegetables`, Bay Leaf under `mushrooms`); `use_count` was rejected
+because it counts CATALOGUE coverage and its own migration says not to present
+it. Bare `pepper` is off the list although `black_pepper` is on it — the word
+alone will not separate the spice from the capsicum, and crediting somebody with
+a bell pepper they do not have is the failure the list exists to avoid.
+
+**An id is not a thing**, and this is the read-path half of alias resolution.
+`resolveIngredientIds` and `matchIngredients` resolve a NAME; the picker hands
+over an ID, so two ingredient ROWS that are the same thing stayed two ids.
+`ingredient_identity_ids` closes an id over `ingredient_aliases` in both
+directions and transitively (chains exist: "crushed red pepper" → Red Pepper
+Flakes → Chili Flakes), and it is applied to `ingredients`, `blacklist` and
+`p_pantry` alike — a blacklist that lets Minced Pork through because the reader
+excluded Ground Pork is the same defect pointing at somebody's dinner. Dishes
+reachable by picking the left-hand row, before → after: All Purpose Flour
+1 → 76, Toasted Sesame Oil 2 → 27, Red Pepper Flakes 0 → 9, Risotto Rice 0 → 7.
+
+Two traps in that. The AND count is computed **per requested id**, not over one
+flattened closure — expanding two requests into four ids and leaving the count
+alone would demand four distinct matches and make the filter *harder*. And
+`parent_id` is NOT used: it is set on 5 of 1041 rows and means "is a kind of"
+(Ghee→Butter, Quail Egg→Egg), so folding it in would answer a request for butter
+with a ghee dish.
+
+`find_near_miss_recipes` got the same closure, because the search screen calls
+both with the same ids on one screen and a divergence would show a dish in one
+and not the other. It gets no pantry key — that rail answers "one swap from
+suiting your DIET", and ordering it by the fridge would put two questions in one
+list.
+
+```bash
+npx nx run @fridgeezy/database:check-pantry-ranking
+```
+
+A semantics check like `check-near-miss`, and the group to read first is **1.
+Inert without a pantry**: that is the assertion protecting every existing
+surface. It also pins the degenerate cases (the all-staples dish, the untouched
+dish), that staples count on neither side, that the named gap and the count
+agree, and that the totals and facets do not move.
+
+**What it costs.** Measured on a synthetic local catalogue at 9 ingredients per
+dish: 1,000 recipes 16 → 36 ms, 5,000 46 → 86 ms, 20,000 155 → 258 ms. Linear
+in the catalogue with a ~1.7 constant, and it does not change the complexity
+class — this function was already linear because `family_picks`,
+`total_recipes` and `facet_counts` each walk the whole matching set. The new
+work is one hash-aggregated pass over `recipe_ingredients`, which is why a
+30-item pantry costs the same as a 5-item one.
+
+**Known and not fixed here:** most of the picker trapdoor is not an alias
+problem. Only 475 of 1041 ingredients are used by anything, and rows like
+"Grilled Tomatoes" carry no alias to Tomato — so an AND search on one still
+empties. What `p_pantry` does for those is make a bad pick *harmless* rather
+than fatal. Closing the rest is `merge-spelling-variants` and
+`dedupe-ingredients`, not a query.
 
 ### The adaptation gate: the tap the near-miss card leads to
 

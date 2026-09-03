@@ -1,3 +1,4 @@
+export * from "./repositories/ai-usage.repository";
 export * from "./repositories/categories.repository";
 export * from "./repositories/entitlements.repository";
 export * from "./repositories/ingredients.repository";

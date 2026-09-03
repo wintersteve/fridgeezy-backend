@@ -200,7 +200,10 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
-email_sent = 2
+# Ignored while mail goes to Mailpit, and live the moment [auth.email.smtp] is
+# enabled below — at 2 a testing session runs out of sign-in codes on its third
+# attempt, and GoTrue reports that as a plain "email rate limit exceeded".
+email_sent = 100
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
 # Number of anonymous sign-ins that can be made per hour per IP address. Requires enable_anonymous_sign_ins = true.
@@ -237,15 +240,29 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
-# [auth.email.smtp]
-# enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# Send the sign-in code to a real inbox instead of Mailpit.
+#
+# This block REPLACES Mailpit rather than adding to it: once it is enabled every
+# auth mail leaves the machine and :54324 stays empty. It needs RESEND_API_KEY in
+# `apps/database/.env` — with the key unset the stack still starts and looks
+# healthy, and the failure shows up only as a sign-in that never delivers a code.
+# Comment the whole block out to go back to Mailpit.
+#
+# `onboarding@resend.dev` is Resend's shared sender and needs no domain
+# verification, at the price that it only delivers to the address on the Resend
+# account that issued the key. That is the right trade for dev and the wrong one
+# for anything else: this block is LOCAL ONLY. Production auth mail is Supabase's
+# own mailer, configured in the dashboard, and pushing this file with
+# `supabase config push` would point the hosted project at a dev key — which is
+# the same reason `operations/push-magic-link-template.sh` exists.
+[auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 587
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "onboarding@resend.dev"
+sender_name = "Fridgeezy"
 
 # The sign-in mail. This is the ONLY template the app depends on: the whole auth
 # flow is `signInWithOtp` + `verifyOtp`, so what has to arrive is the six digits.

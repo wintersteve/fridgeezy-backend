@@ -15,10 +15,18 @@ import { collectRoutes, RouteInfo } from "../utils/collect-routes";
 /**
  * What a caller must hold to reach a mount.
  *
- * `subscriber` is the DEFAULT and `account` is the exception, which inverts what
- * this file did before 2026-08-26. See {@link MOUNTS}.
+ * `subscriber` is the DEFAULT and the other two are exceptions, which inverts
+ * what this file did before 2026-08-26. See {@link MOUNTS}.
+ *
+ * `metered` (2026-09-03) is authentication only at the mount, exactly like
+ * `account` — the difference is a promise: **every route under a metered mount
+ * carries its own gate**, either `requireQuota` or `requireEntitlement`, and
+ * {@link assertMeteredMountsAreGated} refuses to boot if one does not. That
+ * promise is what buys back the property the `subscriber` default exists for.
+ * An `account` mount makes no such promise, because its routes are genuinely
+ * free (`/prompts`, `/speech/synthesize`).
  */
-type MountTier = "account" | "subscriber";
+type MountTier = "account" | "metered" | "subscriber";
 
 interface Mount {
     prefix: string;
@@ -80,11 +88,17 @@ interface Mount {
  *   somebody trying to delete their own data.
  */
 const MOUNTS: Mount[] = [
-    { prefix: "/ingredients", router: IngredientsRoutes },
-    { prefix: "/suggestions", router: SuggestionsRoutes },
-    { prefix: "/recipes", router: RecipesRoutes, publicRouter: RecipesPublicRoutes },
-    { prefix: "/substitutes", router: SubstitutesRoutes },
-    { prefix: "/chat", router: ChatRoutes },
+    // The five AI mounts are `metered` since 2026-09-03: a signed-in account may
+    // ATTEMPT them, and `requireQuota` decides how many times. See
+    // `require-quota.ts` for why the paywall moved from the door to the
+    // allowance. Each route declares its own bucket, because the buckets run
+    // through these modules rather than along them — `/recipes/import` is a
+    // photo and `/recipes/:id/chat` is a question.
+    { prefix: "/ingredients", router: IngredientsRoutes, tier: "metered" },
+    { prefix: "/suggestions", router: SuggestionsRoutes, tier: "metered" },
+    { prefix: "/recipes", router: RecipesRoutes, publicRouter: RecipesPublicRoutes, tier: "metered" },
+    { prefix: "/substitutes", router: SubstitutesRoutes, tier: "metered" },
+    { prefix: "/chat", router: ChatRoutes, tier: "metered" },
     // Splits internally: /synthesize is free, /command carries its own gate.
     { prefix: "/speech", router: SpeechRoutes, tier: "account" },
     { prefix: "/prompts", router: PromptsRoutes, tier: "account" },
@@ -120,6 +134,9 @@ export function createRestRouter() {
         // `requireSupabaseUser` resolved, so it cannot run first. An `account`
         // mount takes authentication only and may still carry the paid gate on
         // an individual route — that is what `/speech/command` does.
+        // A `metered` mount takes authentication only, like `account`. What
+        // makes it safe is not this line but `assertMeteredMountsAreGated`,
+        // which proves every route under it carries a gate of its own.
         const gates =
             (tier ?? "subscriber") === "subscriber"
                 ? [requireSupabaseUser, requireEntitlement]
@@ -130,7 +147,41 @@ export function createRestRouter() {
 
     addDirectRoutes(router);
 
+    assertMeteredMountsAreGated();
+
     return router;
+}
+
+/**
+ * Refuses to build the router if a route under a `metered` mount is ungated.
+ *
+ * The `subscriber` default exists so that forgetting a tier cannot give anything
+ * away. `metered` gives that up at the mount — the whole point is that a free
+ * account may reach these routes — so the guarantee has to be recovered
+ * somewhere, and this is it: a promise checked at boot rather than a default
+ * checked by omission.
+ *
+ * **It throws rather than warning.** A failed boot is loud, immediate and
+ * identical in dev and in production; a warning on a Lambda cold start is a line
+ * nobody reads while an AI route serves itself for free. The check is
+ * deterministic and runs on every boot, so it cannot surprise production without
+ * having first surprised whoever added the route.
+ */
+export function assertMeteredMountsAreGated(): void {
+    const ungated = MOUNTS.filter(({ tier }) => tier === "metered").flatMap(
+        ({ prefix, router }) =>
+            collectRoutes(router, prefix).filter(
+                (route) => !route.quotaBucket && !route.requiresEntitlement
+            )
+    );
+
+    if (ungated.length === 0) return;
+
+    throw new Error(
+        `Metered mounts must gate every route. Ungated: ${ungated
+            .map((route) => `${route.methods.join("/")} ${route.path}`)
+            .join(", ")}`
+    );
 }
 
 /**
@@ -165,6 +216,9 @@ export function describeRestEndpoints(basePath = ""): RouteInfo[] {
             const mounted = collectRoutes(router, `${basePath}${prefix}`);
 
             return [
+                // Only a `subscriber` mount makes its routes premium wholesale.
+                // A `metered` mount's routes carry their own marks, which
+                // `collectRoutes` has already derived from the handler stack.
                 ...((tier ?? "subscriber") === "subscriber" ? paid(mounted) : mounted),
                 ...open(
                     publicRouter ? collectRoutes(publicRouter, `${basePath}${prefix}`) : []

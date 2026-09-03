@@ -59,6 +59,12 @@ const BODY = `
     they aren't kept after processing.</p>
   </details>
 
+  <details>
+    <summary>I'd like it to do something it doesn't</summary>
+    <p>That's a <a href="/feature-request">feature request</a> — same address,
+    and there are a few prompts on that page to make it easy to send.</p>
+  </details>
+
   <h2>Privacy &amp; legal</h2>
   <p>The details live in the <a href="/privacy">Privacy Policy</a> and the
   <a href="/terms">Terms of Use</a>.</p>

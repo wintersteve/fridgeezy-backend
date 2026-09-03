@@ -246,6 +246,7 @@ ${body}
   <a class="wordmark" href="/">FRIDGEEZY</a>
   <nav>
     <a href="/support">Support</a>
+    <a href="/feature-request">Feature requests</a>
     <a href="/privacy">Privacy Policy</a>
     <a href="/terms">Terms of Use</a>
     <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>

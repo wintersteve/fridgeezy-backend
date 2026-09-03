@@ -441,15 +441,16 @@ td .mono { color: var(--ink); }
   <h1>What to build next</h1>
   <p class="standfirst">One build order across both repos, assembled from seven separate reviews and then checked against the working tree — because most of what those reviews recommended was implemented today, and a plan that lists finished work as pending is worse than no plan.</p>
   <div class="byline">
-    <span>2 September 2026 · revised 18:0<span>0</span></span>
-    <span>backend @ 78d27f3 · client working tree</span>
-    <span>19 items in · 14 out · 2 cleared</span>
+    <span>2 September 2026 · revised 23:3<span>0</span></span>
+    <span>backend @ 78d27f3 + working tree · client working tree</span>
+    <span>19 items in · 14 out · 2 cleared · 2 written</span>
   </div>
 </header>
 
 <div class="callout accent" style="margin-bottom:56px">
-  <h3>Revised after a second pass over the tree.</h3>
-  <p>Two items have been completed since this was first written and are struck through below: <strong>the sign-out leak</strong> — fixed far more thoroughly than specified — and <strong>the taste-profile delete screen</strong>. One claim has been corrected: the near-miss endpoint's absence from production is inferred from the deployed function's timestamp, and cannot be confirmed by probing it, for a reason worth knowing. There is also a new section 04: <a href="#quick">the quick-win shortlist</a>.</p>
+  <h3>Two of the ranked items are now written.</h3>
+  <p><strong>Item 04, overlap ranking</strong>, and <strong>item 06, summing amounts within a unit family</strong>, both exist in their repos' working trees and both are proved by an executable check. Neither has reached a user: the migration has been applied to <em>local only</em>, nothing in the client passes <code>p_pantry</code> yet, and the client tree is still uncommitted. They have moved from “not built” to the same waiting room as everything in <a href="#notlive">section 01</a> — which is now the only thing standing between three finished pieces of work and anybody seeing them.</p>
+  <p>Two earlier items stay struck through below: <strong>the sign-out leak</strong> and <strong>the taste-profile delete screen</strong>. One claim remains corrected: the near-miss endpoint's absence from production is inferred from the deployed function's timestamp, and cannot be confirmed by probing it, for a reason worth knowing.</p>
 </div>
 
 <!-- ============================================================ -->
@@ -551,9 +552,14 @@ td .mono { color: var(--ink); }
           <td>Quality changes to generation. Silent when absent, which is exactly why they have gone unnoticed for a week.</td>
         </tr>
         <tr>
-          <td><strong>One migration</strong><br><span class="mono">20260831000001_display_name_from_oauth</span></td>
-          <td class="mono">31 Aug</td>
-          <td>Remote stops at <code>20260830000002</code>. The trigger that reads a name out of the Apple/Google identity payload is not there, so accounts created in production keep a null <code>display_name</code>. Needs <code>up-remote</code>.</td>
+          <td><strong>Two migrations</strong><br><span class="mono">20260831000001_display_name_from_oauth</span><br><span class="mono">20260902000001_pantry_overlap_ranking</span></td>
+          <td class="mono">31 Aug · 2 Sep</td>
+          <td>Remote stops at <code>20260830000002</code>. The first is the trigger that reads a name out of the Apple/Google identity payload, so accounts created in production keep a null <code>display_name</code>. The second is item 04 below — it is applied to the local stack and verified there, and has never run against the dev project. Both need <code>up-remote</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>Amounts that add up</strong><br><span class="mono">round-quantity.ts</span> · <span class="mono">collect-menu-ingredients.ts</span></td>
+          <td class="mono">2 Sep</td>
+          <td>Item 06 below, in the client tree only. Purely local arithmetic — no query change, no schema change, nothing to deploy on the backend — so it ships with the next client build and needs nothing else.</td>
         </tr>
         <tr>
           <td><strong>The client working tree</strong></td>
@@ -574,7 +580,7 @@ td .mono { color: var(--ink); }
     <h2>The loop, and what sits under it</h2>
   </div>
 
-  <p class="lede">The fridge, the week and cooked history are usually costed as three features. They are one feature with three entry points, because <strong>each one supplies the next one's hardest input</strong> — and all three are unreachable until <code>find_recipes</code> can rank by ingredient rather than filter by it.</p>
+  <p class="lede">The fridge, the week and cooked history are usually costed as three features. They are one feature with three entry points, because <strong>each one supplies the next one's hardest input</strong> — and all three were unreachable until <code>find_recipes</code> could rank by ingredient rather than filter by it. <strong>It can now</strong>, in the working tree: what follows is why that mattered, and item 04 records what was actually built.</p>
 
   <div class="figure">
     <div class="scroll">
@@ -620,15 +626,16 @@ td .mono { color: var(--ink); }
         <!-- foundation -->
         <rect class="base-box" x="30" y="330" width="860" height="74" rx="3"></rect>
         <text class="base-name" x="460" y="362" text-anchor="middle">Overlap ranking in find_recipes</text>
-        <text class="base-sub" x="460" y="385" text-anchor="middle">SCORE BY COVERAGE — NEVER WIDEN THE AND-ALL FILTER IN PLACE</text>
+        <text class="base-sub" x="460" y="385" text-anchor="middle">RANK BY WHAT IS MISSING — THE AND-ALL FILTER KEPT ITS MEANING</text>
       </svg>
     </div>
     <p class="figcaption">Every ingredient path in this database is a conjunctive filter: a recipe qualifies only if it contains <em>every</em> id passed in. Point a fridge at that and it inverts — ten items returns almost nothing, thirty returns zero, and it gets worse the more the user invests. A fridge is a ranking input, and nothing here can consume one.</p>
   </div>
 
   <div class="callout accent">
-    <h3>Which is why overlap ranking is the safest expensive thing on the list.</h3>
+    <h3>Which is why overlap ranking was the safest expensive thing on the list.</h3>
     <p>It is the precondition for all three loop items, and it independently closes a defect that is already costing you: of 1041 ingredients only about a third are referenced by any dish, so two thirds of the ingredient picker is a trapdoor that empties the results. <code>20260830000002</code> sorted the picker to route around that hole. It did not close it. This does — <strong>even if you never build the planner.</strong></p>
+    <p><strong>Written on 2 September, and it was worse than the figure above.</strong> Measured against the dev catalogue with a 26-item fridge fed in the most generous order possible — the catalogue's most-used ingredients first — the AND filter returns 100 rows at one item, 53 at two, 29 at three, 2 at four and <strong>0 from five onward, and never recovers</strong>. Not thirty items. Five.</p>
   </div>
 </section>
 
@@ -684,18 +691,19 @@ td .mono { color: var(--ink); }
       </div>
     </div>
 
-    <div class="item">
+    <div class="item blocked">
       <span class="idx">04</span>
       <div>
-        <h3>Overlap ranking</h3>
-        <p class="why">A scoring path beside the AND-all filter: <code>p_pantry uuid[]</code> ordering by coverage and counting what is missing, or a sibling function. Nothing is excluded; a dish needing one thing you lack appears lower with the gap named — the shape <code>find_near_miss_recipes</code> already returns for diets.</p>
-        <p class="why"><strong>Do not widen the existing <code>ingredients</code> parameter.</strong> Its AND-all semantics are relied on by the fridge picker and the search screen's entity strip, and changing them in place silently changes what every existing filter means.</p>
-        <p class="why">Hatched because the query is easy and the <em>ranking</em> is not: the weights need measuring against a real catalogue, and there is no <code>calibrate</code> target for it yet.</p>
-        <div class="tags"><span class="chip todo">not built</span><span class="chip live">fixes picker trapdoor</span></div>
+        <h3>Overlap ranking <span style="font-weight:400; color:var(--pending)">— written</span></h3>
+        <p class="why"><code>20260902000001_pantry_overlap_ranking</code>. <code>find_recipes</code> takes <code>p_pantry uuid[]</code>, which <strong>ranks and never filters</strong> — same rows, same totals, same facets, different order — and returns <code>pantry_have</code>, <code>pantry_missing</code> and the missing ingredients by name, the shape <code>find_near_miss_recipes</code> already uses for diets.</p>
+        <p class="why"><strong>The advice above was followed, and one thing was added to it.</strong> <code>ingredients</code> keeps its AND-all semantics: the decisive caller turned out to be the client's own generation trigger, which fires off a <em>short page</em> — widen the filter and every page is full, so the search screen quietly stops generating. What did change globally is the identity closure: <code>ingredient_identity_ids</code> folds each id together with every ingredient row that is the same thing, on <code>ingredients</code>, <code>blacklist</code> and <code>p_pantry</code> alike. Strictly widening for a filter, strictly narrowing for a blacklist, so no caller loses anything. Picking “All Purpose Flour” reached <strong>1 dish before and 76 after</strong>; Red Pepper Flakes and Risotto Rice reached <em>nothing</em> before.</p>
+        <p class="why"><strong>The ranking is fewest-missing, not most-used</strong>, with the fridge's own contribution as the tiebreak and a clause that sinks any dish the fridge did not reach at all. No weighted score: a weight would be a fitted constant with nothing to fit it against, and it could not be printed on a card. Staples (<code>pantry_staples</code>, a table of canonical ids) are exempt from both sides — they are 17.7% of ingredient rows and spread 0–4 per dish, so counting them is noise with variance.</p>
+        <p class="why"><strong>What is left.</strong> Apply the migration to the dev project, and give the client something that passes the parameter — item 07 is what would. Until then this changes nothing anybody sees, by construction: with an empty pantry the ordering is byte-identical to before, which <code>check-pantry-ranking</code> asserts first of its 23 cases.</p>
+        <div class="tags"><span class="chip pending">built · local only</span><span class="chip pending">nothing passes it yet</span><span class="chip live">closes the alias half of the trapdoor</span></div>
       </div>
       <div class="meter">
         <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:88%"></i></span></div>
-        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:26%"></i><i class="fuzzy" style="width:34%"></i></span><span class="est">1–2 wk</span></div>
+        <div class="row"><span class="lbl">left</span><span class="bar"><i class="solid" style="width:8%"></i></span><span class="est">a deploy</span></div>
       </div>
     </div>
 
@@ -714,17 +722,19 @@ td .mono { color: var(--ink); }
       </div>
     </div>
 
-    <div class="item">
+    <div class="item blocked">
       <span class="idx">06</span>
       <div>
-        <h3>Sum amounts within a unit family</h3>
-        <p class="why">The one thing that genuinely degrades from three dishes to twelve. <code>200 ml + 1 tbsp</code> is honest at three courses and unreadable at twelve. Collapse g/kg, ml/l and countables; keep the existing “+” across families, because that <em>is</em> still the honest answer.</p>
-        <p class="why">Lands in one function — the client already funnels every amount through a single formatter — and the units table exists. Only worth doing if item 05 ships.</p>
-        <div class="tags"><span class="chip todo">not built</span><span class="chip todo">client only</span></div>
+        <h3>Sum amounts within a unit family <span style="font-weight:400; color:var(--pending)">— written</span></h3>
+        <p class="why">Done in <code>round-quantity.ts</code>, beside <code>formatScaledAmount</code>, because a total is an amount becoming text and assembling one anywhere else would round by its own rules. <code>UNIT_META</code> gained a <code>family</code> field mirroring <code>units.type</code>; <code>sumScaledAmounts</code> groups by it and <code>mergeMenuIngredients</code> calls it.</p>
+        <p class="why"><strong>“Collapse countables” was wrong, and the units table is what makes it dangerous.</strong> Every count unit carries <code>base_unit_id → piece, conversion_factor 1.0</code>, so following the table's own conversion turns a pinch of salt and two cloves of garlic into <code>3 pc</code>. That factor is a storage convention, not a claim. Count units sum only with an identical unit — as does any abbreviation the table has never seen.</p>
+        <p class="why">Across the whole catalogue merged as one list: <strong>345 amount terms become 191</strong>, and <strong>142 of 165 lines now carry a single number</strong>. Salt was a 22-term chain and is now <code>22 tsp + 4 pinch + 16 g</code>. The 23 lines that keep a <code>+</code> keep it for a reason a shopper can act on — grams of flour beside cups of it, a bunch of parsley beside eight sprigs — and that <code>+</code> is now a statement rather than a default.</p>
+        <p class="why"><strong>It did not need item 05 after all.</strong> That caveat assumed a menu was the only place amounts merge; “everything to buy” already merges every recipe on every list, which is a larger set than any menu. The twelve-dish case has existed the whole time.</p>
+        <div class="tags"><span class="chip pending">built · not live</span><span class="chip todo">client only</span><span class="chip live">26 checks</span></div>
       </div>
       <div class="meter">
         <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:38%"></i></span></div>
-        <div class="row"><span class="lbl">effort</span><span class="bar"><i class="solid" style="width:9%"></i></span><span class="est">½ day</span></div>
+        <div class="row"><span class="lbl">left</span><span class="bar"><i class="solid" style="width:4%"></i></span><span class="est">a build</span></div>
       </div>
     </div>
 
@@ -735,7 +745,7 @@ td .mono { color: var(--ink); }
         <p class="why"><code>pantry_items</code> roughly as it was — it was dropped for disuse, not on a design objection, and the substrate survived the consolidation — plus a <code>source</code> (shopped · cooked · scanned · declared) and a decaying confidence. <strong>Decay to low, never to absent</strong>, and drop the nightly cron: a deleted onion and an onion you are unsure about are different states, and only one of them can be shown to the user for correction.</p>
         <p class="why">Wholesale resync is nearly free — <code>/ingredients/extract</code> already returns catalogue ids with a match type. Two honest gaps in it: confidence is per response rather than per item, and there are no quantities at all.</p>
         <p class="why">Copy the <code>profile_taste_signals</code> contract verbatim for the writer: observed rather than declared, fire-and-forget, never between the user and their first token.</p>
-        <div class="tags"><span class="chip todo">not built</span><span class="chip pending">needs 03 + 04</span></div>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip pending">needs 03</span><span class="chip live">04 is written</span></div>
       </div>
       <div class="meter">
         <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:76%"></i></span></div>
@@ -763,7 +773,7 @@ td .mono { color: var(--ink); }
         <h3>Paid plan generation</h3>
         <p class="why">Pick five dishes that fit the diet, the skill level and the weeknight time band, chosen partly for what they share so the shopping list is short. <strong>Catalogue-first</strong> — a plan assembled from <code>find_recipes</code> hits costs nothing to fill; generation is the fallback for slots retrieval cannot answer. Same instinct as compose's retrieval-before-generation, which turned a multi-second paid stream into ~40 ms.</p>
         <p class="why">This is the subscription product, and it is the honest paywall line: the plan and its list are the user's own data and stay free, filling it for you runs a model and is paid. The cost note that matters — <code>shopping_lists.recipe_id</code> is a foreign key to <code>recipes</code>, so a five-dish plan of catalogue suggestions is five promotes before the list is complete. Price it against someone planning every week, not against someone composing twice a year.</p>
-        <div class="tags"><span class="chip todo">not built</span><span class="chip pending">needs 04 + 05</span></div>
+        <div class="tags"><span class="chip todo">not built</span><span class="chip pending">needs 05</span><span class="chip live">04 is written</span></div>
       </div>
       <div class="meter">
         <div class="row"><span class="lbl">value</span><span class="bar"><i class="solid v" style="width:68%"></i></span></div>
@@ -796,7 +806,7 @@ td .mono { color: var(--ink); }
       <div>
         <h3>Deploy the API</h3>
         <p class="why">Still the biggest, and still true — production is a week behind and the near-miss rail is live against an endpoint that is almost certainly not there. Unchanged since this morning: <code>LastModified</code> is still 26 August, and no new migrations have landed.</p>
-        <p class="why"><strong>What it actually takes:</strong> <code>build-artifact.sh</code>, which already asserts the cold-start contract; a terraform apply; <code>up-remote</code> for the single pending migration; and a smoke test of the chat photo attachment, which is the only genuinely new capability in the batch and has never run. Everything else in the batch is a fix to a path that already works, so it fails quietly rather than loudly if the deploy is wrong.</p>
+        <p class="why"><strong>What it actually takes:</strong> <code>build-artifact.sh</code>, which already asserts the cold-start contract; a terraform apply; <code>up-remote</code> for the two pending migrations; and a smoke test of the chat photo attachment, which is the only genuinely new capability in the batch and has never run. Everything else in the batch is a fix to a path that already works, so it fails quietly rather than loudly if the deploy is wrong.</p>
         <div class="tags"><span class="chip pending">built · not live</span><span class="chip live">no decisions</span></div>
       </div>
       <div class="meter">
@@ -827,6 +837,7 @@ td .mono { color: var(--ink); }
         <p class="why">Down from 50, and the remainder are duplicates by construction — no embedding, no model, no judgement — so they should be merged directly rather than entering the LLM audit at ~5 calls each. <code>merge_ingredient</code> already exists. Re-run <code>embed-ingredients</code> afterwards or a merged row's stale vector degrades matching silently instead of failing.</p>
         <p class="why"><strong>Do not act on the <code>Red Bell Pepper → Green Bell Pepper</code> alias.</strong> It is wrong, learned at runtime by the old single-candidate adjudicator, and the correct cleanup is to delete it.</p>
         <p class="why"><em>One honest caveat:</em> if the database wipe is close, this is work you will do twice. The durable version is teaching <code>seed-ingredients</code> not to reintroduce them.</p>
+        <p class="why"><strong>Item 04 changed what this is for, and did not replace it.</strong> The identity closure means the eleven pairs no longer split a search — asking for All Purpose Flour now reaches Flour's 76 dishes. What it cannot do is stop the picker offering both rows, or stop a dish listing one while its sibling carries the aliases. Merging is still the fix; it is no longer the thing standing between a reader and a result.</p>
         <div class="tags"><span class="chip todo">not built</span><span class="chip pending">check the wipe date</span></div>
       </div>
       <div class="meter">
@@ -969,7 +980,7 @@ td .mono { color: var(--ink); }
 
     <div class="cutrow">
       <div class="what">“Buy this, unlock N dishes”</div>
-      <div class="reason">Measured: the best possible purchase unlocks <strong>two dishes</strong>, and only 7 dishes in the whole catalogue sit one ingredient away. That is a catalogue-size problem, not a query problem. The same query read the other way — “3 dishes are one ingredient away” — is the honest version and it is what item 04 gives you for free.</div>
+      <div class="reason">Measured: the best possible purchase unlocks <strong>two dishes</strong>, and only 7 dishes in the whole catalogue sit one ingredient away. That is a catalogue-size problem, not a query problem. The same query read the other way — “3 dishes are one ingredient away” — is the honest version, and item 04 now returns exactly that: <code>pantry_missing</code> with the missing ingredients named.</div>
     </div>
 
     <div class="cutrow">
@@ -989,7 +1000,7 @@ td .mono { color: var(--ink); }
 
     <div class="cutrow">
       <div class="what">Leak 3 as a “taste” ranking term</div>
-      <div class="reason">Real, but the fix is not a new signal. <code>find_recipes</code> ranks on skill level and everyone's favourite count, and there is nothing revealed worth adding (see above). The right first addition to that ORDER BY is overlap — declared, explainable, and item 04 already builds it.</div>
+      <div class="reason">Real, but the fix is not a new signal. <code>find_recipes</code> ranks on skill level and everyone's favourite count, and there is nothing revealed worth adding (see above). The right first addition to that ORDER BY is overlap — declared, explainable, and item 04 has now made it: three integer keys between the skill tier and the like count.</div>
     </div>
 
     <div class="cutrow">
@@ -1035,16 +1046,19 @@ td .mono { color: var(--ink); }
   <div class="close">
     <h2>If you did nothing else this week</h2>
     <ol>
-      <li><strong>Deploy the API.</strong> An afternoon, and it is the difference between a near-miss feature that works and one that 404s in front of a user. It does not wait on the client tree.</li>
+      <li><strong>Deploy the API and run <code>up-remote</code>.</strong> An afternoon, and it now carries three things rather than one: the near-miss endpoint that 404s in front of a user, the OAuth display-name trigger, and item 04's migration. It does not wait on the client tree.</li>
+      <li><strong>Commit the client tree.</strong> It has grown again — the cook-step redesign, onboarding, preferences, and now item 06. None of it is in a build.</li>
       <li><strong>Start the Apple Paid Applications agreement.</strong> It is not work, it is waiting, and nothing about the subscription can be verified until it clears.</li>
-      <li><strong>Take quick wins B through E</strong> — the error fields on the wire, the 11 alias merges, the 10 merge verdicts, the dead Settings row. Well under a day together, and B is what turns the honest error screen into a client-only job later.</li>
-      <li><strong>Then decide between item 04 and item 05.</strong> They are the fork. Item 05 is the smallest honest week — two columns and a filter over a shopping list that already works — and it will tell you whether anyone plans a week in this app before you pay for the rest. Item 04 is the larger bet, and the one that pays off even if the answer is no.</li>
+      <li><strong>Take quick wins B through E</strong> — the error fields on the wire, the 11 alias merges, the 10 merge verdicts, the dead Settings row. Well under a day together, and B is what turns the honest error screen into a client-only job later. Note the alias merges are worth <em>more</em> now, not less: item 04 folds an alias-linked duplicate into its target, so every merge that runs shrinks the set of ingredients still stranded without one.</li>
+      <li><strong>The fork is no longer 04 against 05.</strong> Item 04 is written, so the question is only whether anyone plans a week here — item 05, the smallest honest slice — or whether to spend the ranking on item 07 and let the fridge answer instead. Both now start from a query that can consume an inventory.</li>
     </ol>
   </div>
 
-  <p class="footnote"><strong>Revision, 2 September, evening.</strong> Re-checked against both trees. The sign-out fix verified by reading <code>shared/storage/</code> and by running <code>npm run check:session-clear</code>, which passes and accounts for all 16 persisted stores; the taste screen verified from <code>flags.ts</code>, <code>settings-screen.tsx</code> and <code>taste-screen/</code>. The deploy gap re-confirmed unchanged, and the 401-masks-404 behaviour established by probing the live function URL with both a real route and an invented one. Row counts re-read and unchanged. Nothing else on the list had moved.</p>
+  <p class="footnote"><strong>Revision, 2 September, late.</strong> Items 04 and 06 written and marked accordingly. Everything claimed about them was run rather than reasoned: <code>check-pantry-ranking</code> (23 assertions) and <code>check-near-miss</code> (18) pass against a locally-reset stack; <code>check:sum-amounts</code> (26) passes under plain node; the client typechecks and lints clean, and the backend typechecks, builds across 14 projects and reports no new knip findings. The before/after figures — 100→0 rows at five fridge items, 1→76 dishes for All Purpose Flour, 345→191 amount terms, 22 salt amounts to three — are read-only queries against the dev project, and the scaling table (1k/5k/20k recipes) is a synthetic local catalogue. <strong>What was not exercised:</strong> nothing has been applied to the dev project, no client code passes <code>p_pantry</code>, neither change has been seen in the running app, and <code>check-recipe-visibility</code> cannot run on a freshly reset stack (it needs a profile row and exits before any call). One casualty worth recording: the local database's twelve generated recipes and 140 ingredients were destroyed by <code>db reset</code> — the seeds cover units, tags, categories and cooking actions, and no recipes or ingredients at all.</p>
 
-  <p class="footnote" style="margin-top:20px">Checked against the working tree on 2 September 2026, not taken from the reviews. Deploy state read from the live Lambda's last-modified timestamp; migration gap from the linked project's applied list against <code>apps/database/supabase/migrations/</code>; row counts (1041 ingredients, 11 alias collisions, 360 unbackfilled shelf-life strings, 45 already populated, 1 unclassified ingredient, 10 merge reviews, 29 prompts, 6 taste signals) read read-only from the dev project. Client claims verified by reading the files named. Sources: <code>ERROR_STRATEGY.md</code>, <code>INGREDIENT_AFFINITY.md</code>, <code>INGREDIENT_IDENTITY.md</code>, <code>PERSONALISATION_REVIEW.html</code>, <code>MEAL_PLANNING_REVIEW.html</code>, <code>TODOS.md</code> in both repos, and the client's <code>motion-review.html</code> and <code>design/menu-picker-redesign.html</code>. No code was written and nothing was run against a database beyond the read-only counts above.</p>
+  <p class="footnote" style="margin-top:20px"><strong>Revision, 2 September, evening.</strong> Re-checked against both trees. The sign-out fix verified by reading <code>shared/storage/</code> and by running <code>npm run check:session-clear</code>, which passes and accounts for all 16 persisted stores; the taste screen verified from <code>flags.ts</code>, <code>settings-screen.tsx</code> and <code>taste-screen/</code>. The deploy gap re-confirmed unchanged, and the 401-masks-404 behaviour established by probing the live function URL with both a real route and an invented one. Row counts re-read and unchanged. Nothing else on the list had moved.</p>
+
+  <p class="footnote" style="margin-top:20px">Checked against the working tree on 2 September 2026, not taken from the reviews. Deploy state read from the live Lambda's last-modified timestamp; migration gap from the linked project's applied list against <code>apps/database/supabase/migrations/</code>; row counts (1041 ingredients, 11 alias collisions, 360 unbackfilled shelf-life strings, 45 already populated, 1 unclassified ingredient, 10 merge reviews, 29 prompts, 6 taste signals) read read-only from the dev project. Client claims verified by reading the files named. Sources: <code>ERROR_STRATEGY.md</code>, <code>INGREDIENT_AFFINITY.md</code>, <code>INGREDIENT_IDENTITY.md</code>, <code>PERSONALISATION_REVIEW.html</code>, <code>MEAL_PLANNING_REVIEW.html</code>, <code>TODOS.md</code> in both repos, and the client's <code>motion-review.html</code> and <code>design/menu-picker-redesign.html</code>. No code was written in the passes of 2 September that produced this document's <em>first two</em> revisions, and nothing was run against a database beyond the read-only counts above. The third revision, recorded in the footnote above it, did write code — items 04 and 06 — and says so.</p>
 </section>
 
 </div>

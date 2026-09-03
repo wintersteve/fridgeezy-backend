@@ -1,6 +1,7 @@
 import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { renderFeatureRequestPage } from "./feature-request";
 import { renderLandingPage } from "./landing";
 import { renderNotFoundPage } from "./not-found";
 import { renderPrivacyPage } from "./privacy";
@@ -30,6 +31,10 @@ const origin = process.env.SITE_ORIGIN?.replace(/\/+$/, "") || undefined;
 const PAGES: Array<{ file: string; html: string }> = [
     { file: "index.html", html: renderLandingPage(origin) },
     { file: "support/index.html", html: renderSupportPage(origin) },
+    {
+        file: "feature-request/index.html",
+        html: renderFeatureRequestPage(origin),
+    },
     { file: "privacy/index.html", html: renderPrivacyPage(origin) },
     { file: "terms/index.html", html: renderTermsPage(origin) },
     { file: "404.html", html: renderNotFoundPage(origin) },

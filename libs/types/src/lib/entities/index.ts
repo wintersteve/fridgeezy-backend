@@ -17,6 +17,7 @@ export * from './ingredients';
 export * from './menu-courses';
 export * from './menus';
 export * from './near-miss-swappable-properties';
+export * from './pantry-items';
 export * from './pantry-staples';
 export * from './profile-blacklisted-ingredients';
 export * from './profile-dietary-preferences';

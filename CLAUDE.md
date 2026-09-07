@@ -757,16 +757,46 @@ Things that bite:
   `waiveQuota(req)`.
 - **Limits live in `ai_quota_limits`, a table**, so the numbers can be tuned
   without a deploy — they are the part most likely to be wrong, and the honest
-  answer only comes from watching conversion. Free: 5 recipes then 3/month, 5
-  photos then 2, 20 questions then 10. Subscribers get a silent fair-use ceiling
-  (150/100/1000) that a real cook must never meet — **the client draws no ceiling
-  for that tier**, because telling somebody on an unlimited plan that it is
-  limited is worse than saying nothing.
-- **The period is the SIGNUP ANNIVERSARY, not the calendar month.** A calendar
-  reset hands somebody who joins on the 28th three days of allowance; it also
-  stacks every renewal onto the 1st.
-- **It stands down with `REQUIRE_ENTITLEMENT`.** Metering while purchasing is not
-  shipped would wall every user at five recipes with no way to buy more.
+  answer only comes from watching conversion. Free: 5 recipes then 2/week, 3
+  photos then 1, 15 questions then 5. Subscribers get a silent fair-use ceiling
+  (60/40/350 a week) that a real cook must never meet — **the client draws no
+  ceiling for that tier**, because telling somebody on an unlimited plan that it
+  is limited is worse than saying nothing.
+- **The period is a WEEK on both tiers** (`period` on each limit row, 2026-09-04;
+  it was a month until then). Two different arguments landed on the same window:
+  - **Free** — a monthly cap spent on day three leaves the app dead for
+    twenty-nine days, which is a churn, not a conversion. This migration's
+    predecessor made that argument itself and answered it with a bigger *first*
+    bucket, which only moves the dead month to month two. A week also matches the
+    clock the product already runs on: `/plan` is seven days, the shop is weekly.
+  - **Subscribers** — the row is a rate governor, not an allowance, and a monthly
+    bucket governs nothing: 150/month permits all 150 inside an hour, which is
+    the entire month's spend before a chargeback can be noticed. Weekly bounds
+    the burst. Every comparable product caps on a window far shorter than its
+    billing period for the same reason.
+- **The ceiling is NOT the monthly figure over four, and free is NOT a fraction
+  of the ceiling.** The ceiling is sized against a heavy real week (~20 recipes)
+  with a wide margin, landing near monthly ÷ 2.5. Free is sized against what a
+  week of cooking looks like. Tying the two by a ratio would move the free tier
+  every time the anti-abuse threshold was retuned; that they land ~1:30 apart is
+  a consequence, not a target.
+- **The period is anchored on SIGNUP, not on a calendar boundary.** A calendar
+  reset hands somebody who joins on the 28th three days of allowance, and a
+  Monday reset stacks every user's allowance onto one morning — 4.3× more
+  concentration on a weekly window than a monthly one had.
+- **A subscriber refused on their ceiling must not meet a paywall.** `requireQuota`
+  answers 402 on either tier and the two mean opposite things, so the body carries
+  `tier`; the client reads it and raises a toast instead of the unlock sheet. Sold
+  a subscription they already hold, the sheet closed itself the instant it opened
+  (`useFeatureAccess` reports a subscriber `allowed`), so the whole answer was a
+  modal that flashed over a stream that had failed silently.
+- **It stands down only with `ALLOW_UNAUTHENTICATED`**, since with no user id
+  there is nobody to charge. It used to stand down with `REQUIRE_ENTITLEMENT` as
+  well and had to — metering while purchasing was not shipped would have walled
+  every user at five recipes with no way to buy more. That flag is gone
+  (2026-09-04) and `ai_usage_events` only started filling then; before it, the
+  middleware returned on its first line and the table was empty for three weeks
+  while every route looked correctly wired.
 - **Revoke function grants BY NAME.** Supabase's base setup grants EXECUTE on new
   functions to `anon` and `authenticated` directly, so `revoke ... from public`
   does not touch it — the first cut of this migration left the shipped anon key
@@ -823,14 +853,28 @@ The paid half of personalisation is the half that runs a model
 `entitlementExempt` is gone — with the tier declared per mount, nothing needs
 exempting.
 
-**`REQUIRE_ENTITLEMENT=true` is still opt-IN, inverting `ALLOW_UNAUTHENTICATED`
-deliberately.** Failing closed here would put the paywall in front of routes the
-product now gives away. It is a rollout switch — **flip it on in the same release
-that ships purchasing, then delete the flag.** The startup banner shouts while it
-is off, because "off" is both correct today and silently expensive the day it
-stops being. It also stands down when `ALLOW_UNAUTHENTICATED=true`: with no auth
-there is no user id to look an entitlement up for, and that combination used to
-answer 500 "misconfigured" on every premium route.
+**The gate is unconditional — `REQUIRE_ENTITLEMENT` is gone (2026-09-04).** It
+was a rollout switch, defaulting to OFF in dev and prod alike, for a gate that
+could not be enforced while there was nothing to buy. What retired it is that
+there now is: real App Store products against the store key, and RevenueCat's
+**Test Store** (`EXPO_PUBLIC_REVENUECAT_TEST_KEY`) for local work, whose
+purchases go through RevenueCat's own backend, grant the entitlement and fire a
+real webhook. The app moved the same way — `paywall-override` defaults to
+enforcing whenever a Test Store key is configured. **Do not reintroduce a flag**:
+a standing one is how enforcement ends up off in production with nothing to say
+so, which is exactly what it did here.
+
+It still stands down when `ALLOW_UNAUTHENTICATED=true`, which is now the only way
+off it: with no auth there is no user id to look an entitlement up for, and that
+combination used to answer 500 "misconfigured" on every premium route.
+
+**A local stack never receives a webhook.** RevenueCat delivers to the one
+configured Function URL, so a Test Store purchase made against `npm run api:dev`
+grants the entitlement on the device and writes the row into the REMOTE Supabase
+— the local API still answers 402. `TARGET=local ./infra/send-webhook-event.sh
+INITIAL_PURCHASE` is the supported way to hold one locally (and `CLEAR` to drop
+it again); it reads the secret from `apps/api/.env`, the database from
+`apps/api/.env.dev`, and refuses any `API_URL` that is not loopback.
 
 State lives in `profile_entitlements`, written **only** by the webhook (RLS has a
 select policy and deliberately no insert/update/delete, so every client role is
@@ -993,12 +1037,6 @@ those frames incrementally, which is why frame shapes are part of the contract.
   dark with pale pigment and handing back a light picture. Dark asks the blooms
   to *reach* the edges while the ground stays the majority of the frame.
 
-  **`padPngToSquare` is not a step every image takes.** It exists because one
-  recipe asset is cropped three ways, and it works by shrinking the subject
-  relative to the frame. An asset generated at the aspect it is displayed at
-  must skip it — `generate-dish-tiles` renders 9:16 for a 9:16 slot, and
-  padding would undo the framing it asks for.
-
   The default image model is `gemini-3-pro-image-preview`, picked by a blind A/B
   on 2026-08-04 rather than by preference. Flash renders this art direction as
   flat, hard-outlined cel shading whatever the prompt says, and six prompt
@@ -1020,17 +1058,54 @@ those frames incrementally, which is why frame shapes are part of the contract.
   that worked last week 404s, check the model id before anything else — and note
   that `GET /v1beta/models` will happily list a model the key can no longer use.
 
-  Recipe images are **padded to a square by `padPngToSquare` before upload**.
-  The client shows one asset in boxes from 0.62 to 1.36 aspect, all cropping to
-  fill, and a 3:4 render loses 45% of its height in the widest of them — it cut
-  through the plate on every dish measured. Padding shrinks the plate relative
-  to the frame without touching the artwork, so one asset survives all three
-  crops while staying full-bleed. Note what this rules out: asking the model for
-  a smaller plate does not work (measured — plate size swings 51–87% of frame
-  height on an identical prompt), and `contentFit="contain"` in the client is
-  wrong because these surfaces are full-bleed. `libs/genai` therefore
-  externalises `node:` builtins in its vite config; the padder uses `zlib` to
-  avoid a native image dependency on Lambda.
+  **Recipe images are generated SQUARE and stored exactly as the model returns
+  them.** `aspectRatio: "1:1"`, no post-processing of any kind.
+
+  They used to be 3:4 renders widened to a square by `padPngToSquare` in
+  `libs/genai`, which is **deleted** (2026-09-04) along with its hand-rolled PNG
+  codec. It drew visible lines down both sides, and the cause is inherent to the
+  approach rather than a bug in it: it copied each row's nearest edge pixel
+  outward across ~160 columns, so any vertical variation in that one-pixel edge
+  column — grain, the vignette, a wisp of shadow — stretched into a horizontal
+  streak. It converted 1-D vertical noise into horizontal banding. Its clamp
+  only lifted rows much *darker* than their neighbours, so ordinary noise
+  streaked straight through.
+
+  The reason a square is still the target is unchanged: the client shows one
+  asset in boxes from ~0.6 to ~1.5 aspect, all cropping to fill, so the source
+  has to sit in the middle of that range. A 3:4 render loses half its height in
+  the widest box and cut through the plate on every dish measured; a square
+  loses about a third, and it is the shape every measured number on the client
+  side already assumes.
+
+  **What the padder was actually doing was shrinking the plate relative to the
+  frame** — a padded square and a native square are the same aspect and differ
+  only in how much margin surrounds the dish. So the margin is now asked for in
+  the prompt instead, and the wording matters: `framing` describes *a band of
+  the picture with nothing in it*, not *a fraction of the frame the vessel must
+  fill*. The second form was measured on 2026-08-04 and does not hold (the plate
+  renders at ~77% of frame width whether two thirds or three quarters is asked
+  for, against a 72–83% per-dish spread). That is the same wall
+  `generate-dish-tiles` records: instructions aimed at the camera or the crop do
+  not survive, statements about the scene do.
+
+  **Do not reintroduce padding here.** If the plate needs more margin, that is
+  the `framing` line's job; if it needs less crop, that is the client box's.
+
+  **The stored catalogue is already mixed, and was before any of this.** Sampled
+  2026-09-04 over the 39 readable objects in the `recipes` bucket: 26 are
+  864x1184 portrait, 12 are 1184x1184 square (the padder's output — it preserved
+  the height and widened) and one is 1024x1024. Every one of them decodes as
+  8-bit non-interlaced RGB, so the portrait ones are not padder failures: they
+  simply predate it, because `generateAndUploadRecipeImage` short-circuits on an
+  existing object at the deterministic path and **nothing ever re-generates an
+  image**. So the client has been drawing two aspect ratios since 2026-08-20 —
+  which is why its own comments disagree with each other, one calling the assets
+  "3:4 portraits" and three calling them "padded squares". Both were true, of
+  different files. New images now land on the square side, which is the side
+  every measured number in `recipe-card.styles.ts` assumes. To re-roll one,
+  delete the object at `<normalised-name>.png` and the next request that needs
+  it will paint a new one.
 
 ### Chat tool calling
 

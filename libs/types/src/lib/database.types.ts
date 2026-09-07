@@ -39,18 +39,21 @@ export type Database = {
           bucket: Database["public"]["Enums"]["ai_quota_bucket"]
           first_period: number
           per_period: number
+          period: string
           tier: string
         }
         Insert: {
           bucket: Database["public"]["Enums"]["ai_quota_bucket"]
           first_period: number
           per_period: number
+          period?: string
           tier: string
         }
         Update: {
           bucket?: Database["public"]["Enums"]["ai_quota_bucket"]
           first_period?: number
           per_period?: number
+          period?: string
           tier?: string
         }
         Relationships: []
@@ -680,6 +683,79 @@ export type Database = {
           property?: Database["public"]["Enums"]["dietary_property"]
         }
         Relationships: []
+      }
+      pantry_items: {
+        Row: {
+          confidence: number
+          first_seen_at: string
+          id: string
+          ingredient_id: string
+          last_seen_at: string
+          profile_id: string
+          source: string
+        }
+        Insert: {
+          confidence?: number
+          first_seen_at?: string
+          id?: string
+          ingredient_id: string
+          last_seen_at?: string
+          profile_id: string
+          source: string
+        }
+        Update: {
+          confidence?: number
+          first_seen_at?: string
+          id?: string
+          ingredient_id?: string
+          last_seen_at?: string
+          profile_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pantry_items_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "pantry_items_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "pantry_items_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "pantry_items_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "pantry_items_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pantry_items_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pantry_staples: {
         Row: {
@@ -1869,6 +1945,12 @@ export type Database = {
           menu_main_recipe_id: string | null
           menu_title: string | null
           name: string | null
+          plan_cooked_at: string | null
+          plan_date: string | null
+          plan_id: string | null
+          plan_meal: string | null
+          plan_slot: number | null
+          plan_title: string | null
           profile_id: string
           recipe_id: string
           updated_at: string
@@ -1879,6 +1961,12 @@ export type Database = {
           menu_main_recipe_id?: string | null
           menu_title?: string | null
           name?: string | null
+          plan_cooked_at?: string | null
+          plan_date?: string | null
+          plan_id?: string | null
+          plan_meal?: string | null
+          plan_slot?: number | null
+          plan_title?: string | null
           profile_id: string
           recipe_id: string
           updated_at?: string
@@ -1889,6 +1977,12 @@ export type Database = {
           menu_main_recipe_id?: string | null
           menu_title?: string | null
           name?: string | null
+          plan_cooked_at?: string | null
+          plan_date?: string | null
+          plan_id?: string | null
+          plan_meal?: string | null
+          plan_slot?: number | null
+          plan_title?: string | null
           profile_id?: string
           recipe_id?: string
           updated_at?: string
@@ -2071,6 +2165,73 @@ export type Database = {
         }
         Relationships: []
       }
+      profile_pantry: {
+        Row: {
+          category_id: string | null
+          category_name: string | null
+          confidence: number | null
+          default_shelf_life_days: number | null
+          first_seen_at: string | null
+          id: string | null
+          ingredient_id: string | null
+          ingredient_name: string | null
+          last_seen_at: string | null
+          profile_id: string | null
+          source: string | null
+          state: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingredients_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pantry_items_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "pantry_items_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "pantry_items_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "pantry_items_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "pantry_items_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pantry_items_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recipe_dietary: {
         Row: {
           diet_canonical_id: string | null
@@ -2105,8 +2266,9 @@ export type Database = {
       }
     }
     Functions: {
+      ai_quota_period_length: { Args: { p_period: string }; Returns: unknown }
       ai_quota_period_start: {
-        Args: { p_anchor: string; p_now?: string }
+        Args: { p_anchor: string; p_now?: string; p_period: string }
         Returns: string
       }
       ai_quota_status: {
@@ -2148,6 +2310,7 @@ export type Database = {
           saved_count: number
         }[]
       }
+      confirm_pantry_item: { Args: { p_id: string }; Returns: undefined }
       current_profile_id: { Args: never; Returns: string }
       delete_orphan_generated_recipes: { Args: never; Returns: number }
       difficulty_preference_rank: {
@@ -2306,6 +2469,17 @@ export type Database = {
         Args: { input_text: string }
         Returns: string
       }
+      pantry_confidence: {
+        Args: {
+          p_age_days: number
+          p_confidence: number
+          p_shelf_life_days: number
+        }
+        Returns: number
+      }
+      pantry_confidence_floor: { Args: never; Returns: number }
+      pantry_default_shelf_life_days: { Args: never; Returns: number }
+      pantry_state: { Args: { p_confidence: number }; Returns: string }
       persist_recipe: {
         Args: {
           p_base_recipe_id?: string
@@ -2439,6 +2613,19 @@ export type Database = {
         }
         Returns: string
       }
+      record_pantry_cooked: {
+        Args: { p_ingredient_ids: string[] }
+        Returns: number
+      }
+      record_pantry_scan: {
+        Args: { p_confidence?: number; p_ingredient_ids: string[] }
+        Returns: number
+      }
+      record_pantry_shopped: {
+        Args: { p_ingredient_ids: string[] }
+        Returns: number
+      }
+      record_plan_cooked: { Args: { p_recipe_ids: string[] }; Returns: number }
       record_prompt: {
         Args: {
           p_conversation_id?: string

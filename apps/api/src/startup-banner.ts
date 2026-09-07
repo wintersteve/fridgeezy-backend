@@ -1,4 +1,4 @@
-import { isEntitlementRequired } from "./middleware/require-entitlement";
+import { isAuthDisabled } from "./middleware/require-auth";
 import { describeRestEndpoints } from "./rest";
 import type { RouteInfo } from "./utils/collect-routes";
 
@@ -55,19 +55,23 @@ function describeAuth(routes: RouteInfo[]): string {
 /**
  * Whether the paid gate is enforcing.
  *
- * Printed unconditionally, and the *off* state is the one that shouts — the
- * opposite of `describeAuth`, matching the inverted default in
- * `require-entitlement.ts`. The gate has to ship disabled (the client cannot
- * sell a subscription yet) which means "off" is both the correct state today and
- * the state that silently costs money once it stops being correct. Something has
- * to say so on every boot.
+ * Printed unconditionally, and the *off* state is the one that shouts. It used
+ * to be off by default — `REQUIRE_ENTITLEMENT` was a rollout switch and this
+ * line was the only thing saying so on a server that was neither charging nor
+ * counting. The flag is gone (2026-09-04) and the gate is unconditional, so the
+ * only way to see the warning now is to have disabled auth, which is a local
+ * escape hatch `describeAuth` is already shouting about one line above.
+ *
+ * The line stays, and prints the counts, for the reason it was written: a gate
+ * that came off a route is invisible in a diff and obvious in a number that
+ * dropped between boots.
  */
 function describeEntitlement(routes: RouteInfo[]): string {
     // Counted from the routing itself, so a premium route that lost its
-    // middleware reads as one fewer here on the next boot. This is the safety net
-    // for entitlement being an opt-in the author has to remember — see the note
-    // on `requireEntitlement`. Zero is worth shouting about while any route is
-    // meant to be paid.
+    // middleware reads as one fewer here on the next boot. The mount `tier` makes
+    // an omission fail closed, but it cannot catch a per-route gate that was
+    // deleted — see the note on `requireEntitlement`. Zero is worth shouting
+    // about while any route is meant to be paid.
     const premium = routes.filter((route) => route.requiresEntitlement).length;
     // Metered routes are counted separately because they are a different claim:
     // a premium route is closed to a free account, a metered one is open to it N
@@ -77,8 +81,8 @@ function describeEntitlement(routes: RouteInfo[]): string {
         `${premium} premium route${premium === 1 ? "" : "s"}` +
         (metered > 0 ? `, ${metered} metered` : "");
 
-    if (!isEntitlementRequired()) {
-        return `⚠ NOT ENFORCED — ${scope} open to every signed-in user (REQUIRE_ENTITLEMENT unset)`;
+    if (isAuthDisabled()) {
+        return `⚠ NOT ENFORCED — ${scope} open to everyone (ALLOW_UNAUTHENTICATED)`;
     }
 
     if (premium === 0 && metered === 0) {

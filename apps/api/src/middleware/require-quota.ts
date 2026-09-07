@@ -6,7 +6,6 @@ import {
 import type { NextFunction, Request, Response } from "express";
 
 import { isAuthDisabled } from "./require-auth";
-import { isEntitlementRequired } from "./require-entitlement";
 
 declare global {
     // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -91,11 +90,17 @@ const STATE = new WeakMap<Request, QuotaState>();
  * shortcuts, which take a model call's price for no model call at all; those
  * call {@link QuotaHandle.waive} explicitly.
  *
- * ## It stands down with `REQUIRE_ENTITLEMENT`
+ * ## It stands down only with `ALLOW_UNAUTHENTICATED`
  *
- * Same switch, and it has to be: metering while purchasing is not shipped would
- * wall every user at five recipes with no way to buy more. Turning the paid gate
- * on is what turns this on.
+ * It used to stand down with `REQUIRE_ENTITLEMENT` as well, and had to: metering
+ * while purchasing was not shipped would have walled every user at five recipes
+ * with no way to buy more. That flag is gone (2026-09-04, see
+ * {@link requireEntitlement}), so metering is now on wherever auth is — which is
+ * what makes `ai_usage_events` fill at all. It was empty for three weeks because
+ * this returned on the first line.
+ *
+ * With auth off there is no user id to charge, so there is nothing to do but
+ * pass. That is a local escape hatch and the banner shouts about it.
  */
 export function requireQuota(bucket: QuotaBucket) {
     async function handle(
@@ -103,7 +108,7 @@ export function requireQuota(bucket: QuotaBucket) {
         res: Response,
         next: NextFunction
     ): Promise<void> {
-        if (!isEntitlementRequired() || isAuthDisabled()) {
+        if (isAuthDisabled()) {
             next();
             return;
         }

@@ -11,6 +11,20 @@
 #   ./infra/send-webhook-event.sh TEST
 #
 #   USER_ID=<uuid> ./infra/send-webhook-event.sh RENEWAL   # pick the subject
+#   TARGET=local ./infra/send-webhook-event.sh INITIAL_PURCHASE
+#
+# ## TARGET=local, and why it is not optional any more
+#
+# RevenueCat delivers webhooks to ONE configured URL, the deployed Function URL,
+# so a Test Store purchase made against a local `npm run api:dev` grants the
+# entitlement on the DEVICE and writes the row into the REMOTE Supabase. The
+# local stack never hears about it. That did not matter while the paid gate was
+# behind `REQUIRE_ENTITLEMENT` and off by default; with the gate unconditional
+# (2026-09-04) it is the difference between a working local API and one that
+# 402s the home feed's generation. So this is now the supported way to hold an
+# entitlement locally, and `TARGET=local` reads its secret and its database out
+# of `apps/api/.env{,.dev}` rather than SSM and posts at `API_URL`
+# (default `http://127.0.0.1:8000`).
 #
 # It prints the `profile_entitlements` row before and after, because the row is
 # the thing under test — the handler answers 200 for "applied" and for "ignored
@@ -36,22 +50,36 @@
 #    depth on top of that; the differing secrets are the actual protection.
 # 3. Every event is stamped `environment: SANDBOX`, so any row it creates is
 #    distinguishable from a real purchase in the table itself.
+# 4. `TARGET=local` cannot reach either deployment: it never resolves a Function
+#    URL and refuses a non-loopback `API_URL`.
 set -euo pipefail
 
+TARGET="${TARGET:-dev}"
 FUNCTION_NAME="${FUNCTION_NAME:-fridgeezy-dev-api}"
 REGION="${AWS_REGION:-eu-central-1}"
 SSM_PREFIX="/fridgeezy/dev"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# The guard. Pinning by default is not enough — someone will export
-# FUNCTION_NAME for an unrelated reason and this must not quietly follow it.
-case "$FUNCTION_NAME" in
-    *-dev-*) ;;
+case "$TARGET" in
+    dev|local) ;;
     *)
-        echo "refusing: FUNCTION_NAME='$FUNCTION_NAME' is not a dev function." >&2
-        echo "This script fabricates entitlements and is dev-only by design." >&2
+        echo "refusing: TARGET='$TARGET' is not 'dev' or 'local'." >&2
         exit 1
         ;;
 esac
+
+# The guard. Pinning by default is not enough — someone will export
+# FUNCTION_NAME for an unrelated reason and this must not quietly follow it.
+if [ "$TARGET" = "dev" ]; then
+    case "$FUNCTION_NAME" in
+        *-dev-*) ;;
+        *)
+            echo "refusing: FUNCTION_NAME='$FUNCTION_NAME' is not a dev function." >&2
+            echo "This script fabricates entitlements and is dev-only by design." >&2
+            exit 1
+            ;;
+    esac
+fi
 
 EVENT_TYPE="${1:-}"
 
@@ -64,25 +92,73 @@ case "$EVENT_TYPE" in
         ;;
 esac
 
-command -v aws >/dev/null 2>&1 || { echo "aws CLI not found on PATH" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 not found on PATH" >&2; exit 1; }
 
-ssm() {
-    aws ssm get-parameter --name "$SSM_PREFIX/$1" --with-decryption \
-        --region "$REGION" --query 'Parameter.Value' --output text
+# Reads one key out of a dotenv file, quotes stripped. Deliberately not `source`:
+# these files are Nx's, not this script's, and sourcing them would drop every
+# other key they hold — OPENAI_API_KEY among them — into this shell.
+dotenv() {
+    python3 -c '
+import pathlib, re, sys
+path, key = pathlib.Path(sys.argv[1]), sys.argv[2]
+if not path.exists():
+    sys.exit(1)
+for line in path.read_text().splitlines():
+    match = re.match(rf"\s*(?:export\s+)?{re.escape(key)}\s*=\s*(.*)", line)
+    if match:
+        print(match.group(1).strip().strip("\"\x27"))
+        sys.exit(0)
+sys.exit(1)
+' "$1" "$2"
 }
 
-SECRET="$(ssm REVENUECAT_WEBHOOK_SECRET)" || {
-    echo "no $SSM_PREFIX/REVENUECAT_WEBHOOK_SECRET in SSM — run put-secrets.sh first" >&2
-    exit 1
-}
+if [ "$TARGET" = "local" ]; then
+    URL="${API_URL:-http://127.0.0.1:8000}"
 
-URL="$(aws lambda get-function-url-config --function-name "$FUNCTION_NAME" \
-    --region "$REGION" --query FunctionUrl --output text)"
-URL="${URL%/}/rest/billing/revenuecat"
+    # The local counterpart of the dev-function guard. Without it, exporting
+    # API_URL for an unrelated reason would point a script that fabricates
+    # entitlements at a real deployment.
+    case "$URL" in
+        http://127.0.0.1:*|http://localhost:*) ;;
+        *)
+            echo "refusing: API_URL='$URL' is not loopback." >&2
+            echo "TARGET=local fabricates entitlements against the local stack only." >&2
+            exit 1
+            ;;
+    esac
 
-SUPABASE_URL="$(ssm SUPABASE_URL)"
-SERVICE_KEY="$(ssm SUPABASE_SERVICE_ROLE_KEY)"
+    URL="${URL%/}/rest/billing/revenuecat"
+
+    # `.env` holds the shared secret and `.env.dev` the local Supabase, which is
+    # exactly how `api:serve:dev` loads them — so the secret this signs with is
+    # by construction the one the running API compares against.
+    SECRET="$(dotenv "$REPO_ROOT/apps/api/.env" REVENUECAT_WEBHOOK_SECRET)" || {
+        echo "no REVENUECAT_WEBHOOK_SECRET in apps/api/.env" >&2
+        exit 1
+    }
+
+    SUPABASE_URL="$(dotenv "$REPO_ROOT/apps/api/.env.dev" SUPABASE_URL)"
+    SERVICE_KEY="$(dotenv "$REPO_ROOT/apps/api/.env.dev" SUPABASE_SERVICE_ROLE_KEY)"
+else
+    command -v aws >/dev/null 2>&1 || { echo "aws CLI not found on PATH" >&2; exit 1; }
+
+    ssm() {
+        aws ssm get-parameter --name "$SSM_PREFIX/$1" --with-decryption \
+            --region "$REGION" --query 'Parameter.Value' --output text
+    }
+
+    SECRET="$(ssm REVENUECAT_WEBHOOK_SECRET)" || {
+        echo "no $SSM_PREFIX/REVENUECAT_WEBHOOK_SECRET in SSM — run put-secrets.sh first" >&2
+        exit 1
+    }
+
+    URL="$(aws lambda get-function-url-config --function-name "$FUNCTION_NAME" \
+        --region "$REGION" --query FunctionUrl --output text)"
+    URL="${URL%/}/rest/billing/revenuecat"
+
+    SUPABASE_URL="$(ssm SUPABASE_URL)"
+    SERVICE_KEY="$(ssm SUPABASE_SERVICE_ROLE_KEY)"
+fi
 
 # A real auth.users id is required: profile_entitlements.user_id is a foreign key
 # to it, so a made-up uuid fails the insert and surfaces as a 500 from the
@@ -171,7 +247,8 @@ print(json.dumps({
 PY
 )"
 
-echo "function    $FUNCTION_NAME"
+echo "target      $TARGET"
+if [ "$TARGET" = "dev" ]; then echo "function    $FUNCTION_NAME"; fi
 echo "url         $URL"
 echo "event       $EVENT_TYPE"
 echo "subject     $USER_ID"

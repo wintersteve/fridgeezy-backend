@@ -28,8 +28,11 @@ bottom of this file — the checkboxes here are the summary.
       App Store shared secret.
 - [ ] Webhook: URL + `Authorization` value, matched into `apps/api/.env`, then
       `put-secrets.sh` and a cold start.
-- [ ] `REQUIRE_ENTITLEMENT=true`, then **delete the flag** and make the gate
-      unconditional so it cannot end up off in production quietly.
+- [x] `REQUIRE_ENTITLEMENT=true`, then **delete the flag** and make the gate
+      unconditional so it cannot end up off in production quietly. Done
+      2026-09-04: the flag is gone from the middleware, the banner, `lambda.tf`,
+      `variables.tf` and both tfvars. It had defaulted to off everywhere, so
+      nothing was enforced and `ai_usage_events` was empty for three weeks.
 - [x] **Decide what the subscription actually sells.** Done 2026-08-26: **every
       AI feature**, on the rule "if a model runs, it is paid". Compose alone was
       too thin to sell — one surface, several taps deep, that most users never
@@ -712,8 +715,10 @@ do with this repo and are the slowest; do them first.
 
    ```
    REVENUECAT_WEBHOOK_SECRET=<the same string>
-   REQUIRE_ENTITLEMENT=true
    ```
+
+   There is no `REQUIRE_ENTITLEMENT` any more — the gate is unconditional as of
+   2026-09-04.
 
 2. Push the secret to SSM — it is already in `put-secrets.sh`:
 
@@ -722,33 +727,20 @@ do with this repo and are the slowest; do them first.
    APPLY=true ./infra/put-secrets.sh
    ```
 
-3. Flip the gate in `infra/environments/dev.tfvars`:
-
-   ```
-   require_entitlement = true
-   ```
-
-   The variable and the `lambda.tf` wiring already exist, so this is the only
-   edit. It is **not** a secret — it says whether to enforce, not what to enforce
-   with — so it lives in the env block rather than SSM.
-4. Build and deploy:
+3. Build and deploy:
 
    ```bash
    ./infra/build-artifact.sh
    terraform -chdir=infra apply -var-file=environments/dev.tfvars
    ```
 
-5. Confirm the deployed state. **The startup banner does NOT print on Lambda** —
+4. Confirm the deployed state. **The startup banner does NOT print on Lambda** —
    `startupBanner` is imported only by `main.ts`, the local serve entrypoint, so
-   its `billing` line is a check for `npm run api`, never for CloudWatch. On the
-   deployed function the two facts are confirmed separately:
+   its `billing` line is a check for `npm run api`, never for CloudWatch. The
+   gate needs no confirming now that it is unconditional; the secret does, and
+   only an actual delivery proves it, since nothing reports it at boot:
 
    ```bash
-   # the flag — from the function's own config, not the banner
-   aws lambda get-function-configuration --function-name fridgeezy-dev-api \
-     --region eu-central-1 --query 'Environment.Variables.REQUIRE_ENTITLEMENT'
-
-   # the secret — only an actual delivery proves it; nothing reports it at boot
    aws logs tail /aws/lambda/fridgeezy-dev-api --follow --region eu-central-1 \
      | grep --line-buffered "\[billing\]"
    ```
@@ -778,6 +770,6 @@ Then, signed into the Sandbox tester account:
 
 ## 6. Afterwards
 
-- [ ] Delete the `REQUIRE_ENTITLEMENT` flag and make `requireEntitlement`
-      unconditional. It exists only to sequence this rollout.
+- [x] Delete the `REQUIRE_ENTITLEMENT` flag and make `requireEntitlement`
+      unconditional. Done 2026-09-04.
 - [ ] Add the Android SDK key and repeat from step 2 for a Play Store app.

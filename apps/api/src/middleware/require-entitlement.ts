@@ -7,25 +7,6 @@ import type { NextFunction, Request, Response } from "express";
 import { isAuthDisabled } from "./require-auth";
 
 /**
- * Whether the paid gate is live.
- *
- * **This one is opt-IN, and that inverts `ALLOW_UNAUTHENTICATED` deliberately.**
- * There, enforcement is the default because forgetting to set a variable must
- * fail closed. Here, failing closed would put the paywall in front of routes the
- * product now gives away — see the tier split on `requireEntitlement` below.
- *
- * So this is a rollout switch, which is the one kind of flag this repo keeps
- * (see CLAUDE.md: "Build a flag scoped to a risky change, not as a standing
- * fixture"). **Flip it on in the same release that ships purchasing, then delete
- * the flag and make the gate unconditional.** Leaving it as a permanent setting
- * is how it ends up off in production with nothing to say so — which is why the
- * startup banner reports the state rather than staying quiet about it.
- */
-export function isEntitlementRequired(): boolean {
-    return process.env.REQUIRE_ENTITLEMENT === "true";
-}
-
-/**
  * Rejects a request from a user with no active subscription.
  *
  * ## Attach this per MOUNT, via `tier`
@@ -77,6 +58,29 @@ export function isEntitlementRequired(): boolean {
  * subscription". Collapsing them sends a paying user who lapsed to the login
  * screen, and the client cannot tell it should show the paywall instead.
  *
+ * ## Unconditional, and there is no flag any more
+ *
+ * This ran behind `REQUIRE_ENTITLEMENT` from 2026-08-12 until 2026-09-04. That
+ * was a rollout switch for a gate that could not be enforced yet — with nothing
+ * to buy, enforcing returned 402 to everybody and took the product offline
+ * rather than protecting the spend. It defaulted to OFF, in dev and in prod, so
+ * for three weeks nothing was enforced and no usage was metered.
+ *
+ * What retired it is that there is now something to buy from both sides: real
+ * App Store products against the store key, and RevenueCat's **Test Store**
+ * (`EXPO_PUBLIC_REVENUECAT_TEST_KEY`) for local work, whose purchases go through
+ * RevenueCat's own backend, grant the entitlement and fire a real webhook. The
+ * app made the same call in the same direction — `paywall-override` defaults to
+ * enforcing whenever a Test Store key is configured.
+ *
+ * **Do not reintroduce a flag.** A standing one is how enforcement ends up off
+ * in production with nothing to say so, which is precisely what happened here.
+ * The two remaining ways off the gate are both loud and both local:
+ * `ALLOW_UNAUTHENTICATED=true` (below), and granting yourself an entitlement
+ * with `infra/send-webhook-event.sh`, which now has a `TARGET=local` mode for
+ * exactly this — the local stack never receives a real webhook, since RevenueCat
+ * delivers to the deployed Function URL.
+ *
  * ## Known gap: the purchase-to-webhook window
  *
  * A user who has just paid is entitled according to the RevenueCat SDK on their
@@ -97,19 +101,15 @@ export async function requireEntitlement(
     res: Response,
     next: NextFunction
 ): Promise<void> {
-    if (!isEntitlementRequired()) {
-        next();
-        return;
-    }
-
     // Auth off means no user id was ever resolved, so there is nobody to look an
-    // entitlement up for. Stand down rather than answering 500: both flags are
-    // local escape hatches, and `ALLOW_UNAUTHENTICATED=true` with
-    // `REQUIRE_ENTITLEMENT=true` used to make every premium route fail as
-    // "misconfigured" — a combination that was rare while entitlement was
-    // all-or-nothing and is ordinary now that only some routes carry it.
-    // Disabling auth in production is a far louder problem than the paywall
-    // following it, and the banner already shouts about that one.
+    // entitlement up for. Stand down rather than answering 500:
+    // `ALLOW_UNAUTHENTICATED=true` is the local escape hatch, and it used to
+    // make every premium route fail as "misconfigured" instead. Disabling auth
+    // in production is a far louder problem than the paywall following it, and
+    // the banner already shouts about that one.
+    //
+    // **This is the only remaining way off the gate**, now that
+    // `REQUIRE_ENTITLEMENT` is gone — see the note on {@link requireEntitlement}.
     if (isAuthDisabled()) {
         next();
         return;

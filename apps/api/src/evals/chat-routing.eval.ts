@@ -8,6 +8,7 @@ import {
     convertToolsToOpenAiTools,
     createChatCompletion,
     readRoutedSearch,
+    type RoutedSearch,
 } from "../modules/chat/services";
 import { getRecipeSuggestionsTool, planMenuTool } from "../modules/chat/tools";
 import {
@@ -45,6 +46,26 @@ interface Case {
     message: string;
     /** Which tool must be chosen. Defaults to the dish search. */
     tool?: "GET_RECIPE_SUGGESTIONS" | "PLAN_MENU";
+    /**
+     * Assert NO tool was called — the turn is a question the model answers in
+     * prose itself.
+     *
+     * The half of the fork with no card at the end of it, and the one that
+     * fails invisibly: a question answered with a recipe card still produces
+     * something on screen, so nothing looks broken. It is only wrong if you
+     * read it.
+     */
+    noTool?: boolean;
+    /**
+     * `noTool` only: a lowercased substring the prose answer must contain.
+     *
+     * Answering in prose is only half of it. The chat has no tool calls in the
+     * history it is sent back, so the ONLY thing that carries a dish into the
+     * next turn is the assistant having said its name — answer "yes, that's a
+     * cheese sauce" and "give me that recipe" has nothing to resolve. Naming it
+     * is what makes the follow-up case below work.
+     */
+    answerNames?: string;
     /** PLAN_MENU only: lowercased substrings the `courses` array must contain. */
     courses?: string[];
     /**
@@ -67,6 +88,16 @@ interface Case {
     noComponent?: boolean;
     /** Lowercased substrings, each of which some `exclude` entry must contain. */
     exclude?: string[];
+    /**
+     * Lowercased substrings that no `exclude` entry may contain.
+     *
+     * For the one shape that makes the search unsatisfiable: the same dish in
+     * `dish` and in `exclude`. `searchRecipeSuggestions` now throws the
+     * exclusion away rather than trusting this, so a miss here is a prompt
+     * regression rather than a live outage — which is exactly why it is worth
+     * catching in the eval instead of in a support ticket.
+     */
+    noExclude?: string[];
     /** Lowercased substrings, each of which some `ingredients` entry must contain. */
     ingredients?: string[];
     why: string;
@@ -209,6 +240,104 @@ const CASES: Case[] = [
         exclude: ["cacio"],
         why: "every dish already shown goes in `exclude` or the same card comes back",
     },
+
+    // --- A VARIATION is a request for the variation ------------------------
+    //
+    // Measured 2026-09-03 and the reason this section exists. After a Béchamel
+    // card, "What if we add cheese to it?" routed to
+    // `dish: "Béchamel", exclude: ["Béchamel"]` — pinned and forbidden at once,
+    // which no row can satisfy. Asked outright a second time, in full words, it
+    // still dropped the cheese and pinned plain Béchamel. Three turns, nothing
+    // written, and the model knew the word the whole time: asked
+    // "what is bechamel with cheese called?" it answers Mornay.
+    {
+        message: "What if we add cheese to it?",
+        history: [
+            { role: "user", content: "Can you give me a Béchamel recipe" },
+            {
+                role: "assistant",
+                content:
+                    "I found Béchamel Sauce — butter, flour and milk, the base for lasagne and gratins.",
+            },
+        ],
+        noTool: true,
+        answerNames: "mornay",
+        why: "asking what WOULD happen is a question, and the same sentence is answered in prose on the recipe chat — but it has to say the word, or the follow-up below has nothing to go on",
+    },
+    {
+        message: "great, give me that recipe",
+        history: [
+            { role: "user", content: "Can you give me a Béchamel recipe" },
+            {
+                role: "assistant",
+                content:
+                    "I found Béchamel Sauce — butter, flour and milk, the base for lasagne and gratins.",
+            },
+            { role: "user", content: "What if we add cheese to it?" },
+            {
+                role: "assistant",
+                content:
+                    "Add grated cheese to a béchamel and it becomes a Mornay sauce — Gruyère and Parmesan are the classic pair.",
+            },
+        ],
+        dish: "mornay",
+        noExclude: ["chamel"],
+        why: "the other half of the pair: the answer named the dish, so this turn can pin it — and the béchamel it is built ON must not be excluded",
+    },
+    {
+        message: "Can you give me a recipe for Béchamel with cheese",
+        dish: "mornay",
+        why: "spelled out in full, with no history to lean on — the modifier is the whole request",
+    },
+    {
+        message: "can you make it vegan?",
+        history: [
+            { role: "user", content: "a carbonara recipe" },
+            {
+                role: "assistant",
+                content: "Here's Carbonara — guanciale, egg, pecorino and pepper.",
+            },
+        ],
+        noExclude: ["carbonara"],
+        why: "a variation with no established name of its own: whatever `dish` ends up as, excluding the base cannot be right",
+    },
+
+    // --- A QUESTION is answered, not searched ------------------------------
+    //
+    // The general chat has only two tools and both end in a card, so every
+    // question used to be answered by searching for a dish. "is bechamel the
+    // same as white sauce?" returned a Béchamel card and a summary describing
+    // it — a yes/no question answered with a recipe.
+    {
+        message: "is bechamel the same as white sauce?",
+        noTool: true,
+        why: "a comparison is a question; a card answers it with the wrong kind of thing",
+    },
+    {
+        message: "how long does bechamel keep in the fridge?",
+        noTool: true,
+        why: "nothing to cook here — this one already worked and must keep working",
+    },
+    {
+        message: "what is bechamel with cheese called?",
+        noTool: true,
+        why: "asking for a NAME is not asking for a recipe; naming it in prose is what lets the next turn find it",
+    },
+    {
+        message: "why does my hollandaise split?",
+        noTool: true,
+        why: "a technique question — the answer is an explanation, not a hollandaise card",
+    },
+
+    // --- ...and the questions that ARE requests for a card -----------------
+    {
+        message: "how do I make a Béchamel?",
+        why: "phrased as a question, but it wants the recipe — the fork must not swallow this",
+    },
+    {
+        message: "what can I do with leftover roast chicken?",
+        why: "a question in form, a request for something to cook in substance",
+    },
 ];
 
 const tools = convertToolsToOpenAiTools({
@@ -216,8 +345,16 @@ const tools = convertToolsToOpenAiTools({
     PLAN_MENU: planMenuTool,
 });
 
+/** What one routing call produced: the tool it chose, its arguments, its prose. */
+interface Routed extends RoutedSearch {
+    /** null when the model answered the question itself instead of fetching. */
+    tool: string | null;
+    courses: string[];
+    prose: string;
+}
+
 /** Run one routing call and return the arguments it produced. */
-async function route(testCase: Case) {
+async function route(testCase: Case): Promise<Routed> {
     const stream = createChatCompletion(
         [
             { role: "system", content: SYSTEM_PROMPT },
@@ -228,7 +365,11 @@ async function route(testCase: Case) {
         { stream: true, model: ROUTING_MODEL, temperature: 0.7 }
     );
 
+    let prose = "";
+
     for await (const event of stream) {
+        if (event.type === "chunk") prose += event.delta;
+
         if (event.type === "tool_calls") {
             const [call] = event.tool_calls;
             let courses: string[] = [];
@@ -248,14 +389,17 @@ async function route(testCase: Case) {
             }
 
             return {
-                tool: call?.function.name,
+                tool: call?.function.name ?? null,
                 courses,
+                prose,
                 ...readRoutedSearch(event.tool_calls),
             };
         }
     }
 
-    return null;
+    // No tool call: the model answered the question itself, and the prose IS
+    // the reply. Returned rather than dropped so `answerNames` can read it.
+    return { tool: null, courses: [], prose };
 }
 
 const has = (values: string[] | undefined, needle: string) =>
@@ -278,7 +422,20 @@ async function main() {
 
             const wantTool = testCase.tool ?? "GET_RECIPE_SUGGESTIONS";
 
-            if (!routed) {
+            if (testCase.noTool) {
+                if (routed.tool) {
+                    reasons.push(
+                        `called ${routed.tool} with query "${routed.query ?? ""}" — this is a question to answer, not a dish to fetch`
+                    );
+                } else if (
+                    testCase.answerNames &&
+                    !routed.prose.toLowerCase().includes(testCase.answerNames)
+                ) {
+                    reasons.push(
+                        `the answer never says "${testCase.answerNames}", so the next turn has no dish to resolve: ${JSON.stringify(routed.prose.slice(0, 160))}`
+                    );
+                }
+            } else if (!routed.tool) {
                 reasons.push("no tool call at all — the search never runs");
             } else if (routed.tool !== wantTool) {
                 reasons.push(
@@ -327,6 +484,14 @@ async function main() {
                 for (const needle of testCase.exclude ?? []) {
                     if (!has(routed.exclude, needle)) {
                         reasons.push(`exclude is missing "${needle}"`);
+                    }
+                }
+
+                for (const needle of testCase.noExclude ?? []) {
+                    if (has(routed.exclude, needle)) {
+                        reasons.push(
+                            `exclude contains "${needle}", the dish this turn is about — pinned and forbidden at once`
+                        );
                     }
                 }
 

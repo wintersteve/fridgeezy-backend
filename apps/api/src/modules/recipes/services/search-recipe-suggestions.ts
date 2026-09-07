@@ -419,7 +419,50 @@ export async function searchRecipeSuggestions(
         onMetric,
     } = options;
 
-    const excluded = new Set((exclude ?? []).map(canonicalizeName));
+    /**
+     * The dish the caller pinned can never also be a dish it refuses.
+     *
+     * **This is not defensive tidying — it is the one shape that makes the whole
+     * search unsatisfiable by construction.** `isRequestedDish` below admits
+     * only rows named `dish`; `isExcluded` refuses any row named in `exclude`.
+     * With the same name in both, every catalogue stage rejects every row, and
+     * generation — pinned to that dish by its `Dish:` line — has its own output
+     * rejected too. The turn ends `unsatisfied` with nothing to show and nothing
+     * in the log to say why.
+     *
+     * It arrives from the chat router, which is told to pin a named dish AND to
+     * exclude every dish it has already shown. Those two rules are both right on
+     * their own and collide on a follow-up about the dish on screen: measured
+     * 2026-09-03, "What if we add cheese to it?" after a Béchamel card routed to
+     * `dish: "Béchamel", exclude: ["Béchamel"]` and could not have returned
+     * anything.
+     *
+     * The pin wins, because it is the more specific statement: `exclude` is a
+     * list of things already seen, while `dish` is what this request is FOR. A
+     * caller that genuinely wants "something other than X" says so by leaving
+     * `dish` unset — which is exactly what the accompaniment shape
+     * ("what sauce goes with apple strudel") does.
+     *
+     * The router prompt was fixed in the same change; this is the half that
+     * cannot be un-fixed by a model having a bad day.
+     */
+    const pinnedName = canonicalizeName(dish);
+    const contradicted = (exclude ?? []).filter(
+        (name) => !!pinnedName && canonicalizeName(name) === pinnedName
+    );
+
+    if (contradicted.length > 0) {
+        console.warn(
+            `[SearchRecipeSuggestions] Ignoring exclude ${JSON.stringify(contradicted)} — it names the pinned dish "${dish}"`
+        );
+        onMetric?.("search.exclude_contradicted_dish");
+    }
+
+    const excluded = new Set(
+        (exclude ?? [])
+            .map(canonicalizeName)
+            .filter((name) => !!name && name !== pinnedName)
+    );
     const isExcluded = (...names: Array<string | null | undefined>) =>
         names.some((name) => !!name && excluded.has(canonicalizeName(name)));
 

@@ -217,6 +217,14 @@
                     "cwd": "apps/database"
                 }
             },
+            "backfill-shelf-life": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/backfill-shelf-life.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
             "strip-cuisine-from-names": {
                 "executor": "nx:run-commands",
                 "options": {
@@ -242,6 +250,13 @@
                 "executor": "nx:run-commands",
                 "options": {
                     "command": "npx jiti operations/check-pantry-ranking.ts",
+                    "cwd": "apps/database"
+                }
+            },
+            "check-shelf-life": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/check-shelf-life.ts",
                     "cwd": "apps/database"
                 }
             },

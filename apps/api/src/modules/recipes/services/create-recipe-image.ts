@@ -1,4 +1,8 @@
-import { buildFoodIllustrationStyle, generateImage } from "@fridgeezy/genai";
+import {
+    buildFoodIllustrationStyle,
+    generateImage,
+    padPngToSquare,
+} from "@fridgeezy/genai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
 
 import { toDeviceReachable } from "../../../utils/device-reachable-url";
@@ -79,27 +83,21 @@ PLATING
 - Garnish is counted, not scattered: a precise number of pieces you could tally at a glance, each placed individually. No sprinkling, no dusting across the whole plate, no crumbs trailing to the rim.
 
 ${buildFoodIllustrationStyle({
-    // The client crops this three ways — a full-width detail hero, a landscape
-    // card crop and a tall list thumb — so the vessel has to survive a centre
-    // crop to any of them, and the margin around it is what makes that possible.
+    // The client crops this three ways — a 520px 3:4 hero, a 272x200 landscape
+    // card crop, and a square list thumb — so the vessel has to survive a centre
+    // crop to any of them.
     //
-    // **This is a statement about where the objects ARE, and that is the whole
-    // point of the wording.** It used to ask the vessel to fill "about two
-    // thirds of the frame's width", and the model did not honour it: measured
-    // over six dishes on 2026-08-04, two thirds and three quarters both rendered
-    // the plate at ~77% of frame width — a smaller difference than the per-dish
-    // spread (72–83%) — and a third phrasing pinning it to the middle half of
-    // the height still swung between 51% and 87%. A *fraction of the frame* is
-    // an instruction about the camera, and this project has measured repeatedly
-    // that those do not survive while statements about the scene do
-    // (`generate-dish-tiles` records the same wall from the other side, and
-    // `generate-cuisine-cards`'s empty top third is the form that works).
-    //
-    // So the margin is described as a band of the picture that has nothing in
-    // it, which is a thing the model can draw, rather than as a size the vessel
-    // must hold, which it demonstrably cannot.
+    // The "two thirds" is aspirational and the model does not honour it. Measured
+    // over six dishes on 2026-08-04, asking for three quarters and asking for two
+    // thirds both render the plate at ~77% of frame width, a smaller difference
+    // than the per-dish spread (72–83%). A third phrasing pinning the plate to
+    // the middle half of the height did better — it halved the clipping — but
+    // still swung between 51% and 87% of frame height across dishes on one
+    // prompt. **Rewording this will not reliably change the plate's size.**
+    // The margin that actually matters is added after generation instead, by
+    // `padPngToSquare`, which is deterministic.
     framing:
-        "the vessel is complete and precisely centred both horizontally and vertically. A wide band of empty background runs around all four edges of the frame, and nothing enters it — no part of the vessel, no food, no garnish and no shadow reaches into that band, so the dish sits well inside its own margin on every side and still reads when the image is cropped to a tall column or to a wide banner.",
+        "the vessel is complete and precisely centred both horizontally and vertically, filling about two thirds of the frame's width, with a generous and even margin of empty background on all four sides — so the image still reads when cropped to a square or to a wide banner.",
     renderingEmphasis:
         "Detail is concentrated on the centrepiece and falls away toward the rim, so the eye lands in one place.",
     mood: "spare, exact and expensive — one confident gesture, generously surrounded by empty plate.",
@@ -123,25 +121,7 @@ export async function generateAndUploadRecipeImage(
         const { base64Data, mimeType } = await generateImage({
             prompt: buildPrompt(name),
             numberOfImages: 1,
-            // Square, painted rather than padded.
-            //
-            // The client shows this one asset in boxes from ~0.6 to ~1.5
-            // aspect, all cropping to fill, so the source has to sit in the
-            // middle of that range: a 3:4 render loses half its height in the
-            // widest of them and cut through the plate on every dish measured.
-            // A square loses about a third, and it is the shape every measured
-            // number on the client side already assumes.
-            //
-            // It used to BE a square, made by widening a 3:4 render with
-            // `padPngToSquare` — deleted 2026-09-04. That padder copied each
-            // row's edge pixel outward across ~160 columns, so any vertical
-            // variation in the one-pixel edge column (grain, the vignette, a
-            // wisp of shadow) stretched into a horizontal streak: visible lines
-            // down both sides. Generating the square directly is the same
-            // geometry with nothing synthetic in it, so there is no seam and no
-            // streak available to draw. **Do not reintroduce padding here** —
-            // if the plate needs more margin, that is the `framing` line's job.
-            aspectRatio: "1:1",
+            aspectRatio: "3:4",
         });
 
         if (!base64Data) {
@@ -149,7 +129,13 @@ export async function generateAndUploadRecipeImage(
             return ""; // Return empty string if no image data
         }
 
-        const buffer = Buffer.from(base64Data, "base64");
+        // Widen the 3:4 render to a square before storing it. The client shows
+        // this one file in boxes from 0.62 to 1.36 aspect, all cropping to fill;
+        // at 3:4 the widest of those cut through the plate on every dish
+        // measured. Padding is what makes one asset survive all three, and it
+        // has to happen here rather than at display time because the surfaces
+        // are full-bleed — see `padPngToSquare` for the rejected alternatives.
+        const buffer = padPngToSquare(Buffer.from(base64Data, "base64"));
 
         // Always store at the single deterministic path (the content type still
         // reflects the real bytes, which is what clients render by).

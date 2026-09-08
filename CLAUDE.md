@@ -1037,6 +1037,12 @@ those frames incrementally, which is why frame shapes are part of the contract.
   dark with pale pigment and handing back a light picture. Dark asks the blooms
   to *reach* the edges while the ground stays the majority of the frame.
 
+  **`padPngToSquare` is not a step every image takes.** It exists because one
+  recipe asset is cropped three ways, and it works by shrinking the subject
+  relative to the frame. An asset generated at the aspect it is displayed at
+  must skip it — `generate-dish-tiles` renders 9:16 for a 9:16 slot, and
+  padding would undo the framing it asks for.
+
   The default image model is `gemini-3-pro-image-preview`, picked by a blind A/B
   on 2026-08-04 rather than by preference. Flash renders this art direction as
   flat, hard-outlined cel shading whatever the prompt says, and six prompt
@@ -1058,54 +1064,17 @@ those frames incrementally, which is why frame shapes are part of the contract.
   that worked last week 404s, check the model id before anything else — and note
   that `GET /v1beta/models` will happily list a model the key can no longer use.
 
-  **Recipe images are generated SQUARE and stored exactly as the model returns
-  them.** `aspectRatio: "1:1"`, no post-processing of any kind.
-
-  They used to be 3:4 renders widened to a square by `padPngToSquare` in
-  `libs/genai`, which is **deleted** (2026-09-04) along with its hand-rolled PNG
-  codec. It drew visible lines down both sides, and the cause is inherent to the
-  approach rather than a bug in it: it copied each row's nearest edge pixel
-  outward across ~160 columns, so any vertical variation in that one-pixel edge
-  column — grain, the vignette, a wisp of shadow — stretched into a horizontal
-  streak. It converted 1-D vertical noise into horizontal banding. Its clamp
-  only lifted rows much *darker* than their neighbours, so ordinary noise
-  streaked straight through.
-
-  The reason a square is still the target is unchanged: the client shows one
-  asset in boxes from ~0.6 to ~1.5 aspect, all cropping to fill, so the source
-  has to sit in the middle of that range. A 3:4 render loses half its height in
-  the widest box and cut through the plate on every dish measured; a square
-  loses about a third, and it is the shape every measured number on the client
-  side already assumes.
-
-  **What the padder was actually doing was shrinking the plate relative to the
-  frame** — a padded square and a native square are the same aspect and differ
-  only in how much margin surrounds the dish. So the margin is now asked for in
-  the prompt instead, and the wording matters: `framing` describes *a band of
-  the picture with nothing in it*, not *a fraction of the frame the vessel must
-  fill*. The second form was measured on 2026-08-04 and does not hold (the plate
-  renders at ~77% of frame width whether two thirds or three quarters is asked
-  for, against a 72–83% per-dish spread). That is the same wall
-  `generate-dish-tiles` records: instructions aimed at the camera or the crop do
-  not survive, statements about the scene do.
-
-  **Do not reintroduce padding here.** If the plate needs more margin, that is
-  the `framing` line's job; if it needs less crop, that is the client box's.
-
-  **The stored catalogue is already mixed, and was before any of this.** Sampled
-  2026-09-04 over the 39 readable objects in the `recipes` bucket: 26 are
-  864x1184 portrait, 12 are 1184x1184 square (the padder's output — it preserved
-  the height and widened) and one is 1024x1024. Every one of them decodes as
-  8-bit non-interlaced RGB, so the portrait ones are not padder failures: they
-  simply predate it, because `generateAndUploadRecipeImage` short-circuits on an
-  existing object at the deterministic path and **nothing ever re-generates an
-  image**. So the client has been drawing two aspect ratios since 2026-08-20 —
-  which is why its own comments disagree with each other, one calling the assets
-  "3:4 portraits" and three calling them "padded squares". Both were true, of
-  different files. New images now land on the square side, which is the side
-  every measured number in `recipe-card.styles.ts` assumes. To re-roll one,
-  delete the object at `<normalised-name>.png` and the next request that needs
-  it will paint a new one.
+  Recipe images are **padded to a square by `padPngToSquare` before upload**.
+  The client shows one asset in boxes from 0.62 to 1.36 aspect, all cropping to
+  fill, and a 3:4 render loses 45% of its height in the widest of them — it cut
+  through the plate on every dish measured. Padding shrinks the plate relative
+  to the frame without touching the artwork, so one asset survives all three
+  crops while staying full-bleed. Note what this rules out: asking the model for
+  a smaller plate does not work (measured — plate size swings 51–87% of frame
+  height on an identical prompt), and `contentFit="contain"` in the client is
+  wrong because these surfaces are full-bleed. `libs/genai` therefore
+  externalises `node:` builtins in its vite config; the padder uses `zlib` to
+  avoid a native image dependency on Lambda.
 
 ### Chat tool calling
 

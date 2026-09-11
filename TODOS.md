@@ -516,21 +516,38 @@ silently degrades rather than erroring.
 
 ---
 
-# 10. Deferred — universal links for recipe sharing
+# 10. Universal links — BUILT, awaiting delegation and a native build
 
-**Blocked on buying a domain.** Sharing works today: the link opens a browser and
-the page offers an "Open in Fridgeezy" button. What is missing is the link itself
-opening the app, which needs `associatedDomains` (an entitlement, so a native
-rebuild) plus `/.well-known/apple-app-site-association` and
-`/.well-known/assetlinks.json` served from that same origin.
+**fridgeezy.com was bought on 2026-09-11** (GoDaddy, served by Route 53). The
+infrastructure and the static files are done; what is left needs a registrar and
+a native build.
 
-**Not the Lambda Function URL** — putting a shared AWS-owned host in the app's
-entitlement means claiming a domain we do not control, and the value is baked into
-a native build. Point a custom domain at the Function URL instead.
+- **`infra/dns.tf`** holds the zone, the us-east-1 certificate and the apex/www
+  ALIAS records, and its header carries the two-stage apply this needs: ACM
+  cannot validate until GoDaddy delegates, so a single cold apply fails.
+- **`infra/site.tf`** gained `aliases`, the ACM certificate and a `/r/*`
+  behaviour on the API origin, rewritten to this repo's existing
+  `/rest/recipes/:id/share` route. The Express app is untouched.
+- **`/rest/*` was deliberately NOT put behind the domain.** The Function URL is
+  `RESPONSE_STREAM` and every AI feature is SSE over it; CloudFront in front of
+  that changes the app's hottest response path for a hostname no user sees, and
+  applies an origin-response timeout between bytes. The app keeps pointing
+  `EXPO_PUBLIC_BACKEND_URL` at the Function URL. Measure a real generate stream
+  through CloudFront before revisiting.
+- **The association files are objects in `apps/site`, NOT routes on the API.**
+  That corrects what this item used to say: the `publicRouter` seam was the right
+  answer while the domain was going to point at the Function URL, but the site
+  holds the apex now, so S3 *is* the origin Apple demands — no Lambda and no cold
+  start in front of a file Apple may re-fetch at any time. See
+  `apps/site/src/well-known.ts`; every one of its failure modes is silent, and
+  `infra/deploy-site.sh` needs its own step because the pages sync forces
+  `text/html`.
 
-Those two well-known routes need the **`publicRouter` seam** (CLAUDE.md, Routing):
-they are fetched by Apple and Google, which hold no Supabase session. Full detail
-in the client repo's TODOS.md.
+**Left to do:** delegate the nameservers, apply, `./infra/deploy-site.sh`, set
+`ANDROID_CERT_SHA256` (Google's app-signing key, not the upload key — without it
+`assetlinks.json` is deliberately not written), then `expo prebuild --clean` and a
+new build in the client, since `associatedDomains` is an entitlement. Sequence and
+verification commands are in the client repo's TODOS.md.
 
 ---
 

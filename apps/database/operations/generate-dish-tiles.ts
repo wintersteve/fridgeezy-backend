@@ -52,9 +52,9 @@ const plating = (dish: string) => `PLATING
  * *object* is. A tall thing fills a tall frame whether or not the camera
  * cooperates.
  *
- * This is the same wall `padPngToSquare` documents: subject size swung 51–87% of
- * frame height across identical prompts and no wording closed it. **If a tile
- * comes back too small, change the vessel, not the framing.**
+ * This is the same wall the recipe hero prompt documents: subject size swung
+ * 51–87% of frame height across identical prompts and no wording closed it.
+ * **If a tile comes back too small, change the vessel, not the framing.**
  *
  * - `platter` fills its column because the vessel is long and stood on end. It
  *   backs the home feed's full-bleed layout, where empty ground would show.
@@ -185,9 +185,8 @@ async function generateAndUpload(
         const { base64Data, mimeType } = await generateImage({
             prompt,
             numberOfImages: 1,
-            // Generated at the aspect they are displayed at, so there is no
-            // padding step here — `padPngToSquare` exists to shrink a subject
-            // relative to its frame, which is the opposite of what these want.
+            // Generated at the aspect they are displayed at, so nothing has to
+            // be cropped or padded after the fact.
             aspectRatio: "9:16",
         });
 

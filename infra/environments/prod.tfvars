@@ -19,3 +19,12 @@ function_url_auth_type = "NONE"
 # Note this also RESERVES 50 from the account's concurrency pool, so it caps this
 # function and withholds that capacity from any other function in the account.
 lambda_reserved_concurrency = 50
+
+# No custom domain here, and read the inversion before "fixing" it: this file
+# has never been applied. The live deployment — the Function URL in the app's
+# `.env`, the CloudFront distribution serving the site — is the one in
+# dev.tfvars, which is where `site_domain` is set. Applying THIS file against
+# the current state renames every resource, so it would take the site, the API
+# and the domain with it. See dns.tf for why only one environment may hold the
+# domain at all.
+site_domain = null

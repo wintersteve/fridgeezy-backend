@@ -138,6 +138,25 @@ export function buildIntentLine(routed: RoutedSearch): string {
 }
 
 /**
+ * The line that opens a SECOND attempt at the search, after the first found
+ * nothing.
+ *
+ * It leads with the failure rather than quietly starting again. The first line
+ * of the reply has already promised to look something up, and a second promise
+ * arriving under it with no explanation reads as the assistant repeating
+ * itself — where naming the miss makes the two lines a sequence the reader can
+ * follow: asked for one thing, did not find it, trying another.
+ *
+ * Templated for the same reason {@link buildIntentLine} is, and it inherits
+ * that function's phrasing wholesale: the retry differs from the first attempt
+ * only in its ARGUMENTS, so a second vocabulary for the same sentence would be
+ * two places to keep one voice.
+ */
+export function buildRetryLine(routed: RoutedSearch): string {
+    return `Nothing came back for that. ${buildIntentLine(routed)}`;
+}
+
+/**
  * What a turn that found nothing is ABOUT, and which PREPOSITION it takes.
  *
  * The two are one decision. A named dish is a thing the catalogue does not
@@ -228,6 +247,7 @@ export const STAGE_LABEL: Record<string, string> = {
     catalogue: "Checking your recipes",
     menu: "Choosing the courses",
     generate: "Writing a new one",
+    retry: "Looking again",
     persist: "Saving it",
     summary: "Finishing up",
 };

@@ -18,3 +18,16 @@ function_url_auth_type = "NONE"
 # Dev has one developer and a phone on it — 5 is far above real use and still
 # bounds the damage. Raise it when a real load figure exists, not before.
 lambda_reserved_concurrency = 5
+
+# fridgeezy.com, and it is in THIS file rather than prod.tfvars because of a
+# naming accident worth knowing: there is one workspace and one state, it was
+# applied from here, and so every live resource is named `fridgeezy-dev-*`. This
+# stack is production — its Function URL is the one in the app's `.env` and its
+# distribution serves d3psawhnc7yxi1.cloudfront.net. prod.tfvars has never been
+# applied and would rename all of it.
+#
+# Only one environment may ever hold this value: a single nameserver set is
+# delegated for the domain, so a second zone elsewhere would be created, charged
+# for and silently ignored, and its certificate could never validate. See the
+# header in dns.tf for the delegation step and the two-stage apply it needs.
+site_domain = "fridgeezy.com"

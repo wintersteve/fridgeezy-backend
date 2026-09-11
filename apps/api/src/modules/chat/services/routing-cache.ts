@@ -133,3 +133,17 @@ export function replayToolCalls(toolCalls: ToolCall[], nonce: string): ToolCall[
 export function clearRoutingCache(): void {
     entries.clear();
 }
+
+/**
+ * Drop a cached route that turned out to be wrong.
+ *
+ * Called when the search a cached (or freshly written) route produced came back
+ * with nothing at all — see the retry round in `process-chat`. The entry is a
+ * memo of "which tool call does this message produce", and a route that
+ * produced no card is one the next person typing the same sentence should not
+ * inherit: without this, one bad reading of a popular dish name is served for
+ * the rest of the TTL, and the retry round pays for it every single time.
+ */
+export function deleteRoutingCache(key: string): void {
+    entries.delete(key);
+}

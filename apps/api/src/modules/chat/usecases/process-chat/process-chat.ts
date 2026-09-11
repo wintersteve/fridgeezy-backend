@@ -22,6 +22,7 @@ import type {
 import {
     attachImageToLastUserMessage,
     buildIntentLine,
+    buildRetryLine,
     buildUnsatisfiedLine,
     convertToolsToOpenAiTools,
     createChatCompletion,
@@ -37,6 +38,7 @@ import {
 } from "../../services";
 import {
     cacheKeyFor,
+    deleteRoutingCache,
     readRoutingCache,
     replayToolCalls,
     writeRoutingCache,
@@ -174,6 +176,38 @@ const MENU_INQUIRY_PROMPT = `The tool result above is a menu the user is about t
 - Then ask which courses they would like alongside it, naming the options that appear in the tool result's \`availableCourses\` in plain words (an appetizer, a side, a dessert).
 
 Do not choose for them, do not say what you would recommend, and never name or promise a specific appetizer, side or dessert — none of them have been written. The card below your reply is how they answer, so do not ask them to type anything or list the options as bullets. Use no markdown headings, bullets or numbered lists.`;
+
+/**
+ * How many times ONE turn may run the search.
+ *
+ * Two: the first attempt, and a single retry after it comes back with nothing.
+ * The bound is the feature rather than a tuning knob — see step 5b for why this
+ * pipeline cannot absorb a variable number of rounds.
+ */
+const MAX_SEARCH_ROUNDS = 2;
+
+/**
+ * What the model is told after a search that found nothing.
+ *
+ * It offers exactly two ways out and no third. "Search again" is only worth a
+ * round trip if the arguments CHANGE, which is why the instruction is specific
+ * about which ones to drop: the failures this recovers are over-pinning — a
+ * `dish` invented from a description, a `component` that narrowed to nothing, an
+ * `exclude` carrying something that was never on screen — and a model told
+ * merely to "try again" repeats itself.
+ *
+ * "Answer in prose" is the other half and is not a fallback. A request naming
+ * something that is not a dish should cost one small model call and a true
+ * sentence, not a second ten-second generation written to be thrown away.
+ */
+const RETRY_PROMPT = `That search came back with nothing — no recipe in the catalogue, and nothing worth writing for it.
+
+You get ONE more attempt. Choose one:
+
+1. **Search again with DIFFERENT arguments.** Widen it. Drop \`dish\` if that name was your reading of a description rather than something the user actually typed. Drop \`component\`. Drop anything in \`exclude\` that is not a dish already shown in this conversation. Search the ingredients the user named instead of a dish name. Do NOT send the same arguments again — they have already failed.
+2. **Answer in prose, with no tool call.** Do this when the request names something you do not believe is an established dish, or when you have nothing genuinely different to try. Say plainly that you could not find it, and NAME the closest dish you do know, so there is something to ask for next.
+
+Write no preamble before a tool call.`;
 
 /**
  * Keep the tail of the conversation, never the system message.
@@ -478,10 +512,23 @@ export async function processChat(req: Request, res: Response): Promise<void> {
             return;
         }
 
+        /**
+         * The calls this turn is actually working from.
+         *
+         * Split from `currentToolCalls` because the retry round in step 5b
+         * REPLACES them, and a `let` that is reassigned anywhere loses the
+         * non-null narrowing the guard above just established — inside every
+         * closure below, which is all of them. This one is proven present at
+         * the point it is bound and only ever reassigned to another non-empty
+         * set, so the narrowing is a property of the variable rather than of
+         * where it happens to be read.
+         */
+        let activeToolCalls: ToolCall[] = currentToolCalls;
+
         writeSseEvent(res, {
             type: "tool_calls",
             data: {
-                tool_calls: currentToolCalls.map((call) => ({
+                tool_calls: activeToolCalls.map((call) => ({
                     id: call.id,
                     name: call.function.name,
                 })),
@@ -490,8 +537,10 @@ export async function processChat(req: Request, res: Response): Promise<void> {
 
         // --- 3. The opening line, written here, at zero cost -----------------
 
-        const routed = readRoutedSearch(currentToolCalls);
-        const intentLine = buildIntentLine(routed);
+        // Both are rewritten by the retry round in step 5b, which routes the
+        // turn a second time and so changes what it is about.
+        let routed = readRoutedSearch(activeToolCalls);
+        let intentLine = buildIntentLine(routed);
 
         /**
          * A menu turn answers with ONE card for a whole meal, not a recipe.
@@ -502,7 +551,7 @@ export async function processChat(req: Request, res: Response): Promise<void> {
          * carries it. Giving it a second use-case would have duplicated all of
          * that to change two lines of it.
          */
-        const isMenuTurn = currentToolCalls.some(
+        const isMenuTurn = activeToolCalls.some(
             (call) => call.function.name === "PLAN_MENU"
         );
 
@@ -537,80 +586,95 @@ export async function processChat(req: Request, res: Response): Promise<void> {
             resolveEarlyDish = resolve;
         });
 
-        timer.start("search");
+        /**
+         * One round of the search: whatever tool calls the router asked for,
+         * run with this turn's narration, argument layers and precomputed
+         * vector.
+         *
+         * A function rather than a single expression because a turn can run it
+         * TWICE — see the retry round in step 5b. Everything it closes over is
+         * either fixed for the whole turn (the diet, the callbacks) or a buffer
+         * the caller empties between rounds; nothing in here knows or needs to
+         * know which round it is.
+         */
+        const runSearch = (calls: ToolCall[], span: string) => {
+            timer.start(span);
 
-        const toolResultsPromise = handleToolCalls(
-            currentToolCalls,
-            tools,
-            // Chat only surfaces a single suggestion; other callers keep the
-            // service default of 5. Forward the user's diet/allergies so
-            // generated suggestions respect them regardless of what the model
-            // asked for.
-            {
-                GET_RECIPE_SUGGESTIONS: {
-                    maxResults: 1,
-                    dietaryRestrictions: request.dietaryRestrictions,
-                    blacklist: request.blacklist,
-                },
-            },
-            {
-                GET_RECIPE_SUGGESTIONS: {
-                    /**
-                     * Collected, not written. The newest one is flushed once
-                     * the prose has stopped moving — see step 7.
-                     *
-                     * Writing these live is the obvious thing to do and it is
-                     * wrong: the generator finishes several seconds before the
-                     * summary does, so a live card landed under a paragraph that
-                     * was still growing and got shoved down the screen for the
-                     * next three seconds. A card that arrives early is worth
-                     * nothing if it cannot be read while it arrives.
-                     */
-                    onPartialSuggestion: (partial: PartialRecipeSuggestion) => {
-                        partialsByTempId.set(partial.tempId, partial);
+            return handleToolCalls(
+                calls,
+                tools,
+                // Chat only surfaces a single suggestion; other callers keep the
+                // service default of 5. Forward the user's diet/allergies so
+                // generated suggestions respect them regardless of what the model
+                // asked for.
+                {
+                    GET_RECIPE_SUGGESTIONS: {
+                        maxResults: 1,
+                        dietaryRestrictions: request.dietaryRestrictions,
+                        blacklist: request.blacklist,
                     },
-                    onDishReady: (dish: EarlyDish) => {
-                        timer.start("persist");
-                        resolveEarlyDish(dish);
+                },
+                {
+                    GET_RECIPE_SUGGESTIONS: {
+                        /**
+                         * Collected, not written. The newest one is flushed once
+                         * the prose has stopped moving — see step 7.
+                         *
+                         * Writing these live is the obvious thing to do and it is
+                         * wrong: the generator finishes several seconds before the
+                         * summary does, so a live card landed under a paragraph that
+                         * was still growing and got shoved down the screen for the
+                         * next three seconds. A card that arrives early is worth
+                         * nothing if it cannot be read while it arrives.
+                         */
+                        onPartialSuggestion: (partial: PartialRecipeSuggestion) => {
+                            partialsByTempId.set(partial.tempId, partial);
+                        },
+                        onDishReady: (dish: EarlyDish) => {
+                            timer.start("persist");
+                            resolveEarlyDish(dish);
+                        },
+                        onStage: (stage: string) => {
+                            if (stage === "generate") timer.start("generate");
+                            if (stage === "persist") timer.end("generate");
+                            emitStatus(stage);
+                        },
+                        onMetric: (name: string, value?: number) =>
+                            timer.count(name, value),
+                        // Context, not an argument: this is a live promise the
+                        // service consumes, and the argument layers are for values
+                        // the MODEL could have written. Threading it through those
+                        // would put it in the search input, where nothing reads it.
+                        speculativeEmbedding,
                     },
-                    onStage: (stage: string) => {
-                        if (stage === "generate") timer.start("generate");
-                        if (stage === "persist") timer.end("generate");
-                        emitStatus(stage);
+                    // The menu tool resolves the main through the same search, so it
+                    // takes the same narration and the same precomputed vector. It
+                    // gets no `onPartialSuggestion` or `onDishReady`: a menu turn
+                    // draws no recipe card, so a half-written dish has nowhere to go.
+                    PLAN_MENU: {
+                        onStage: (stage: string) => emitStatus(stage),
+                        onMetric: (name: string, value?: number) =>
+                            timer.count(name, value),
+                        speculativeEmbedding,
                     },
-                    onMetric: (name: string, value?: number) =>
-                        timer.count(name, value),
-                    // Context, not an argument: this is a live promise the
-                    // service consumes, and the argument layers are for values
-                    // the MODEL could have written. Threading it through those
-                    // would put it in the search input, where nothing reads it.
-                    speculativeEmbedding,
                 },
-                // The menu tool resolves the main through the same search, so it
-                // takes the same narration and the same precomputed vector. It
-                // gets no `onPartialSuggestion` or `onDishReady`: a menu turn
-                // draws no recipe card, so a half-written dish has nowhere to go.
-                PLAN_MENU: {
-                    onStage: (stage: string) => emitStatus(stage),
-                    onMetric: (name: string, value?: number) =>
-                        timer.count(name, value),
-                    speculativeEmbedding,
-                },
-            },
-            // A DEFAULT, not an override: the user's saved skill level applies
-            // unless they asked for something else in the message, in which case
-            // the model sets `difficulty` from that and its value wins.
-            {
-                GET_RECIPE_SUGGESTIONS: {
-                    difficulty: request.difficulty,
-                },
-            }
-        ).then((results) => {
-            timer.end("search");
-            timer.end("persist");
+                // A DEFAULT, not an override: the user's saved skill level applies
+                // unless they asked for something else in the message, in which case
+                // the model sets `difficulty` from that and its value wins.
+                {
+                    GET_RECIPE_SUGGESTIONS: {
+                        difficulty: request.difficulty,
+                    },
+                }
+            ).then((results) => {
+                timer.end(span);
+                timer.end("persist");
 
-            return results;
-        });
+                return results;
+            });
+        };
+
+        const toolResultsPromise = runSearch(activeToolCalls, "search");
 
         // Whichever comes first: the dish's words (generation finished, persist
         // still running) or the whole tool result (the catalogue answered, or
@@ -638,55 +702,70 @@ export async function processChat(req: Request, res: Response): Promise<void> {
          */
         let toolResultsSettled = false;
 
-        const parseTask = toolResultsPromise.then((toolResults) => {
-            for (let i = 0; i < toolResults.length; i++) {
-                const toolResult = toolResults[i];
-                const toolCall = currentToolCalls[i];
+        /**
+         * Read one round's tool results into this turn's buffers.
+         *
+         * A factory rather than one chained `.then`, because the retry round in
+         * step 5b produces a SECOND set of results that has to land in the same
+         * buffers and be awaited by the same step 7.
+         *
+         * It reads `activeToolCalls` to pair each result with the call that
+         * produced it, and the retry reassigns that variable — so the ordering
+         * there is load-bearing: round 1's body has fully run (the retry awaits
+         * it before deciding) before round 2's calls replace it.
+         */
+        const readToolResults = (results: Promise<ChatMessage[]>) =>
+            results.then((toolResults) => {
+                for (let i = 0; i < toolResults.length; i++) {
+                    const toolResult = toolResults[i];
+                    const toolCall = activeToolCalls[i];
 
-                if (toolResult.role !== "tool" || !toolResult.content) continue;
+                    if (toolResult.role !== "tool" || !toolResult.content) continue;
 
-                try {
-                    // Tool output crosses a JSON boundary, so this is an
-                    // assertion about our own tool, not a validated parse.
-                    // Fields are read defensively below.
-                    const parsedResult = JSON.parse(
-                        chatMessageText(toolResult.content)
-                    ) as Partial<RecipeSuggestionResult>;
+                    try {
+                        // Tool output crosses a JSON boundary, so this is an
+                        // assertion about our own tool, not a validated parse.
+                        // Fields are read defensively below.
+                        const parsedResult = JSON.parse(
+                            chatMessageText(toolResult.content)
+                        ) as Partial<RecipeSuggestionResult>;
 
-                    if (
-                        toolCall?.function.name === "GET_RECIPE_SUGGESTIONS" &&
-                        parsedResult.suggestions
-                    ) {
-                        resultSuggestions.push(...parsedResult.suggestions);
+                        if (
+                            toolCall?.function.name === "GET_RECIPE_SUGGESTIONS" &&
+                            parsedResult.suggestions
+                        ) {
+                            resultSuggestions.push(...parsedResult.suggestions);
 
-                        if (parsedResult.searchMetadata) {
-                            resultMetadata = parsedResult.searchMetadata;
+                            if (parsedResult.searchMetadata) {
+                                resultMetadata = parsedResult.searchMetadata;
+                            }
+
+                            if (parsedResult.unsatisfied) {
+                                resultUnsatisfied.reason = parsedResult.unsatisfied;
+                            }
                         }
 
-                        if (parsedResult.unsatisfied) {
-                            resultUnsatisfied.reason = parsedResult.unsatisfied;
+                        if (toolCall?.function.name === "PLAN_MENU") {
+                            const withMenu = parsedResult as { menu?: MenuPlan };
+
+                            if (withMenu.menu) resultMenu.plan = withMenu.menu;
                         }
+                    } catch {
+                        console.warn("[ProcessChat] Failed to parse tool result");
                     }
-
-                    if (toolCall?.function.name === "PLAN_MENU") {
-                        const withMenu = parsedResult as { menu?: MenuPlan };
-
-                        if (withMenu.menu) resultMenu.plan = withMenu.menu;
-                    }
-                } catch {
-                    console.warn("[ProcessChat] Failed to parse tool result");
                 }
-            }
 
-            // Nothing is written here. Every frame this turn produces about a
-            // card goes out in step 7, after the prose has settled.
-            toolResultsSettled = true;
+                // Nothing is written here. Every frame this turn produces about a
+                // card goes out in step 7, after the prose has settled.
+                toolResultsSettled = true;
 
-            return toolResults;
-        });
+                return toolResults;
+            });
+
+        let parseTask = readToolResults(toolResultsPromise);
 
         /**
-         * The tool messages that pair with `currentToolCalls`.
+         * The tool messages that pair with `activeToolCalls`.
          *
          * Every id in an assistant turn's `tool_calls` must be answered by a
          * `tool` message with that id, or the provider rejects the request
@@ -705,11 +784,11 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                     {
                         role: "assistant",
                         content: currentContent + intentLine || null,
-                        tool_calls: [currentToolCalls[0]],
+                        tool_calls: [activeToolCalls[0]],
                     },
                     {
                         role: "tool",
-                        tool_call_id: currentToolCalls[0].id,
+                        tool_call_id: activeToolCalls[0].id,
                         content: source.early,
                     },
                 ];
@@ -723,7 +802,7 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                 {
                     role: "assistant",
                     content: currentContent + intentLine || null,
-                    tool_calls: currentToolCalls.filter((call) =>
+                    tool_calls: activeToolCalls.filter((call) =>
                         answered.some(
                             (message) => message.tool_call_id === call.id
                         )
@@ -732,6 +811,243 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                 ...answered,
             ];
         };
+
+        // --- 5b. One more round, when the first found nothing -----------------
+        //
+        // ## What this rescues
+        //
+        // A turn that invoked the tool and produced no card is a DEAD turn. The
+        // client's test is `sawSuggestionTool && noSuggestions`, so it throws
+        // the reply away, shows "Something went wrong" and offers a Regenerate
+        // that re-runs the identical request — the same loop `SearchUnsatisfied`
+        // was written to break, for the case where the search cannot say why it
+        // came back empty. The user was going to spend this generation anyway by
+        // pressing that button; spending it here buys the model the one thing
+        // the button cannot, which is the knowledge that the first arguments
+        // did not work.
+        //
+        // ## One round, and the cap is the feature
+        //
+        // Nothing here loops. An open-ended agent loop was considered and
+        // rejected: this turn's whole shape depends on knowing its step count up
+        // front — the opening line is templated before the search starts, the
+        // summary runs concurrently with persistence, and the card is painted
+        // after the prose stops moving. A variable number of rounds costs all
+        // three, and meters a `questions` unit the user thinks is one question.
+        //
+        // ## What it deliberately does NOT retry
+        //
+        // - **A stated `unsatisfied`.** "No established dish under any name" and
+        //   "that is a drink" are ANSWERS. Retrying one spends a second
+        //   generation arguing with a verdict the search already reached, and
+        //   puts "Something went wrong" back in front of a reader who had just
+        //   been told the truth.
+        // - **A menu turn.** Its empty case is the inquiry — `courses` unset
+        //   means ASK — which is a complete answer with a prompt of its own.
+        // - **A turn whose dish was written and then dropped.** That path
+        //   resolves `earlyDishReady`, so the summary is already running against
+        //   a dish, and those drops are also the ones that state a reason. Only
+        //   the branch where the TOOL RESULT won the race reaches here — which
+        //   is also what makes the check free for every turn that did find
+        //   something, since on that branch the results have already settled.
+        let searchRounds = 1;
+        let retryOutcome: "searched" | "answered" | null = null;
+
+        if (
+            !isMenuTurn &&
+            early.kind === "tool" &&
+            searchRounds < MAX_SEARCH_ROUNDS
+        ) {
+            const firstRound = await parseTask;
+
+            const foundNothing =
+                resultSuggestions.length === 0 &&
+                !resultMenu.plan &&
+                !resultUnsatisfied.reason;
+
+            if (foundNothing) {
+                searchRounds++;
+                timer.count("chat.search_retry");
+
+                // A route that produced nothing must not be handed to the next
+                // person who types the same sentence — see `deleteRoutingCache`.
+                // Round 2's route is deliberately NOT written in its place: it
+                // was reached with the failure in context, and caching it under
+                // a key that means "what this message routes to" would store an
+                // answer to a different question.
+                if (cacheKey) deleteRoutingCache(cacheKey);
+
+                // Round 1's partials were collected and never written — step 7
+                // is the only thing that emits them and it has not run yet.
+                // Dropping them here is what stops it withdrawing a card the
+                // client was never shown.
+                partialsByTempId.clear();
+
+                emitStatus("retry");
+                timer.start("retry_route");
+
+                const retryStream = createChatCompletion(
+                    [
+                        ...messages,
+                        // The round that failed, presented exactly as the
+                        // summary would present it — an assistant turn whose
+                        // tool calls are all answered. A provider rejects
+                        // anything less.
+                        ...summaryTurn({ results: firstRound }),
+                        { role: "system", content: RETRY_PROMPT },
+                    ],
+                    // The one tool, not both. A retry may search again; it may
+                    // not turn a dish turn into a menu turn — `isMenuTurn` was
+                    // read once, above, and the summary prompt and step 7's
+                    // frames have already branched on it.
+                    convertToolsToOpenAiTools({
+                        GET_RECIPE_SUGGESTIONS: getRecipeSuggestionsTool,
+                    }),
+                    {
+                        stream: request.stream,
+                        model: ROUTING_MODEL,
+                        temperature: request.temperature,
+                    }
+                );
+
+                let retryCalls: ToolCall[] | null = null;
+                let retryProse = "";
+                let retryFailed: string | null = null;
+
+                for await (const event of retryStream) {
+                    if (event.type === "chunk") {
+                        // Written live, like the routing call's own preamble.
+                        // On the prose branch this IS the reply, and buffering
+                        // it would leave the screen still for the length of a
+                        // second model call, on a turn that has already been
+                        // slow.
+                        //
+                        // The break comes with the first token rather than
+                        // before the call, because a round that answers with a
+                        // tool call writes nothing here — and an unconditional
+                        // one would leave a blank line hanging under the
+                        // opening line of every retried turn that went on to
+                        // find something.
+                        if (!retryProse) {
+                            writeSseEvent(res, {
+                                type: "content",
+                                data: { delta: "\n\n" },
+                            });
+                        }
+
+                        retryProse += event.delta;
+                        currentContent += event.delta;
+                        writeSseEvent(res, {
+                            type: "content",
+                            data: { delta: event.delta },
+                        });
+                    } else if (event.type === "tool_calls") {
+                        retryCalls = event.tool_calls;
+                    } else if (event.type === "error") {
+                        retryFailed = event.error;
+                        break;
+                    }
+                }
+
+                timer.end("retry_route");
+                timer.count("model_calls");
+
+                if (retryFailed) {
+                    // Logged, never surfaced. The turn already has an outcome —
+                    // round 1 found nothing — and this call was the optional
+                    // attempt to improve on it, so a failure here leaves the
+                    // reader exactly where they would have been without any of
+                    // this rather than replacing an empty turn with a broken
+                    // one.
+                    logRequestError(new Error(retryFailed), {
+                        route: ROUTE,
+                        phase: "provider_event",
+                        method: req.method,
+                        path: stripQuery(req.originalUrl),
+                        streaming: true,
+                        detail: { stage: "retry" },
+                    });
+                }
+
+                if (retryCalls?.length) {
+                    timer.label("retry", "searched");
+                    retryOutcome = "searched";
+
+                    activeToolCalls = retryCalls;
+                    routed = readRoutedSearch(retryCalls);
+                    intentLine = buildRetryLine(routed);
+
+                    // The same three frames the first attempt wrote, in the
+                    // same order, and every one of them is something the
+                    // client's reducer REPLACES rather than appends: a second
+                    // `intent` supersedes the first, which is what keeps the
+                    // card's regenerate control pointed at the dish this turn
+                    // actually went looking for.
+                    writeSseEvent(res, {
+                        type: "tool_calls",
+                        data: {
+                            tool_calls: retryCalls.map((call) => ({
+                                id: call.id,
+                                name: call.function.name,
+                            })),
+                        },
+                    });
+                    writeSseEvent(res, {
+                        type: "content",
+                        data: { delta: `\n\n${intentLine}` },
+                    });
+                    writeSseEvent(res, {
+                        type: "intent",
+                        data: {
+                            text: intentLine,
+                            dish: routed.dish ?? null,
+                            component: routed.component ?? null,
+                        },
+                    });
+
+                    toolResultsSettled = false;
+                    parseTask = readToolResults(
+                        runSearch(retryCalls, "search_retry")
+                    );
+                } else if (retryProse) {
+                    timer.label("retry", "answered");
+                    retryOutcome = "answered";
+
+                    /**
+                     * The model looked twice and chose words over another
+                     * search. That IS the reply and it has already been
+                     * streamed — but the client cannot tell it apart from a
+                     * stream that died halfway, because its whole test is "the
+                     * tool was invoked and no card came back", which is exactly
+                     * this shape. The frame is what says the turn is finished
+                     * and correct, so the prose is committed rather than thrown
+                     * away behind a Regenerate button.
+                     *
+                     * `no_known_dish` is the honest reason of the two: the
+                     * catalogue held nothing and the model, having seen that,
+                     * declined to write one. `attempted` is empty because
+                     * nothing was written to be refused — and because the
+                     * sentence the reader gets is the model's own, step 7 must
+                     * not add `buildUnsatisfiedLine`'s on top of it.
+                     */
+                    resultUnsatisfied.reason = {
+                        reason: "no_known_dish",
+                        attempted: [],
+                    };
+                } else {
+                    // Neither a search nor a sentence: the call failed, or it
+                    // returned nothing at all. Claiming `unsatisfied` here would
+                    // mark an EMPTY reply as a finished answer and commit a turn
+                    // whose only text is "let me look that up" — so the turn is
+                    // left exactly as round 1 ended it, a failure the client
+                    // offers to retry. No worse than before this step existed,
+                    // which is the floor every branch here has to clear.
+                    timer.label("retry", "failed");
+                }
+            } else {
+                timer.label("retry", "none");
+            }
+        }
 
         // --- 6. Summarise, concurrently with whatever is left of persistence --
 
@@ -917,12 +1233,18 @@ export async function processChat(req: Request, res: Response): Promise<void> {
         const unsatisfied = resultUnsatisfied.reason;
 
         if (unsatisfied && resultSuggestions.length === 0) {
-            writeSseEvent(res, {
-                type: "content",
-                data: {
-                    delta: `\n\n${buildUnsatisfiedLine(unsatisfied.reason, routed)}`,
-                },
-            });
+            // ...unless the retry round already wrote one in its own words. Two
+            // sentences saying "I could not find it", in two different voices,
+            // is worse than either of them alone.
+            if (retryOutcome !== "answered") {
+                writeSseEvent(res, {
+                    type: "content",
+                    data: {
+                        delta: `\n\n${buildUnsatisfiedLine(unsatisfied.reason, routed)}`,
+                    },
+                });
+            }
+
             writeSseEvent(res, { type: "unsatisfied", data: unsatisfied });
         }
 

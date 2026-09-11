@@ -17,6 +17,12 @@
 #  - Pages and assets sync with different Cache-Control. Asset filenames are
 #    not content-hashed, so they get a day, not "immutable"; pages get five
 #    minutes so a deploy is visible quickly even without the invalidation.
+#
+#  - `.well-known` is pushed by a step of its own, because the pages sync forces
+#    `text/html` on everything it uploads and Apple requires the association
+#    file to be `application/json`. It is excluded from that sync rather than
+#    re-uploaded after it: `--delete` would otherwise remove it first, leaving a
+#    window where universal links fail to verify mid-deploy.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -49,9 +55,22 @@ for font in "$DIST"/assets/fonts/*.woff2; do
 done
 
 echo "==> syncing pages"
-aws s3 sync "$DIST" "s3://$BUCKET" --delete --exclude "assets/*" \
+aws s3 sync "$DIST" "s3://$BUCKET" --delete \
+    --exclude "assets/*" --exclude ".well-known/*" \
     --content-type "text/html; charset=utf-8" \
     --cache-control "public, max-age=300"
+
+# The universal-link files. `apple-app-site-association` is extensionless, so
+# nothing can be inferred — the content type is set for the whole prefix. Five
+# minutes like the pages: Apple's CDN caches these for much longer anyway, so a
+# tighter value buys nothing and a looser one delays a correction.
+echo "==> syncing .well-known"
+aws s3 sync "$DIST/.well-known" "s3://$BUCKET/.well-known" --delete \
+    --content-type "application/json" \
+    --cache-control "public, max-age=300"
+
+[ -f "$DIST/.well-known/assetlinks.json" ] || echo \
+    "    note: no assetlinks.json (set ANDROID_CERT_SHA256 to enable Android app links)"
 
 echo "==> invalidating CloudFront"
 aws cloudfront create-invalidation --distribution-id "$DIST_ID" \

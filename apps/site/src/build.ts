@@ -7,6 +7,7 @@ import { renderNotFoundPage } from "./not-found";
 import { renderPrivacyPage } from "./privacy";
 import { renderSupportPage } from "./support";
 import { renderTermsPage } from "./terms";
+import { appleAppSiteAssociation, assetLinks } from "./well-known";
 
 /**
  * Static export: renders every page into `dist/` ready for `aws s3 sync`.
@@ -21,6 +22,11 @@ import { renderTermsPage } from "./terms";
  * values. Without it the pages are still valid, just without preview images;
  * `infra/deploy-site.sh` passes it from `terraform output`, so a hand-run
  * build differing from a deployed one in exactly this one way is expected.
+ *
+ * `.well-known/` carries the universal-link files. They are written here rather
+ * than served by the API because the site holds the apex, which is the origin
+ * Apple and Google demand — see `well-known.ts` for the three rules that make
+ * them work, all of which fail silently.
  */
 
 const ROOT = path.join(__dirname, "..");
@@ -53,7 +59,31 @@ cpSync(path.join(ROOT, "src", "assets"), path.join(DIST, "assets"), {
     recursive: true,
 });
 
+/**
+ * `apple-app-site-association` is extensionless on purpose — that is the name
+ * Apple fetches. `assetLinks()` returns null when no signing fingerprint is
+ * configured, and an absent file beats a wrong one: Android caches a failed
+ * verification, so a placeholder would have to be corrected and then waited out.
+ */
+const links = assetLinks();
+
+const WELL_KNOWN: Array<{ file: string; json: unknown }> = [
+    { file: "apple-app-site-association", json: appleAppSiteAssociation() },
+    ...(links ? [{ file: "assetlinks.json", json: links }] : []),
+];
+
+mkdirSync(path.join(DIST, ".well-known"), { recursive: true });
+
+for (const { file, json } of WELL_KNOWN) {
+    writeFileSync(
+        path.join(DIST, ".well-known", file),
+        `${JSON.stringify(json, null, 2)}\n`
+    );
+}
+
 console.log(
     `site → dist: ${PAGES.length} pages + assets` +
+        ` · ${WELL_KNOWN.length} well-known` +
+        (links ? "" : " (no ANDROID_CERT_SHA256, assetlinks.json omitted)") +
         (origin ? ` · og origin ${origin}` : " · no SITE_ORIGIN, og:image omitted")
 );

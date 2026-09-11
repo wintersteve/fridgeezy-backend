@@ -12,10 +12,9 @@ const BUCKET = "cuisine_cards";
  * ## The model does not reproduce a hex, and the card is built around that
  *
  * Asked for `#FBE4E1`, a render came back with corners at `#EEE4DD` — close in
- * feel, nowhere near in value. `padPngToSquare` records the same measurement
- * from the other direction: the art direction asks for a `#FDFBF9` ground and
- * output lands nearer `#F6F0E0`, which is why it replicates edge pixels rather
- * than filling with a palette token.
+ * feel, nowhere near in value. The same measurement holds from the other
+ * direction: the food art direction asks for a `#FDFBF9` ground and output
+ * lands nearer `#F6F0E0`.
  *
  * So these hexes steer the *mood* of a card and nothing more. **Nothing in the
  * client may paint a matching background behind or beside one of these images**

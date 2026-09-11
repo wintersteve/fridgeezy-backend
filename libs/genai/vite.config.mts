@@ -35,13 +35,12 @@ export default defineConfig(() => ({
             formats: ["es" as const],
         },
         rollupOptions: {
-            // `node:zlib` is used by pad-image to read and write PNGs without a
-            // native image dependency. Vite's default target is the browser, so
-            // it resolves node builtins to `__vite-browser-external` and the
-            // build dies on `"inflateSync" is not exported`. This library only
-            // ever runs in the API (local Express and Lambda), so the builtin is
-            // externalised rather than shimmed — same reason and same fix as
-            // libs/bedrock's Smithy/`stream` problem.
+            // Vite's default target is the browser, so it resolves node
+            // builtins to `__vite-browser-external` and any import of one dies
+            // at build time on a missing export. This library only ever runs in
+            // the API (local Express and Lambda), so builtins are externalised
+            // rather than shimmed — same reason and same fix as libs/bedrock's
+            // Smithy/`stream` problem.
             external: [/^node:/],
         },
     },

@@ -682,9 +682,15 @@ Deploy is `./infra/deploy-site.sh`: builds with `SITE_ORIGIN` from
 `terraform output site_url` (crawlers need absolute `og:image` URLs — same
 source-of-truth pattern as `env-remote`), syncs assets at a day of
 Cache-Control and pages at five minutes, fixes woff2 content types the aws CLI
-guesses wrong, and invalidates. The share page is unaffected: it is dynamic
-and stays on the Lambda; when the custom domain lands, the plan in `site.tf`'s
-header is one distribution with `/rest/*` as a second behavior.
+guesses wrong, and invalidates. The share page is dynamic and stays on the
+Lambda, reached through the one API behaviour on this distribution: `/r/*`,
+rewritten to `/rest/recipes/:id/share`, which is the link the app shares and the
+path its universal links claim. **`/rest/*` was deliberately left off** — the
+Function URL is `RESPONSE_STREAM` and the app's SSE traffic has no reason to
+cross CloudFront; `site.tf`'s header carries that argument. `apps/site` also
+writes `.well-known/apple-app-site-association`, which is why the viewer-request
+function exempts that prefix and why `deploy-site.sh` pushes it with its own
+content type.
 
 Every value in `src/chrome.ts` is lifted from the client's theme constants
 (`fridgeezy/src/shared/theme/constants/`) — when those change, this is the
@@ -1037,11 +1043,10 @@ those frames incrementally, which is why frame shapes are part of the contract.
   dark with pale pigment and handing back a light picture. Dark asks the blooms
   to *reach* the edges while the ground stays the majority of the frame.
 
-  **`padPngToSquare` is not a step every image takes.** It exists because one
-  recipe asset is cropped three ways, and it works by shrinking the subject
-  relative to the frame. An asset generated at the aspect it is displayed at
-  must skip it — `generate-dish-tiles` renders 9:16 for a 9:16 slot, and
-  padding would undo the framing it asks for.
+  **Generate at the aspect the asset is displayed at wherever you can.** It is
+  the only framing control that actually works — `generate-dish-tiles` renders
+  9:16 for a 9:16 slot. The recipe hero is the exception, and it pays for it
+  (see below).
 
   The default image model is `gemini-3-pro-image-preview`, picked by a blind A/B
   on 2026-08-04 rather than by preference. Flash renders this art direction as
@@ -1064,17 +1069,22 @@ those frames incrementally, which is why frame shapes are part of the contract.
   that worked last week 404s, check the model id before anything else — and note
   that `GET /v1beta/models` will happily list a model the key can no longer use.
 
-  Recipe images are **padded to a square by `padPngToSquare` before upload**.
-  The client shows one asset in boxes from 0.62 to 1.36 aspect, all cropping to
-  fill, and a 3:4 render loses 45% of its height in the widest of them — it cut
-  through the plate on every dish measured. Padding shrinks the plate relative
-  to the frame without touching the artwork, so one asset survives all three
-  crops while staying full-bleed. Note what this rules out: asking the model for
-  a smaller plate does not work (measured — plate size swings 51–87% of frame
-  height on an identical prompt), and `contentFit="contain"` in the client is
-  wrong because these surfaces are full-bleed. `libs/genai` therefore
-  externalises `node:` builtins in its vite config; the padder uses `zlib` to
-  avoid a native image dependency on Lambda.
+  **Recipe images are stored exactly as the model returns them, and a padding
+  step that widened them to a square was REMOVED on 2026-09-11.** It read the
+  PNG chunks by hand, replicated the edge columns outward to square the 3:4
+  render, and carried a corner-shadow correction on top of that — and the
+  artefacts it introduced were more visible than the crop it was compensating
+  for. Do not rebuild it without new evidence.
+
+  The problem it was aimed at is real and is now simply accepted: the client
+  shows one asset in boxes from 0.62 to 1.36 aspect, all cropping to fill, so a
+  3:4 render loses 45% of its height in the widest of them and can cut into the
+  plate. Both of the obvious alternatives were measured and rejected too —
+  asking the model for a smaller plate does not work (plate size swings 51–87%
+  of frame height on an identical prompt), and `contentFit="contain"` in the
+  client is wrong because these surfaces are full-bleed. **If this is worth
+  fixing again, fix it at the aspect the asset is GENERATED at, or at the box it
+  is displayed in — not by rewriting the pixels afterwards.**
 
 ### Chat tool calling
 
@@ -2035,6 +2045,64 @@ changing it; the parts that bite:
 - **The `while (continueLoop)` loop is gone**, and was already dead: every
   branch set `continueLoop = false`, so it never ran twice. Multi-round tool use
   would have to be built deliberately, not assumed.
+
+### The one retry round (step 5b)
+
+A turn that invoked the tool and produced no card is a DEAD turn — the client's
+test is `sawSuggestionTool && noSuggestions`, so it discards the reply, shows
+"Something went wrong" and offers a Regenerate that re-runs the identical
+request. `SearchUnsatisfied` broke that loop for the two cases the search can
+explain; **this is the case it cannot** — the search simply came back with
+nothing and has no reason to give.
+
+So the turn routes ONCE more, with the failed round in context (`RETRY_PROMPT`),
+and the model either searches again with different arguments or answers in
+prose. The user was going to spend this generation anyway by pressing
+Regenerate; spending it here buys the model the one thing that button cannot
+give it, which is the knowledge that the first arguments did not work.
+
+- **`MAX_SEARCH_ROUNDS` is 2 and nothing loops.** This is the deliberate
+  multi-round tool use the note above says would have to be built on purpose —
+  and it is bounded rather than agentic, because the turn's whole shape depends
+  on knowing its step count up front: the opening line is templated before the
+  search starts, the summary runs concurrently with persistence, and the card is
+  painted after the prose stops moving. A variable number of rounds costs all
+  three and meters a `questions` unit the user thinks is one question.
+- **A stated `unsatisfied` is never retried.** "No established dish under any
+  name" and "that is a drink" are ANSWERS. Retrying one spends a second
+  generation arguing with a verdict the search already reached, and puts
+  "Something went wrong" back in front of a reader who had just been told the
+  truth.
+- **Only the branch where the TOOL RESULT won the `early` race gets here.** A
+  turn whose dish was written and then dropped has already resolved
+  `earlyDishReady` and started its summary — and those drops are the ones that
+  state a reason anyway. It is also what makes this free for every turn that
+  found something: on that branch `parseTask` has already settled, so the
+  emptiness check costs a microtask.
+- **The retry is offered ONE tool, not both.** It may search again; it may not
+  turn a dish turn into a menu turn. `isMenuTurn` was read once and the summary
+  prompt and step 7's frames have already branched on it.
+- **No new frame, and that is what makes it invisible to the client.** The
+  second round writes the same `tool_calls` / `content` / `intent` sequence the
+  first did, and the reducer REPLACES on all three — so a second `intent`
+  supersedes the first and the card's regenerate control follows the dish the
+  turn actually went looking for. `npm run check:chat-frames` in the client
+  drives both branches.
+- **The prose branch carries `unsatisfied: no_known_dish`, and must.** Without
+  it the client cannot tell a model that chose to answer in words from a stream
+  that died — the shape on the wire is identical — and throws the reply away.
+  `attempted` is empty because nothing was written to be refused, and step 7
+  suppresses `buildUnsatisfiedLine` on this path so the reader gets one sentence
+  rather than two saying the same thing in different voices.
+- **A retry that fails or returns nothing claims NOTHING.** It logs and leaves
+  the turn exactly as round 1 ended it. Marking an empty reply as answered would
+  commit a turn whose only text is "let me look that up"; no worse than before
+  this existed is the floor every branch here has to clear.
+- **A route that produced nothing is evicted from the routing cache.** One bad
+  reading of a popular dish name would otherwise be served for the rest of the
+  TTL and pay for a retry every time. Round 2's route is deliberately not cached
+  in its place — it was reached with the failure in context, so it is an answer
+  to a different question than the key names.
 
 ### Two tools, and the router picks
 

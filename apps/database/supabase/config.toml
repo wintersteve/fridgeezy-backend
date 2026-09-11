@@ -273,7 +273,7 @@ sender_name = "Fridgeezy"
 # the token. Push this with `supabase config push` after changing it, or the
 # remote keeps the default.
 [auth.email.template.magic_link]
-subject = "Your Fridgeezy sign-in code"
+subject = "{{ .Token }} is your Fridgeezy sign-in code"
 content_path = "./supabase/templates/magic-link.html"
 
 # Uncomment to customize email template

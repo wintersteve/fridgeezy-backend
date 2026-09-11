@@ -1,8 +1,4 @@
-import {
-    buildFoodIllustrationStyle,
-    generateImage,
-    padPngToSquare,
-} from "@fridgeezy/genai";
+import { buildFoodIllustrationStyle, generateImage } from "@fridgeezy/genai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
 
 import { toDeviceReachable } from "../../../utils/device-reachable-url";
@@ -94,8 +90,9 @@ ${buildFoodIllustrationStyle({
     // the middle half of the height did better — it halved the clipping — but
     // still swung between 51% and 87% of frame height across dishes on one
     // prompt. **Rewording this will not reliably change the plate's size.**
-    // The margin that actually matters is added after generation instead, by
-    // `padPngToSquare`, which is deterministic.
+    // Adding the margin after generation was tried instead (a deterministic pad
+    // to square) and removed for the artefacts it introduced, so this prompt is
+    // the only lever there is.
     framing:
         "the vessel is complete and precisely centred both horizontally and vertically, filling about two thirds of the frame's width, with a generous and even margin of empty background on all four sides — so the image still reads when cropped to a square or to a wide banner.",
     renderingEmphasis:
@@ -129,13 +126,13 @@ export async function generateAndUploadRecipeImage(
             return ""; // Return empty string if no image data
         }
 
-        // Widen the 3:4 render to a square before storing it. The client shows
-        // this one file in boxes from 0.62 to 1.36 aspect, all cropping to fill;
-        // at 3:4 the widest of those cut through the plate on every dish
-        // measured. Padding is what makes one asset survive all three, and it
-        // has to happen here rather than at display time because the surfaces
-        // are full-bleed — see `padPngToSquare` for the rejected alternatives.
-        const buffer = padPngToSquare(Buffer.from(base64Data, "base64"));
+        // Stored exactly as the model returned it. A post-processing step that
+        // widened the 3:4 render to a square — replicating the edge columns
+        // outward, with a corner-shadow correction on top — used to sit here and
+        // was removed on 2026-09-11: it introduced visible artefacts of its own,
+        // which is worse than the centre crop it was compensating for. Framing
+        // is the prompt's job; cropping is the client's.
+        const buffer = Buffer.from(base64Data, "base64");
 
         // Always store at the single deterministic path (the content type still
         // reflects the real bytes, which is what clients render by).

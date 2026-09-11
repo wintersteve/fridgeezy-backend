@@ -34,7 +34,7 @@ set -euo pipefail
 
 PROJECT_REF="${PROJECT_REF:-qkxznjwlybjqpcauaisz}"
 TEMPLATE="$(dirname "$0")/../supabase/templates/magic-link.html"
-SUBJECT="Your Fridgeezy sign-in code"
+SUBJECT="{{ .Token }} is your Fridgeezy sign-in code"
 API="https://api.supabase.com/v1/projects/${PROJECT_REF}/config/auth"
 
 TOKEN="${SUPABASE_ACCESS_TOKEN:-}"

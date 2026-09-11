@@ -41,7 +41,7 @@ import { buildFoodIllustrationStyle, generateImage } from "@fridgeezy/genai";
  *
  * `generate-cuisine-cards` records the measurement that would otherwise matter:
  * **the model does not reproduce a requested hex.** Asked for `#FBE4E1` it
- * returned `#EEE4DD`; `padPngToSquare` saw a `#FDFBF9` ground land near
+ * returned `#EEE4DD`; the food art direction's `#FDFBF9` ground lands nearer
  * `#F6F0E0`. So the `ground` below steers the mood and nothing else.
  *
  * It happens not to matter, and it is worth writing down why rather than
@@ -204,8 +204,8 @@ const OUT_DIR = join(process.cwd(), "operations", "output", "splash");
  * The other image operations never had to notice: they hand `mimeType` straight
  * to Supabase storage as `contentType`, so the bytes and the label always
  * agreed. Writing to disk has no such luck, and a `.png` holding JPEG bytes is
- * a trap for the next person — `padPngToSquare` in `libs/genai` parses PNG
- * chunks directly and would fail on one in a way that says nothing useful.
+ * a trap for the next person: anything that reads the file by its extension
+ * fails on it in a way that says nothing useful.
  */
 const extensionFor = (mimeType: string) =>
     mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "png";

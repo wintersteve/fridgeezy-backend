@@ -15,7 +15,8 @@ import { buildSuggestionSignature } from "@fridgeezy/toolkit";
  * Usage:
  *   npx jiti operations/generate-embeddings.ts <target> [--all]
  *
- *   <target>  categories | units | tags | suggestions | recipes
+ *   <target>  units | tags | suggestions | recipes
+ *             (categories are NOT here — `embed-category-centroids.ts`)
  *   --all     re-embed every row, not just those missing one. Use after
  *             changing a text builder, since existing vectors are then stale
  *             rather than absent.
@@ -41,13 +42,16 @@ interface Target {
     buildText: (row: any) => string;
 }
 
+// NO `categories` TARGET, deliberately — see `embed-category-centroids.ts`.
+//
+// It was here, embedding the bare category name, and that is what put Cloves
+// under Mushrooms: the ingredient fallback compares an ingredient NAME to these
+// vectors, so a shelf LABEL on the other side of the comparison is nearly
+// noise (65.2% agreement, against 85.5% for a centroid of the shelf's curated
+// members). A category vector is now an average of ingredient vectors, which is
+// not a text this file could build, so the target is gone rather than left here
+// to be re-run and silently undo the fix.
 const TARGETS: Record<string, Target> = {
-    categories: {
-        table: "categories",
-        select: "id, name, canonical_id, description",
-        column: "embedding",
-        buildText: (row) => row.name,
-    },
     units: {
         table: "units",
         select: "id, name, abbreviation, type",

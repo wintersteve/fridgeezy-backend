@@ -18,7 +18,7 @@
             "embed-categories": {
                 "executor": "nx:run-commands",
                 "options": {
-                    "command": "npx jiti operations/generate-embeddings.ts categories",
+                    "command": "npx jiti operations/embed-category-centroids.ts",
                     "cwd": "apps/database",
                     "forwardAllArgs": true
                 }
@@ -308,6 +308,14 @@
                     "command": "npx jiti operations/classify-ingredient-component.ts",
                     "cwd": "apps/database"
                 }
+            },
+            "convert-static-art": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/convert-static-art-to-webp.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
             }
         }
     },
@@ -320,6 +328,7 @@
         "@fridgeezy/supabase": "0.0.1",
         "@fridgeezy/toolkit": "0.0.1",
         "@fridgeezy/types": "0.0.1",
+        "sharp": "^0.35.4",
         "ts-case-convert": "^2.1.0"
     }
 }

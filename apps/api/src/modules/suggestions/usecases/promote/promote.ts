@@ -235,7 +235,29 @@ export const promoteSuggestion = createStreamHandler({
         // mid-stream and came back would otherwise pay for the whole recipe a
         // second time (and, since the suggestion is gone, 404 instead).
         const recipesRepository = new RecipesRepository();
-        const promotedResult = await recipesRepository.findBySuggestionId(id);
+
+        // Everything here that does not depend on anything else starts NOW.
+        //
+        // These were four sequential Supabase round trips in front of the first
+        // model token — `findBySuggestionId`, `fetchEnrichedSuggestion`,
+        // `findByCanonicalName` and `fetchRecipeMetadata` — of which only
+        // `findByCanonicalName` genuinely depends on a predecessor (it needs the
+        // suggestion's name). Measured against the deployed project that was
+        // ~1.2s of pure waiting on every promotion.
+        //
+        // `fetchRecipeMetadata` is reference data and now memoised, so on the
+        // shortcut paths below (which return before it is awaited) it costs at
+        // most one read that the next request would have paid for anyway. The
+        // bare `.catch` is what stops that becoming an unhandled rejection when
+        // a shortcut returns first — the error is still delivered at the `await`
+        // further down, which is where it can be reported properly.
+        const metadataPromise = fetchRecipeMetadata();
+        metadataPromise.catch(() => undefined);
+
+        const [promotedResult, suggestionResult] = await Promise.all([
+            recipesRepository.findBySuggestionId(id),
+            fetchEnrichedSuggestion(id),
+        ]);
 
         if (promotedResult.success && promotedResult.value) {
             const promotedId = promotedResult.value;
@@ -296,9 +318,7 @@ export const promoteSuggestion = createStreamHandler({
             );
         }
 
-        // 1. Fetch enriched suggestion with ingredients and tags
-        const suggestionResult = await fetchEnrichedSuggestion(id);
-
+        // 1. The enriched suggestion, read above alongside the promotion check.
         if (!suggestionResult.success) {
             const error = suggestionResult.error;
 
@@ -379,8 +399,8 @@ export const promoteSuggestion = createStreamHandler({
         const ingredientNames = suggestion.ingredients.map((i) => i.name);
         const tagNames = suggestion.tags.map((t) => t.name);
 
-        // 4. Fetch metadata from Supabase
-        const metadata = await fetchRecipeMetadata();
+        // 4. Metadata, started at the top of the handler.
+        const metadata = await metadataPromise;
         const unitsPrompt = formatUnitsForPrompt(metadata.units);
         const tagsPrompt = formatTagsForPrompt(metadata.tags);
 
@@ -491,35 +511,63 @@ export const promoteSuggestion = createStreamHandler({
                         return;
                     }
 
-                    // Point the recipe back at the suggestion it came from
-                    // BEFORE the suggestion is deleted — that id is the only
-                    // handle a returning client still has on this recipe.
-                    const markResult = await recipesRepository.markPromotedFrom(
-                        persistResult.value,
-                        id
-                    );
+                    // Bookkeeping, off the client's clock.
+                    //
+                    // Neither of these writes is something the caller waits on:
+                    // it already has the recipe id from the yield below, which
+                    // is the only thing it needs to open the page. Awaited here
+                    // they were two more serial Supabase round trips between the
+                    // last model token and the completion frame — the user
+                    // staring at a finished recipe that had not arrived yet.
+                    //
+                    // Registered BEFORE the yield rather than after it: the code
+                    // following a generator's final `yield` still runs while the
+                    // consumer is pulling the last value, so moving it down
+                    // would not have taken it off the clock at all.
+                    //
+                    // `trackBackgroundTask` is what makes this safe on Lambda —
+                    // an unawaited promise is otherwise frozen with the
+                    // execution environment; `lambda.ts` drains the registry
+                    // after the response stream closes. The two stay CHAINED and
+                    // in this order: `source_suggestion_id` is the only handle a
+                    // returning client has on this recipe, so it has to be
+                    // written before the suggestion it points at is deleted.
+                    trackBackgroundTask(
+                        (async () => {
+                            const markResult =
+                                await recipesRepository.markPromotedFrom(
+                                    persistResult.value,
+                                    id
+                                );
 
-                    if (!markResult.success) {
-                        console.error(
-                            "Failed to record promoted suggestion:",
-                            markResult.error.message
-                        );
-                    }
+                            if (!markResult.success) {
+                                console.error(
+                                    "Failed to record promoted suggestion:",
+                                    markResult.error.message
+                                );
+                                // Don't delete the suggestion: without the back
+                                // reference it is the only way a returning
+                                // client finds this recipe again.
+                                return;
+                            }
 
-                    // Delete the suggestion after successful recipe creation
-                    const suggestionsRepo = new SuggestionsRepository();
-                    const deleteResult = await suggestionsRepo.delete(id);
+                            const suggestionsRepo = new SuggestionsRepository();
+                            const deleteResult = await suggestionsRepo.delete(id);
 
-                    if (deleteResult.success) {
-                        console.log(
-                            `Suggestion ${id} removed after promotion to recipe`
-                        );
-                    } else {
-                        console.error(
-                            "Failed to delete suggestion:",
-                            deleteResult.error.message
-                        );
-                    }
+                            if (deleteResult.success) {
+                                console.log(
+                                    `Suggestion ${id} removed after promotion to recipe`
+                                );
+                            } else {
+                                console.error(
+                                    "Failed to delete suggestion:",
+                                    deleteResult.error.message
+                                );
+                            }
+                        })()
+                    ).catch((error) => {
+                        console.error("Promotion bookkeeping failed:", error);
+                    });
 
                     // Yield final completion with recipe ID and hero image.
                     //

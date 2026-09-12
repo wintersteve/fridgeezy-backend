@@ -63,10 +63,15 @@ variable "lambda_runtime" {
 
 variable "lambda_architecture" {
   description = <<-EOT
-    Instruction set for the function. arm64 is cheaper per GB-second and the
-    artifact is pure JavaScript, so nothing constrains the choice — `sharp` used
-    to, via its native binaries, but it was unused and has been removed. Adding
-    any native dependency reintroduces the cross-platform install step.
+    Instruction set for the function. arm64 is cheaper per GB-second.
+
+    `sharp` is back (recipe images are re-encoded to WebP on upload), so this is
+    load-bearing again: the artifact carries native binaries and they have to be
+    the ones for THIS value. `infra/build-artifact.sh` reads it from
+    `LAMBDA_ARCHITECTURE` (defaulting to arm64) and installs the matching
+    linux/@img packages, then fails the build if they are missing. **Change this
+    and the env var the build script reads together**, or the deploy succeeds and
+    every recipe image throws inside a background task where nothing is waiting.
   EOT
   type        = string
   default     = "arm64"
@@ -81,10 +86,12 @@ variable "lambda_memory_size" {
   description = <<-EOT
     Memory (MB). Also scales CPU.
 
-    Was 2048, justified by local image processing with `sharp`. That dependency
-    was unused and has been removed: images are produced by a @google/genai call
-    and uploaded straight to Supabase storage, so nothing here is CPU-bound. The
-    work is almost entirely waiting on a model over the network, and Lambda bills
+    Was 2048, justified by local image processing with `sharp`; dropped to 1024
+    when that dependency was removed. `sharp` is back — recipe images are
+    re-encoded to WebP and resized on upload — but it does NOT justify going back
+    up: the two encodes measure ~70ms on an 864x1184 render and run in a
+    background task, so they are noise against a model call. The work here is
+    still almost entirely waiting on a model over the network, and Lambda bills
     GB-seconds against that wall-clock time — on 15-30s streams, memory is the
     largest cost lever in this stack.
 

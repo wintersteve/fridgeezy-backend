@@ -52,6 +52,25 @@ export async function getOrSynthesizeSpeech(text: string): Promise<string> {
         .upload(path, Buffer.from(audioBase64, "base64"), {
             contentType: mimeType,
             upsert: true,
+            // Seconds, NOT a header — supabase-js prefixes `max-age=`
+            // to whatever you pass, so a full directive string is stored as
+            // the malformed `max-age=public, max-age=31536000, immutable`.
+            //
+            // **And it is currently inert on this project**: measured
+            // 2026-09-12, a public object uploaded with this stores
+            // `max-age=31536000` in its metadata and is still SERVED as
+            // `cache-control: no-cache` (the storage gateway reports
+            // `sb-gateway-mode: direct`). Kept anyway — it is the correct
+            // value, it costs nothing, and it starts working the day the
+            // gateway honours it. Do not read the presence of this line as
+            // evidence that responses are cacheable.
+            //
+            // What that costs in practice is small: expo-image keeps its own
+            // disk cache regardless of HTTP semantics, and Cloudflare still
+            // holds the bytes and revalidates (`cf-cache-status:
+            // REVALIDATED`), so the price is one conditional request per
+            // clip rather than a re-download.
+            cacheControl: "31536000",
         });
 
     if (error) {

@@ -5,7 +5,7 @@
     "scripts": {
         "api": "nx run api:serve",
         "api:dev": "nx run api:serve:dev",
-    "webhook:dev": "./infra/send-webhook-event.sh",
+        "webhook:dev": "./infra/send-webhook-event.sh",
         "build:all": "nx run-many -t build --all",
         "build:app": "nx run-many -t lint --projects=tag:scope:app",
         "build:shared": "nx run-many -t build --projects=tag:scope:shared",
@@ -17,6 +17,7 @@
     "dependencies": {
         "@types/cors": "^2.8.19",
         "dotenv": "^17.2.3",
+        "sharp": "^0.35.4",
         "supabase": "2.72.2"
     },
     "devDependencies": {

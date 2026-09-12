@@ -44,6 +44,57 @@ npx nx run @fridgeezy/api:prune
 echo "==> installing production dependencies into dist/"
 npm ci --omit=dev --prefix "$DIST" >/dev/null
 
+# sharp is the one native dependency in the artifact (recipe images are re-encoded
+# to WebP on upload), and `npm ci` above just installed the binaries for THIS
+# machine. Lambda runs linux on `lambda_architecture`, so the @img platform
+# packages have to be replaced with the ones for the runtime — npm resolves those
+# from --os/--cpu/--libc rather than from the host it is running on.
+#
+# The failure this prevents is not a build error: the artifact deploys happily and
+# the first recipe image throws "Could not load the sharp module using the
+# <host>-<arch> runtime" from inside a background task, where nothing is waiting
+# on it and the only symptom is dishes quietly having no picture.
+#
+# Version is read from what npm ci actually resolved, so the platform packages can
+# never be a different sharp from the JS half.
+SHARP_ARCH="${LAMBDA_ARCHITECTURE:-arm64}"
+case "$SHARP_ARCH" in
+    arm64)  SHARP_CPU="arm64" ;;
+    x86_64) SHARP_CPU="x64" ;;
+    *) echo "    unknown LAMBDA_ARCHITECTURE '$SHARP_ARCH' (expected arm64 or x86_64)" >&2; exit 1 ;;
+esac
+
+SHARP_VERSION="$(node -p "require('$DIST/node_modules/sharp/package.json').version")"
+
+echo "==> replacing sharp's host binaries with linux/$SHARP_CPU (sharp $SHARP_VERSION)"
+rm -rf "$DIST/node_modules/@img"
+npm install --prefix "$DIST" --no-save --omit=dev \
+    --os=linux --cpu="$SHARP_CPU" --libc=glibc \
+    "sharp@$SHARP_VERSION" >/dev/null
+
+# npm installs every optional platform package it thinks *could* apply, so
+# --libc=glibc still leaves the musl build and the wasm fallback behind: 28 MB of
+# the 46 MB sharp adds, for two loaders this runtime never reaches. Lambda's
+# nodejs runtime is Amazon Linux (glibc), and sharp resolves the glibc package
+# first and only falls through on failure. The unzipped artifact ceiling is 250 MB
+# and this build is already ~170 MB, so the headroom is worth having.
+rm -rf "$DIST"/node_modules/@img/sharp-linuxmusl-* \
+       "$DIST"/node_modules/@img/sharp-libvips-linuxmusl-* \
+       "$DIST"/node_modules/@img/sharp-wasm32
+
+if ! ls "$DIST"/node_modules/@img/sharp-linux-"$SHARP_CPU"/lib/*.node >/dev/null 2>&1; then
+    echo "    sharp's linux/$SHARP_CPU binary is missing from the artifact" >&2
+    exit 1
+fi
+
+# Belt and braces: a host binary left behind would make the artifact work on a
+# developer's machine and fail on Lambda, which is the whole class of bug the
+# verification at the end of this script exists to catch.
+if ls -d "$DIST"/node_modules/@img/sharp-darwin-* >/dev/null 2>&1; then
+    echo "    host (darwin) sharp binaries are still in the artifact" >&2
+    exit 1
+fi
+
 echo "==> replacing workspace symlinks with real packages"
 if [ ! -d "$DIST/workspace_modules/@fridgeezy" ]; then
     echo "    workspace_modules/@fridgeezy missing — did prune succeed?" >&2

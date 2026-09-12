@@ -64,13 +64,21 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
 - `up-remote` / `reset-remote` — the `--linked` versions, against the live dev
   project
 - `types-remote` — generate types from the linked project instead
-- `embed-ingredients|embed-categories|embed-units|embed-tags|embed-suggestions|embed-recipes`
-  — all six run one script, `operations/generate-embeddings.ts <target>`. They
+- `embed-ingredients|embed-units|embed-tags|embed-suggestions|embed-recipes`
+  — all five run one script, `operations/generate-embeddings.ts <target>`. They
   backfill only rows missing a vector; append `-- --all` to re-embed everything,
   which is what you want after changing a text builder. `embed-ingredients` is
   the one to reach for after any bulk import: `seed-ingredients` embeds only the
   rows it creates, so anything the LLM added arrives without a vector and stays
   invisible to similarity matching until this runs.
+- `embed-categories` — **not** that script. A category's vector is the CENTROID
+  of its curated seed members (`operations/embed-category-centroids.ts`,
+  `-- --dry-run` to see the shelves without writing), because the ingredient
+  fallback compares an ingredient NAME against it: embedding the category's own
+  label instead scored 65.2% against the adjudicator's own answers where the
+  centroid scores 85.5%, and it is what filed Cloves, Saffron, Mussels and
+  Pumpkin under Mushrooms in the live catalogue. Re-run it after editing the
+  seed's categories.
 - `seed-ingredients`, `generate-ingredient-seed`
 - `classify-ingredient-diet` — fills `ingredients.dietary_properties`, which is
   what every dietary filter and every dietary chip on a card derives from. Dry
@@ -237,7 +245,14 @@ and tags as plain rows with no vectors, and ingredient matching resolves a
 category by vector search — so on a freshly reset database every suggestion dies
 with `No categories found - ensure category embeddings are populated`, surfacing
 to the client as cards that appear and are immediately withdrawn. They cost a
-fraction of a cent (265 short rows through text-embedding-3-small).
+fraction of a cent (~700 short rows through text-embedding-3-small — most of
+them `embed-categories`, which embeds the seed's 466 ingredient NAMES to average
+them, not the 20 category labels).
+
+**`embed-categories` reads `ingredient-seed.json`, not the catalogue**, so it
+belongs where it is in that list: it works on a database with no ingredients in
+it at all, and running it before `seed-ingredients` is right rather than merely
+tolerable.
 
 Optionally `seed-ingredients` then `embed-ingredients` for a realistic ingredient
 catalog. Without it the pipeline still works — unmatched ingredients are simply

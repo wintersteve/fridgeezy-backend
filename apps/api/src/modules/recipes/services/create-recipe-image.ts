@@ -16,24 +16,74 @@ const normalizeFileName = (name: string): string => {
         .replace(/^_+|_+$/g, ""); // Trim leading/trailing underscores
 };
 
-// A recipe's image always lives at this single, deterministic path (one
-// extension), so its public URL can be computed from the name alone \u2014 no
-// storage lookup, and no need to await generation before knowing the URL.
-const imageStoragePath = (name: string): string =>
+/**
+ * Encoding for the two objects every dish now gets.
+ *
+ * The model returns PNG, and these illustrations are flat watercolour on a plain
+ * ground — the one thing PNG is worst at. Measured on a real 864x1184 render:
+ * **1522 KB as PNG, 58 KB as WebP q82 at the same pixel dimensions**, and 11 KB
+ * at 420px wide. That is what made the feed slow; almost none of it was the
+ * dimensions of the picture.
+ *
+ * So the HERO is not resized at all — the recipe page draws it ~520pt wide, so
+ * 864px is already only ~1.7x on a 3x screen and there is nothing worth giving
+ * away for 26 more KB. The CARD variant is the resize: card slots are 248-272pt
+ * and lists draw a small square thumb, so 420px is the width worth storing a
+ * second copy at.
+ *
+ * `withoutEnlargement` because a future model or a hand-placed asset could be
+ * narrower than `CARD_WIDTH`, and upscaling to hit a number is worse than
+ * serving what there is. Both encodes together cost ~70ms, against a model call
+ * measured in seconds.
+ */
+const HERO_QUALITY = 82;
+const CARD_WIDTH = 420;
+const CARD_QUALITY = 75;
+
+/**
+ * The hero path, and the reason it is a real `.webp` rather than WebP bytes
+ * hidden under the old `.png` name.
+ *
+ * The extension is LOAD-BEARING as a signal. `persistRecipeWithIngredientIds`
+ * stores the *predicted* URL rather than waiting for the upload, so prediction
+ * and upload have to agree — and on the client a stored URL ending `.webp` is
+ * the guarantee that `<name>_sm.webp` was written beside it by this same
+ * function. That is what lets a card ask for the small one with no existence
+ * check and no 404 fallback, and what makes a legacy `.png` row degrade by
+ * simply never asking.
+ */
+const heroStoragePath = (name: string): string =>
+    `${normalizeFileName(name)}.webp`;
+
+/** The card/thumbnail variant, always written together with the hero. */
+const cardStoragePath = (name: string): string =>
+    `${normalizeFileName(name)}_sm.webp`;
+
+/**
+ * Where dishes generated before this pipeline still live. Read, never written:
+ * there is no backfill and these objects are left exactly as they are.
+ */
+const legacyStoragePath = (name: string): string =>
     `${normalizeFileName(name)}.png`;
+
+const publicUrl = (path: string): string =>
+    toDeviceReachable(
+        supabaseAdmin.storage.from("recipes").getPublicUrl(path).data.publicUrl
+    );
 
 /**
  * The deterministic public URL a recipe's image will live at, derived purely
- * from its name. Valid to store BEFORE generation finishes uploading \u2014 the URL
+ * from its name. Valid to store BEFORE generation finishes uploading — the URL
  * resolves once the (async) upload lands. Lets persistence set `image_url`
  * without blocking on, or re-triggering, image generation.
+ *
+ * Always the WebP hero, which is why `generateAndUploadRecipeImage` below has to
+ * end with a `.webp` at this path for every dish it is asked about — including
+ * one that already has a legacy PNG. A row pointing at an extension nothing ever
+ * wrote is a dish with no picture and nothing in the logs.
  */
 export const getRecipeImagePublicUrl = (name: string): string =>
-    toDeviceReachable(
-        supabaseAdmin.storage.from("recipes").getPublicUrl(
-            imageStoragePath(name)
-        ).data.publicUrl
-    );
+    publicUrl(heroStoragePath(name));
 
 /**
  * The plating half of the prompt. The style half is shared with the cuisine
@@ -100,22 +150,131 @@ ${buildFoodIllustrationStyle({
     mood: "spare, exact and expensive — one confident gesture, generously surrounded by empty plate.",
 })}`;
 
+/**
+ * Writes both variants for `source` and returns the hero's public URL.
+ *
+ * The two encodes run together; the two UPLOADS do not. Hero first is what makes
+ * a half-finished write degrade into "this dish has no small variant" — which no
+ * client ever asks about, since the card path is only derived from a hero URL
+ * that came back — rather than into a card variant with no hero behind it.
+ */
+async function uploadVariants(name: string, source: Buffer): Promise<string> {
+    // Imported here rather than at the top of the file, for three reasons that
+    // each stand alone:
+    //
+    //  * `sharp` is a ~30 MB native module and loading libvips is not free. Only
+    //    this path needs it, and it runs as a background task — so a chat turn
+    //    or a recipe stream on a cold Lambda should not pay for it.
+    //  * The deployment artifact carries LINUX binaries (see
+    //    `infra/build-artifact.sh`), while `build-artifact.sh` verifies the
+    //    handler's module graph loads on the build machine. A static import
+    //    would make that check require a macOS binary the artifact must not
+    //    contain.
+    //  * It matches how `@fridgeezy/llm` defers its provider SDKs.
+    const { default: sharp } = await import("sharp");
+
+    const [hero, card] = await Promise.all([
+        sharp(source).webp({ quality: HERO_QUALITY }).toBuffer(),
+        sharp(source)
+            .resize({ width: CARD_WIDTH, withoutEnlargement: true })
+            .webp({ quality: CARD_QUALITY })
+            .toBuffer(),
+    ]);
+
+    for (const [path, body] of [
+        [heroStoragePath(name), hero],
+        [cardStoragePath(name), card],
+    ] as const) {
+        const { error } = await supabaseAdmin.storage
+            .from("recipes")
+            .upload(path, body, {
+                contentType: "image/webp",
+                upsert: true,
+                // Seconds, NOT a header — supabase-js prefixes `max-age=`
+                // to whatever you pass, so a full directive string is stored as
+                // the malformed `max-age=public, max-age=31536000, immutable`.
+                //
+                // **And it is currently inert on this project**: measured
+                // 2026-09-12, a public object uploaded with this stores
+                // `max-age=31536000` in its metadata and is still SERVED as
+                // `cache-control: no-cache` (the storage gateway reports
+                // `sb-gateway-mode: direct`). Kept anyway — it is the correct
+                // value, it costs nothing, and it starts working the day the
+                // gateway honours it. Do not read the presence of this line as
+                // evidence that responses are cacheable.
+                //
+                // What that costs in practice is small: expo-image keeps its own
+                // disk cache regardless of HTTP semantics, and Cloudflare still
+                // holds the bytes and revalidates (`cf-cache-status:
+                // REVALIDATED`), so the price is one conditional request per
+                // image rather than a re-download. The bytes themselves are the
+                // win — see the WebP encode above.
+                cacheControl: "31536000",
+            });
+
+        if (error) {
+            console.error(`Failed to upload ${path}:`, error);
+            return "";
+        }
+    }
+
+    return publicUrl(heroStoragePath(name));
+}
+
 export async function generateAndUploadRecipeImage(
     name: string
 ): Promise<string> {
     try {
-        const filePath = imageStoragePath(name);
+        const heroPath = heroStoragePath(name);
+        const legacyPath = legacyStoragePath(name);
 
-        // Reuse an existing image for this dish name if we already have one.
-        const { data: existingFile } = await supabaseAdmin.storage
+        // One list call for every object under this dish's base name — `search`
+        // is a substring match, so it answers for the hero, the card variant and
+        // the legacy PNG at once.
+        const { data: existing } = await supabaseAdmin.storage
             .from("recipes")
-            .list("", { search: filePath });
+            .list("", { search: normalizeFileName(name) });
 
-        if (existingFile?.some((file) => file.name === filePath)) {
-            return getRecipeImagePublicUrl(name);
+        const has = (path: string) =>
+            existing?.some((file) => file.name === path) ?? false;
+
+        // Already converted: nothing to do, and no model call.
+        if (has(heroPath)) return publicUrl(heroPath);
+
+        // A dish generated before this pipeline, being asked for again — a
+        // re-promotion, or a blacklist-adapted variant taking the base's name.
+        //
+        // CONVERTED, not regenerated. `getRecipeImagePublicUrl` has already
+        // predicted a `.webp` for whatever row is about to be written, so
+        // returning the PNG's URL would leave the row pointing at an extension
+        // nothing wrote; and generating fresh art would both cost a model call
+        // and silently change a dish's established picture. Re-encoding the
+        // bytes that already exist satisfies the prediction, keeps the art, and
+        // costs one download plus ~70ms.
+        //
+        // This is deliberately NOT a backfill: it fires only for a dish some
+        // request actually touched, so it is bounded by traffic rather than by
+        // the size of the catalogue, and the legacy object is left in place.
+        if (has(legacyPath)) {
+            const { data: legacy, error: downloadError } =
+                await supabaseAdmin.storage.from("recipes").download(legacyPath);
+
+            if (legacy && !downloadError) {
+                console.log(`Converting legacy image for ${name} to WebP`);
+                return await uploadVariants(
+                    name,
+                    Buffer.from(await legacy.arrayBuffer())
+                );
+            }
+
+            console.error(
+                `Could not read legacy image for ${name}:`,
+                downloadError
+            );
+            // Fall through and generate — better a new picture than none.
         }
 
-        const { base64Data, mimeType } = await generateImage({
+        const { base64Data } = await generateImage({
             prompt: buildPrompt(name),
             numberOfImages: 1,
             aspectRatio: "3:4",
@@ -126,29 +285,13 @@ export async function generateAndUploadRecipeImage(
             return ""; // Return empty string if no image data
         }
 
-        // Stored exactly as the model returned it. A post-processing step that
-        // widened the 3:4 render to a square — replicating the edge columns
-        // outward, with a corner-shadow correction on top — used to sit here and
-        // was removed on 2026-09-11: it introduced visible artefacts of its own,
-        // which is worse than the centre crop it was compensating for. Framing
-        // is the prompt's job; cropping is the client's.
-        const buffer = Buffer.from(base64Data, "base64");
-
-        // Always store at the single deterministic path (the content type still
-        // reflects the real bytes, which is what clients render by).
-        const { error } = await supabaseAdmin.storage
-            .from("recipes")
-            .upload(filePath, buffer, {
-                contentType: mimeType,
-                upsert: true,
-            });
-
-        if (error) {
-            console.error("Failed to upload recipe image:", error);
-            return ""; // Return empty string on upload error
-        }
-
-        return getRecipeImagePublicUrl(name);
+        // The model's framing is kept as-is. A post-processing step that widened
+        // the 3:4 render to a square — replicating the edge columns outward, with
+        // a corner-shadow correction on top — used to sit here and was removed on
+        // 2026-09-11: it introduced visible artefacts of its own, which is worse
+        // than the centre crop it was compensating for. Framing is the prompt's
+        // job; cropping is the client's. Re-encoding is not cropping.
+        return await uploadVariants(name, Buffer.from(base64Data, "base64"));
     } catch (error) {
         console.error("Failed to generate and upload recipe image:", error);
         return ""; // Return empty string on error

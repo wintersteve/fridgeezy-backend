@@ -55,6 +55,39 @@ const CANDIDATE_LIMIT = 10;
  * "same" more likely, not less.
  */
 const SHORTLIST_LIMIT = 5;
+/**
+ * Cosine similarity below which the category fallback answers NOTHING and the
+ * ingredient is created with a null `category_id`.
+ *
+ * The fallback used to have no floor at all: `search_categories` is top-1 with
+ * no threshold, so whichever shelf happened to be nearest became a stated fact
+ * about the ingredient. With category vectors built from the bare LABEL (see
+ * `embed-category-centroids.ts`) the winners were decided at similarities around
+ * 0.3 — noise — and "Mushrooms", being a short plural food noun, won things like
+ * Cloves (0.377), Saffron, Bay Leaf, Mussels and Pumpkin. Those rows are still in
+ * the live catalogue; this is the half that stops more of them being written.
+ *
+ * 0.45 is measured against the 359 ingredients the adjudicator categorised
+ * itself: with centroids a member of a shelf scores 0.5-0.7 and the 5th
+ * percentile of correct answers is 0.479, so this floor turns away 14 of the 359
+ * — 9 of which the fallback was getting wrong and 5 right. It is NOT set where
+ * precision is maximised: the two distributions overlap, so a floor high enough
+ * to catch most wrong answers (0.60 keeps only 68% of the right ones) throws
+ * away far more than it saves. What it catches is the regime where the answer is
+ * arbitrary rather than merely arguable.
+ *
+ * An uncategorised ingredient is a real answer, and a much cheaper one to be
+ * wrong about: the app groups it under "Other" rather than telling a cook that
+ * cloves are a fungus, and `seed-ingredients` fills a null category later
+ * without overwriting anything.
+ *
+ * ORDER OF DEPLOY. This number only means anything against centroid vectors.
+ * Read against the old label vectors every score is around 0.3, so an API
+ * carrying this floor talking to a database whose `embed-categories` has not
+ * been re-run will categorise NOTHING — quietly, and not wrongly, but nothing.
+ * Write the centroids first.
+ */
+const CATEGORY_MATCH_FLOOR = 0.45;
 
 export interface IngredientMatch {
     originalName: string;
@@ -461,7 +494,9 @@ export async function matchIngredients(
                 }
 
                 if (!categoryId) {
-                    // Fallback: nearest-centroid (always returns a match).
+                    // Fallback: nearest category centroid — which is allowed to
+                    // say "none of these". The RPC still returns a row whatever
+                    // the distance, so the abstention is ours to make.
                     const categoryMatch = await categoriesRepo.findBestMatch(
                         r.embedding
                     );
@@ -472,10 +507,23 @@ export async function matchIngredients(
                         );
                         return failure(categoryMatch.error);
                     }
-                    categoryId = categoryMatch.value.category.id;
-                    console.log(
-                        `[Ingredients] Assigned "${r.name}" to category "${categoryMatch.value.category.name}" (centroid fallback, similarity: ${categoryMatch.value.similarity.toFixed(3)})`
-                    );
+
+                    const { category, similarity } = categoryMatch.value;
+
+                    if (similarity >= CATEGORY_MATCH_FLOOR) {
+                        categoryId = category.id;
+                        console.log(
+                            `[Ingredients] Assigned "${r.name}" to category "${category.name}" (centroid fallback, similarity: ${similarity.toFixed(3)})`
+                        );
+                    } else {
+                        // Logged rather than silent: a name that resembles no
+                        // shelf is either a genuinely new kind of thing or a sign
+                        // the centroids need rebuilding, and neither is visible
+                        // from a null column.
+                        console.log(
+                            `[Ingredients] "${r.name}" left uncategorised — nearest shelf "${category.name}" scored ${similarity.toFixed(3)}, below the ${CATEGORY_MATCH_FLOOR} floor`
+                        );
+                    }
                 }
 
                 const createResult = await ingredientsRepo.create({

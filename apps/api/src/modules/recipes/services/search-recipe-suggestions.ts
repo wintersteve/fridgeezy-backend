@@ -8,6 +8,7 @@ import { findSuggestionByName } from "../../suggestions/services/find-suggestion
 import { generateSuggestionsStream } from "../../suggestions/services/generate-suggestions-stream";
 import { streamSingleSuggestion } from "../../suggestions/services/stream-single-suggestion";
 
+import { resolveCuisineFilter } from "./cuisine-filter";
 import {
     qualifyingRecipeIds,
     qualifyingSuggestionIds,
@@ -16,7 +17,11 @@ import {
 import { fetchRecipeSummary } from "./fetch-recipe-summary";
 import {
     findCatalogueRecipes,
+    findDishesUsingComponents,
+    findPairingsForDish,
+    resolveComponents,
     resolveIngredientIds,
+    type ResolvedComponent,
 } from "./find-catalogue-recipes";
 import { searchRecipes, searchRecipesByEmbedding } from "./search-recipes";
 
@@ -115,6 +120,73 @@ export interface RecipeSuggestionInput {
      * generation, which is what the question actually asked for.
      */
     exclude?: string[];
+    /**
+     * The reader is turning down what they were just shown — "something else",
+     * "no, not that one", "anything but the lasagne".
+     *
+     * It exists because the argument set cannot otherwise tell a refusal apart
+     * from a follow-up: both arrive as a pinned `dish` that is ALSO in
+     * `exclude`, and the two want opposite resolutions. See the note on
+     * `pinRefused` in the body. Absent means "not a refusal", which is the
+     * behaviour that shipped before this field.
+     */
+    refusing?: boolean;
+    /**
+     * The dish this request is ABOUT but must never return — the anchor of a
+     * "what goes well with X" or "what sauce goes with X" request.
+     *
+     * ## It is excluded HERE, by construction, and that is the whole point
+     *
+     * The rule "a request for something RELATED to a dish is never answered with
+     * that dish" has now been broken twice, by two different routes, and both
+     * times the protection was an instruction the router had to remember:
+     *
+     * - `component` accompaniments relied on the model writing the accompanied
+     *   dish into `exclude`. When it did, the search worked.
+     * - "What goes well with Korean chicken?" routed with an EMPTY `exclude`,
+     *   nothing refused the anchor, and stage 1b's vector search scored Korean
+     *   Fried Chicken 0.602 — top hit, single slot, the dish returned as the
+     *   answer to a question about it.
+     *
+     * A third instruction would fail a third way. Naming the anchor in its own
+     * field lets the search exclude it whether or not the model also said so,
+     * which makes the guarantee a property of the code rather than of a prompt.
+     *
+     * It is folded into the exclusion set below, so it reaches every catalogue
+     * stage AND the generator through one path — the same list, not a second
+     * rule that could disagree with it.
+     */
+    pairsWith?: string;
+    /**
+     * Which slot on the table a `pairsWith` request wants filled.
+     *
+     * Deliberately separate from {@link component}, which is a BUILDING BLOCK
+     * vocabulary (sauce, dough, roux) and contains no course at all. Before this
+     * existed the router reached for `component: "side"` — a value not in
+     * `COMPONENT_TAGS`, which flowed through unvalidated, matched the course tag
+     * by name and half-worked, while telling the generator to write a component
+     * of a kind it has never heard of.
+     */
+    course?: "appetizer" | "side" | "dessert";
+    /**
+     * The cuisine or region the dish must belong to — "Thai", "Asian",
+     * "Middle Eastern".
+     *
+     * A REGION expands to its descendants and a specific cuisine does not; see
+     * `resolveCuisineFilter`. Absent means no cuisine filter at all, which is
+     * most turns.
+     */
+    cuisine?: string[];
+    /**
+     * The most time the cook has, TOTAL, in whole minutes. A CEILING.
+     *
+     * Deliberately a number rather than one of `timeBandFor`'s bands. The bands
+     * are a product statement about what a weeknight allows (`quick` is
+     * anything up to 30 minutes), and mapping "I've got 20 minutes" onto
+     * `quick` would WIDEN it — a 28-minute dish would qualify for a 20-minute
+     * request. A ceiling cannot widen.
+     */
+    maxMinutes?: number;
     /**
      * The component type the user actually asked for ("sauce", "marinade"). Set
      * only for component questions; when present, every catalogue stage keeps
@@ -401,11 +473,19 @@ export async function searchRecipeSuggestions(
 ): Promise<RecipeSuggestionResult> {
     const {
         query,
-        dish,
+        // Renamed on the way in: the pin that APPLIES to this search is derived
+        // below, because a caller that is refusing the pinned dish gets it
+        // dropped. Everything downstream reads the derived `dish`.
+        dish: requestedDish,
         matchThreshold = DEFAULT_MATCH_THRESHOLD,
         maxResults = 5,
         ingredients,
         exclude,
+        refusing,
+        pairsWith,
+        course,
+        cuisine,
+        maxMinutes,
         component,
         dietaryRestrictions,
         blacklist,
@@ -437,34 +517,110 @@ export async function searchRecipeSuggestions(
      * `dish: "Béchamel", exclude: ["Béchamel"]` and could not have returned
      * anything.
      *
-     * The pin wins, because it is the more specific statement: `exclude` is a
-     * list of things already seen, while `dish` is what this request is FOR. A
-     * caller that genuinely wants "something other than X" says so by leaving
-     * `dish` unset — which is exactly what the accompaniment shape
-     * ("what sauce goes with apple strudel") does.
+     * ## Which side wins is now a question the CALLER answers
      *
-     * The router prompt was fixed in the same change; this is the half that
-     * cannot be un-fixed by a model having a bad day.
+     * The collision has two causes that look identical here and mean opposite
+     * things, and until `refusing` existed only one of them could be served:
+     *
+     * - **"tell me more about that dish"** — the reader is asking ABOUT the card
+     *   on screen. The dish is on screen, so it is in the exclusions; the pin is
+     *   what the turn is for. **The pin wins.** This is the 2026-09-03 case.
+     * - **"no, something else"** — the reader is REFUSING the card on screen.
+     *   The router still pins it, because it is what the conversation is about,
+     *   and the collision is the same shape. **The exclusion wins**, and the pin
+     *   is dropped for this turn so the search and the generator are free to find
+     *   something that is not it.
+     *
+     * Nothing in the arguments distinguishes those two, which is why the router
+     * is asked to say so directly (`refusing`) rather than having this infer it
+     * from a sentence it never sees. With `refusing` unset — an older client, a
+     * model that did not fill it in — the behaviour is exactly what it was, so
+     * the earlier fix cannot be undone by this one.
+     *
+     * The collision also became far more COMMON in the same change that made it
+     * resolvable: `shownDishes` sends the complete list of cards on screen, and
+     * the dish a follow-up is about is by definition one of them.
      */
-    const pinnedName = canonicalizeName(dish);
+    const pinnedName = canonicalizeName(requestedDish);
     const contradicted = (exclude ?? []).filter(
         (name) => !!pinnedName && canonicalizeName(name) === pinnedName
     );
 
+    /**
+     * The reader refused the pinned dish, so the pin is dropped rather than the
+     * exclusion.
+     *
+     * Only when the two actually collide. `refusing` on its own says nothing
+     * about the pin — "something other than lasagne, but make it a béchamel
+     * gratin" is a refusal AND a legitimate new pin, and dropping that pin would
+     * throw away the half of the request the reader was most specific about.
+     */
+    const pinRefused = !!refusing && contradicted.length > 0;
+
     if (contradicted.length > 0) {
         console.warn(
-            `[SearchRecipeSuggestions] Ignoring exclude ${JSON.stringify(contradicted)} — it names the pinned dish "${dish}"`
+            pinRefused
+                ? `[SearchRecipeSuggestions] Dropping the pin on "${requestedDish}" — the caller is refusing it (exclude names it, refusing=true)`
+                : `[SearchRecipeSuggestions] Ignoring exclude ${JSON.stringify(contradicted)} — it names the pinned dish "${requestedDish}"`
         );
-        onMetric?.("search.exclude_contradicted_dish");
+        onMetric?.(
+            pinRefused ? "search.pin_refused" : "search.exclude_contradicted_dish"
+        );
     }
 
+    /**
+     * The pin as it applies to THIS search.
+     *
+     * Everything below reads this rather than the raw argument, so unpinning is
+     * one decision made once: `isRequestedDish` reopens, stage 1a and stage 2
+     * stop asking for the dish by name, and — the half that matters most —
+     * `streamSingleSuggestion` gets no `Dish:` line, so the generator is free to
+     * answer with something the reader has not already turned down.
+     */
+    const dish = pinRefused ? undefined : requestedDish;
+
+    /**
+     * The exclusions that SURVIVED the contradiction check, as the caller spelled
+     * them.
+     *
+     * Kept as display names, not just as the canonical set below, because they
+     * are now sent to the GENERATOR as well as used to filter rows — and a
+     * generator prompt cannot use `b_chamel`. Deriving both from one list is what
+     * stops the two layers disagreeing about which exclusions are in force: a
+     * dish the catalogue stages are told to ignore must not be a dish the
+     * generator is told to avoid, and vice versa.
+     */
+    /**
+     * The anchor joins the exclusions, here rather than in the prompt.
+     *
+     * Appended rather than merged into `exclude` upstream so there is exactly
+     * one list in force from this line down: the catalogue stages read it
+     * through `isExcluded`, the generator is handed the same names, and neither
+     * can be told something the other was not. A caller that also listed the
+     * anchor in `exclude` costs nothing — the set below deduplicates.
+     *
+     * It is NOT subject to the `refusing` tiebreak or the pin contradiction
+     * check: those arbitrate between a dish the caller ASKED FOR and one it
+     * refused, and an anchor was never asked for. A request naming the same dish
+     * in `dish` and `pairsWith` is incoherent rather than ambiguous, and
+     * excluding it is the safe reading.
+     */
+    const excludedNames = [
+        ...(exclude ?? []).filter(
+            (name) => !pinnedName || canonicalizeName(name) !== pinnedName
+        ),
+        ...(pairsWith ? [pairsWith] : []),
+    ];
+
     const excluded = new Set(
-        (exclude ?? [])
-            .map(canonicalizeName)
-            .filter((name) => !!name && name !== pinnedName)
+        excludedNames.map(canonicalizeName).filter((name): name is string => !!name)
     );
     const isExcluded = (...names: Array<string | null | undefined>) =>
-        names.some((name) => !!name && excluded.has(canonicalizeName(name)));
+        names.some((name) => {
+            const canonical = canonicalizeName(name);
+
+            return !!canonical && excluded.has(canonical);
+        });
 
     // The names that count as "the dish the user asked for": the dish they
     // named plus the raw query (stage 1a already treats the query as a name).
@@ -486,6 +642,24 @@ export async function searchRecipeSuggestions(
     const wanted = component ? canonicalizeName(component) : null;
     const isWantedComponent = (tags: Array<{ name: string }>) =>
         !wanted || tags.some((tag) => canonicalizeName(tag.name) === wanted);
+
+    /**
+     * Does this row fill the COURSE slot the reader asked for?
+     *
+     * Found by `assertSearchFieldsAreGated` on 2026-09-14, which is what that
+     * assertion is for: `course` reached the pairing retrieval and the generator
+     * and **nothing else**. So "what side goes with lasagne" could be answered
+     * from stage 1b with a main, because similarity does not know what a course
+     * is and no gate here said otherwise.
+     *
+     * Open when no course was asked for — which is most turns, including an open
+     * "what goes well with this", where a starter, a side or a pudding are all
+     * fair answers.
+     */
+    const wantedCourse = course ? canonicalizeName(course) : null;
+    const isWantedCourse = (tags: Array<{ name: string }>) =>
+        !wantedCourse ||
+        tags.some((tag) => canonicalizeName(tag.name) === wantedCourse);
 
     const suggestions: RecipeSuggestionItem[] = [];
     /** See {@link SearchUnsatisfied}. Only ever set on the generate path. */
@@ -520,14 +694,155 @@ export async function searchRecipeSuggestions(
     // independent reads and stage 1a is the one on the critical path, so making
     // it wait for a vocabulary lookup would add latency to the one stage whose
     // whole justification is that it is decisive and cheap.
-    const [namedRecipe, dietFilter] = await Promise.all([
-        new RecipesRepository().findBaseRecipes(
-            [query, dish].filter(
-                (name): name is string => !!name && !isExcluded(name)
-            )
-        ),
-        resolveDietaryFilter(dietaryRestrictions),
-    ]);
+    // The two ingredient resolutions ride along for the same reason the diet
+    // does: they are independent indexed reads, every later stage needs them,
+    // and issuing them here costs nothing beyond what the slowest of the group
+    // already costs. Stage 1a's own gate reads the component half, so they
+    // cannot be deferred past it in any case.
+    const [
+        namedRecipe,
+        dietFilter,
+        resolvedIngredientIds,
+        requestedComponents,
+        resolvedBlacklistIds,
+        cuisineFilter,
+    ] = await Promise.all([
+            new RecipesRepository().findBaseRecipes(
+                [query, dish].filter(
+                    (name): name is string => !!name && !isExcluded(name)
+                )
+            ),
+            resolveDietaryFilter(dietaryRestrictions),
+            ingredients?.length
+                ? resolveIngredientIds(ingredients)
+                : Promise.resolve([] as string[]),
+            ingredients?.length
+                ? resolveComponents(ingredients)
+                : Promise.resolve([] as ResolvedComponent[]),
+            // The reader's allergies and dislikes, as ids — see `isBlacklisted`.
+            blacklist?.length
+                ? resolveIngredientIds(blacklist)
+                : Promise.resolve([] as string[]),
+            resolveCuisineFilter(cuisine),
+        ]);
+
+    /**
+     * Does this row contain something the reader will not eat?
+     *
+     * **This gate did not exist until 2026-09-14, and its absence was the most
+     * serious thing `assertSearchFieldsAreGated` turned up.** `blacklist` was
+     * threaded into stage 1c, 1d, 1e and both generators — every path that
+     * filters in SQL or writes a prompt — and into no push site at all. So the
+     * three stages that read tables directly (1a exact name, 1b similarity, 2
+     * canonical suggestion) could return a dish containing an ingredient the
+     * reader had said they cannot eat, and nothing anywhere would notice.
+     *
+     * It is the same shape as `suitsDiet` and sits beside it, but the two are
+     * not interchangeable: a diet is a property of the DISH derived from every
+     * ingredient's classification, while this is a named list of specific
+     * ingredient rows. A dish can be perfectly vegan and still contain the one
+     * nut somebody is allergic to.
+     *
+     * Matching is by ingredient ID on both sides, never substring — the rule
+     * `decideReuse` already states for the promote path, and for the same
+     * reason: "Butter" must not match "butternut squash".
+     *
+     * **Identity closure is deliberately NOT applied here**, unlike
+     * `find_recipes`, and that is a known narrowing rather than an oversight:
+     * `resolveIngredientIds` resolves canonical ids and aliases but does not
+     * expand an id over `ingredient_identity_ids`. A reader who blacklisted
+     * "Ground Pork" is protected from that row and not from "Minced Pork". The
+     * SQL stages get the closure for free; these three do not, and closing it
+     * needs the id-expansion helper reachable from TypeScript. Recorded rather
+     * than silently accepted.
+     */
+    /**
+     * Does this row belong to the cuisine the reader asked for?
+     *
+     * Open when none was asked for. When one was, the row must carry a tag from
+     * the SUBTREE — so "Asian" admits a Thai dish and "Thai" admits only Thai.
+     *
+     * **Fails closed on an unresolvable term**, which is why the count is
+     * compared rather than the set merely being non-empty: "an Ethiopian dish"
+     * against a vocabulary with no Ethiopian tag must return nothing from the
+     * catalogue and fall through to generation, where the word reaches the
+     * prompt. Quietly dropping it would answer with any dish at all, which is
+     * the exact failure this field was added for.
+     */
+    const isWantedCuisine = (tags: Array<{ id: string }>): boolean => {
+        if (!cuisineFilter) return true;
+        if (cuisineFilter.rootIds.length < cuisineFilter.requestedCount) {
+            return false;
+        }
+
+        return tags.some((tag) => cuisineFilter.subtreeIds.has(tag.id));
+    };
+
+    /**
+     * Does this dish fit in the time the reader has?
+     *
+     * Open when no ceiling was asked for. When one was, **a row with no recorded
+     * time is REFUSED** — the same fail-closed rule `recipe_dietary` applies to
+     * an unclassified ingredient, and for the same reason: "we do not know how
+     * long this takes" is not evidence that it fits in twenty minutes. The cost
+     * is near zero (44 of 45 recipes and 37 of 37 suggestions carry a total) and
+     * the alternative is telling somebody with half an hour to start a braise.
+     *
+     * A ceiling, never a band. See `RecipeSuggestionInput.maxMinutes`.
+     */
+    const withinTime = (totalTimeMinutes: number | null | undefined): boolean =>
+        maxMinutes === undefined ||
+        (typeof totalTimeMinutes === "number" &&
+            totalTimeMinutes > 0 &&
+            totalTimeMinutes <= maxMinutes);
+
+    const blacklistedIds = new Set(resolvedBlacklistIds);
+    const isBlacklisted = (rows: Array<{ id: string }>): boolean =>
+        blacklistedIds.size > 0 &&
+        rows.some((row) => blacklistedIds.has(row.id));
+
+    const requestedComponentIds = new Set(
+        requestedComponents.map((component) => component.id)
+    );
+
+    /**
+     * Is this row the COMPONENT ITSELF, rather than a dish built on it?
+     *
+     * The mirror image of the rule the router already enforces on the way in —
+     * "a building block is never answered with a dish that contains it" — and it
+     * has to exist here because the inverse fails the same way, silently and by
+     * similarity. Measured 2026-09-13 against the local catalogue: a search for
+     * "recipe with Béchamel" had stage 1b score the **Béchamel Sauce recipe**
+     * highest and push it first, which at chat's `maxResults` of 1 took the only
+     * slot — so the reader asked for a dish USING a béchamel and was handed the
+     * béchamel, with four correct answers sitting behind it in stage 1d.
+     *
+     * The same shape as `containsRequestedIngredient`'s note: the vector rows are
+     * pushed FIRST, so a loose hit takes the slot an exact match was about to
+     * fill. Open when no component was named.
+     *
+     * Both keys are checked because a component answers to two names — the one a
+     * recipe lists it by (`Bechamel Sauce`) and the one a cook asks for
+     * (`Béchamel`) — and the catalogue may hold a recipe under either.
+     */
+    const requestedComponentNames = new Set(
+        requestedComponents
+            .flatMap((component) => [
+                component.canonicalId,
+                component.dishCanonicalId,
+            ])
+            .filter((name): name is string => !!name)
+    );
+
+    const isTheRequestedComponent = (
+        ...names: Array<string | null | undefined>
+    ): boolean =>
+        requestedComponentNames.size > 0 &&
+        names.some((name) => {
+            const canonical = canonicalizeName(name);
+
+            return !!canonical && requestedComponentNames.has(canonical);
+        });
 
     /**
      * How many restrictions were ASKED for, counted off the raw argument rather
@@ -585,6 +900,13 @@ export async function searchRecipeSuggestions(
             summary &&
             !isExcluded(summary.name) &&
             isWantedComponent(summary.tags) &&
+            isWantedCourse(summary.tags) &&
+            isWantedCuisine(summary.tags) &&
+            withinTime(summary.totalTimeMinutes) &&
+            !isBlacklisted(summary.ingredients) &&
+            // A request for a dish USING this component is not answered with
+            // the component — see `isTheRequestedComponent`.
+            !isTheRequestedComponent(summary.name) &&
             // A dish the reader NAMED is still refused when it does not suit
             // their diet, and that is deliberate. This is a feed request, not a
             // reference lookup: chat answers it by COOKING something, so
@@ -619,9 +941,22 @@ export async function searchRecipeSuggestions(
      * similarity stage below has to CHECK against them. Resolving separately in
      * each place would be two round trips to the same answer, free to disagree.
      */
-    const requestedIngredientIds = ingredients?.length
-        ? new Set(await resolveIngredientIds(ingredients))
-        : new Set<string>();
+    /**
+     * The same names, resolved a SECOND way: as components.
+     *
+     * "Béchamel" is an ingredient question and a component question at once, and
+     * the two resolve through different columns — `canonical_id` is
+     * `bechamel_sauce` while what the reader typed canonicalises to `bechamel`,
+     * which only `component_dish_canonical_id` holds. Measured 2026-09-13,
+     * `resolveIngredientIds(["béchamel"])` returned nothing at all, so stage 1c
+     * was skipped rather than answering.
+     *
+     * Both lookups run because a name can legitimately be neither, either or
+     * both: "chicken" is only an ingredient, "béchamel" only a component, and
+     * "tomato sauce" is a row that is both. Two cheap indexed reads, issued
+     * together.
+     */
+    const requestedIngredientIds = new Set(resolvedIngredientIds);
 
     /**
      * Does this row contain something the user named?
@@ -660,7 +995,13 @@ export async function searchRecipeSuggestions(
     // Precedence is unchanged, because it is applied when the results are
     // assembled below rather than by the order they were issued in.
     if (suggestions.length < maxResults) {
-        const [vectorSearch, catalogueRows, canonicalMatch] = await Promise.all([
+        const [
+            vectorSearch,
+            catalogueRows,
+            componentRows,
+            pairingRows,
+            canonicalMatch,
+        ] = await Promise.all([
             // Stage 1b: vector search on recipes.
             runVectorSearch(query, matchThreshold, maxResults, speculativeEmbedding, onMetric),
 
@@ -683,8 +1024,74 @@ export async function searchRecipeSuggestions(
                       // which is the fail-closed case and is why the guard
                       // beneath refuses the whole stage rather than trusting an
                       // unfiltered result.
-                      dietaryTagIds: dietFilter?.tagIds,
+                      // Diet AND cuisine: `find_recipes` takes one generic tag
+                      // array and expands each entry through `tag_subtree`, so
+                      // the ROOTS go in — handing it the 53-tag Asian expansion
+                      // would make it demand a row satisfy all 53.
+                      dietaryTagIds: [
+                          ...(dietFilter?.tagIds ?? []),
+                          ...(cuisineFilter?.rootIds ?? []),
+                      ],
                       limit: maxResults,
+                  })
+                : Promise.resolve([]),
+
+            // Stage 1d: dishes BUILT ON a named component — "a recipe with
+            // béchamel".
+            //
+            // The stage the catalogue had no answer for at all. 1c filters by
+            // ingredient ID, and a recipe does not LIST its béchamel: it lists
+            // the butter, flour and milk, so `recipe_ingredients` where
+            // `ingredient_id = <Bechamel Sauce>` returned zero rows on a
+            // catalogue holding four dishes built on one. This reads
+            // `dish_components` instead — the explicit declarations plus the
+            // ingredient rows that ARE components — so both halves answer.
+            //
+            // Runs alongside the others rather than after, for the reason the
+            // whole fan-out exists: on the path where nothing is found, the
+            // serial arrangement charges the sum of every stage to the request
+            // that then spends ten seconds generating.
+            requestedComponentIds.size
+                ? findDishesUsingComponents({
+                      componentIds: [...requestedComponentIds],
+                      blacklist,
+                      // Applied in SQL by the RPC, like stage 1c — and guarded
+                      // by the same `dietResolved` test below, since a
+                      // restriction that resolved to no tag reaches it as an
+                      // empty array and reads as "no filter".
+                      dietaryTagIds: dietFilter?.tagIds,
+                      // Over-fetched by however many exclusions are in force,
+                      // because the exclusions are applied HERE by name and the
+                      // limit is applied THERE by the database. At chat's
+                      // `maxResults` of 1 the two together are fatal: the RPC
+                      // returns exactly one row, the loop below excludes it, and
+                      // a stage holding four more correct answers contributes
+                      // nothing. Measured — refusing the first dish built on a
+                      // béchamel sent the turn to the generator over a catalogue
+                      // holding three more.
+                      limit: maxResults + excluded.size,
+                  })
+                : Promise.resolve([]),
+
+            // Stage 1e: dishes people have actually served BESIDE the anchor.
+            //
+            // The same retrieval the compose screen runs before it generates, so
+            // "what goes well with the chicken" and "Serve it with…" agree. It
+            // is ranked by how many saved menus hold the pairing, which means it
+            // answers only as well as that corpus has been filled — and today it
+            // is empty (0 menus on the live project), so this returns nothing
+            // essentially always and the turn goes on to generate. That is the
+            // designed behaviour, not a degraded one: the value accrues as
+            // people compose, until the common pairing stops costing a call.
+            pairsWith
+                ? findPairingsForDish({
+                      dishName: pairsWith,
+                      courses: course ? [course] : undefined,
+                      // The anchor is already in here — see `excludedNames`.
+                      exclude: excludedNames,
+                      blacklist,
+                      dietaryRestrictions,
+                      limit: maxResults + excluded.size,
                   })
                 : Promise.resolve([]),
 
@@ -751,7 +1158,15 @@ export async function searchRecipeSuggestions(
                 recipeSummary &&
                 !isExcluded(recipeSummary.name) &&
                 isWantedComponent(recipeSummary.tags) &&
+                isWantedCourse(recipeSummary.tags) &&
+                isWantedCuisine(recipeSummary.tags) &&
+                withinTime(recipeSummary.totalTimeMinutes) &&
+                !isBlacklisted(recipeSummary.ingredients) &&
                 isRequestedDish(recipeSummary.name, recipeSummary.nameEn) &&
+                !isTheRequestedComponent(
+                    recipeSummary.name,
+                    recipeSummary.nameEn
+                ) &&
                 containsRequestedIngredient(recipeSummary.ingredients) &&
                 suitsDiet(vectorQualifies, recipeSummary.id)
             ) {
@@ -798,6 +1213,12 @@ export async function searchRecipeSuggestions(
                 // Same guard as stage 1b: sharing the requested ingredients does
                 // not make a row the dish the user named.
                 if (!isRequestedDish(row.name)) continue;
+                if (isTheRequestedComponent(row.name)) continue;
+                // `find_recipes` applies the blacklist AND the cuisine in SQL
+                // (its `tags` array is subtree-expanded); it knows nothing
+                // about courses.
+                if (!isWantedCourse(row.tags)) continue;
+                if (!withinTime(row.totalTimeMinutes)) continue;
 
                 suggestions.push({
                     id: row.id,
@@ -824,6 +1245,102 @@ export async function searchRecipeSuggestions(
             }
         }
 
+        // Stage 1d results: dishes built on the named component.
+        //
+        // Gated exactly like 1c, with one deliberate omission —
+        // `containsRequestedIngredient` is NOT applied. That gate asks whether
+        // the row's INGREDIENT LIST holds what was requested, and the whole
+        // point of this stage is the dishes where it does not: Moussaka is built
+        // on a béchamel and lists butter, flour and milk. Applying it here would
+        // refuse every row this stage exists to find.
+        //
+        // `isRequestedDish` is applied, and stays open in practice: a component
+        // request sets no `dish` (the router puts the component in
+        // `ingredients`), so the gate admits everything. It is kept rather than
+        // dropped because a caller that DOES pin a dish and name a component
+        // means both, and this stage should not be the one that ignores the pin.
+        if (suggestions.length < maxResults && dietResolved) {
+            for (const row of componentRows) {
+                if (suggestions.some((item) => item.id === row.id)) continue;
+                if (isExcluded(row.name)) continue;
+                if (!isWantedComponent(row.tags)) continue;
+                if (!isRequestedDish(row.name)) continue;
+                if (!isWantedCourse(row.tags)) continue;
+                if (!isWantedCuisine(row.tags)) continue;
+                if (!withinTime(row.totalTimeMinutes)) continue;
+
+                suggestions.push({
+                    id: row.id,
+                    name: row.name,
+                    description: row.description,
+                    image: row.image,
+                    difficulty: row.difficulty,
+                    totalTimeMinutes: row.totalTimeMinutes,
+                    source:
+                        row.source === "recipe"
+                            ? "existing_recipe"
+                            : "suggestion",
+                    ingredients: row.ingredients,
+                    tags: row.tags,
+                });
+
+                onMetric?.("catalogue.component_hit");
+
+                if (row.source === "recipe") {
+                    metadata.vectorSearchHits++;
+                } else {
+                    metadata.canonicalSearchHits++;
+                }
+            }
+        }
+
+        // Stage 1e results: what people actually serve alongside the anchor.
+        //
+        // Pushed AHEAD of stage 2 and after 1d because it is the most specific
+        // answer this search can give — a real pairing somebody kept, rather
+        // than a dish that merely scores well against the words. Gated like the
+        // others; `isTheRequestedComponent` is irrelevant here (a pairing is not
+        // a component) but costs nothing and stays for uniformity.
+        //
+        // No `dietResolved` guard: `menu_pairings_for_recipe` takes dietary tag
+        // NAMES and filters in SQL over both halves of the catalogue, so an
+        // unresolvable restriction cannot reach it as "no filter" the way an
+        // empty tag-id array does for `find_recipes`.
+        if (suggestions.length < maxResults) {
+            for (const row of pairingRows) {
+                if (suggestions.some((item) => item.id === row.id)) continue;
+                if (isExcluded(row.name)) continue;
+                if (!isWantedComponent(row.tags)) continue;
+                if (!isWantedCourse(row.tags)) continue;
+                if (!isWantedCuisine(row.tags)) continue;
+                if (isBlacklisted(row.ingredients)) continue;
+                if (!withinTime(row.totalTimeMinutes)) continue;
+
+                suggestions.push({
+                    id: row.id,
+                    name: row.name,
+                    description: row.description,
+                    image: row.image,
+                    difficulty: row.difficulty,
+                    totalTimeMinutes: row.totalTimeMinutes,
+                    source:
+                        row.source === "recipe"
+                            ? "existing_recipe"
+                            : "suggestion",
+                    ingredients: row.ingredients,
+                    tags: row.tags,
+                });
+
+                onMetric?.("catalogue.pairing_hit");
+
+                if (row.source === "recipe") {
+                    metadata.vectorSearchHits++;
+                } else {
+                    metadata.canonicalSearchHits++;
+                }
+            }
+        }
+
         // Stage 2 result.
         //
         // Skipped when an earlier stage already returned this dish: a suggestion
@@ -836,6 +1353,14 @@ export async function searchRecipeSuggestions(
             !!existingSuggestion &&
             (isExcluded(existingSuggestion.name, existingSuggestion.nameEn) ||
                 !isWantedComponent(existingSuggestion.tags) ||
+                !isWantedCourse(existingSuggestion.tags) ||
+                !isWantedCuisine(existingSuggestion.tags) ||
+                isBlacklisted(existingSuggestion.ingredients) ||
+                !withinTime(existingSuggestion.totalTimeMinutes) ||
+                isTheRequestedComponent(
+                    existingSuggestion.name,
+                    existingSuggestion.nameEn
+                ) ||
                 suggestions.some(
                     (item) =>
                         // By id as well as by name: stage 1c can surface this
@@ -930,9 +1455,28 @@ export async function searchRecipeSuggestions(
                         dietaryRestrictions,
                         blacklist,
                         difficulty,
+                        // What the reader has already seen or asked NOT to see.
+                        // Without this the generator answers "something else"
+                        // with the same dish, dedup resolves it onto the row
+                        // the caller just excluded, and the `existing_recipe`
+                        // branch below refuses it — so a refusal produced NO
+                        // card rather than a different one.
+                        exclude: excludedNames,
+                        // The slot the reader asked to fill, when they said.
+                        course,
+                        // The DTO has taken this since it was written; nothing
+                        // ever sent it from chat. One string, because the
+                        // generator prompt renders a single `Cuisine:` line.
+                        cuisine: cuisine?.[0],
                     },
                     {
                         dish,
+                        // What the generated dish is being written to sit
+                        // beside. The anchor is already in `exclude` above,
+                        // which stops it being RETURNED; this is what stops a
+                        // dish being written that CONTAINS it.
+                        accompanies: pairsWith,
+                        maxMinutes,
                         onField: (fields) => {
                             // `name` streams first; hold the frame until it lands
                             // so the card never renders without a title.
@@ -972,6 +1516,35 @@ export async function searchRecipeSuggestions(
 
                 if (outcome.kind === "suggestion") {
                     const enriched = outcome.suggestion;
+
+                    /**
+                     * A generated dish is NOT gated on the ceiling, deliberately
+                     * — this counts instead.
+                     *
+                     * The catalogue stages refuse a row over the limit outright,
+                     * because there is always another row. Generation is the
+                     * LAST stage: refusing here produces an empty turn, and the
+                     * honest comparison is between a 25-minute dish for a
+                     * 20-minute request and nothing at all.
+                     *
+                     * Measured 2026-09-14 on the streaming path (the one chat
+                     * uses, and the only one that receives `maxMinutes`): a
+                     * 20-minute ceiling produced a 20-minute dish. The prompt
+                     * line appears to hold, so this is here to say if that stops
+                     * being true rather than to act on it. If the counter turns
+                     * out to fire often, the fix is a retry — the shape
+                     * `MAX_GENERATION_ATTEMPTS` already has for notability —
+                     * not a refusal.
+                     */
+                    if (
+                        maxMinutes !== undefined &&
+                        !withinTime(enriched.totalTimeMinutes)
+                    ) {
+                        console.warn(
+                            `[SearchRecipeSuggestions] Generated "${enriched.name}" at ${enriched.totalTimeMinutes ?? "unknown"} min against a ${maxMinutes} min ceiling`
+                        );
+                        onMetric?.("search.generated_over_time_ceiling");
+                    }
                     suggestions.push({
                         id: enriched.id,
                         name: enriched.name,
@@ -1022,13 +1595,37 @@ export async function searchRecipeSuggestions(
                         console.warn(
                             `[SearchRecipeSuggestions] Refusing "${recipe.name}" for "${dish ?? query}" — excluded, or not the component asked for`
                         );
-                        unsatisfied = { reason: "no_known_dish", attempted };
                         onMetric?.("search.dedup_mismatch");
 
+                        /**
+                         * **No `unsatisfied` reason, and that is the whole point
+                         * of this branch.**
+                         *
+                         * It used to report `no_known_dish`, which is a STATEMENT
+                         * about the request — "there is no established dish
+                         * here" — and it is not true of what happened. What
+                         * happened is that we wrote a real dish and dedup
+                         * resolved it onto a row the caller had already refused.
+                         * The request is perfectly answerable; this attempt
+                         * simply landed back where it started.
+                         *
+                         * Saying so mattered because `unsatisfied` is what the
+                         * caller's retry round tests: `process-chat` arms a
+                         * second round only when the search found nothing AND
+                         * gave no reason, so claiming a reason here SUPPRESSED
+                         * the one mechanism that could have recovered the turn.
+                         * A refusal that circled back to the refused dish ended
+                         * as an empty reply with a sentence that was not true.
+                         *
+                         * Leaving it unset lets that existing round fire, and it
+                         * is re-routed with the failed attempt in context — which
+                         * is exactly the recovery a refusal needs, using
+                         * machinery that is already bounded at two rounds. See
+                         * the note on the refusal round in `process-chat`.
+                         */
                         return {
                             suggestions: [],
                             searchMetadata: metadata,
-                            unsatisfied,
                         };
                     }
 
@@ -1073,9 +1670,12 @@ export async function searchRecipeSuggestions(
                 const stream = generateSuggestionsStream({
                     ingredients: [dish ?? query],
                     component,
+                    course,
+                    cuisine: cuisine?.[0],
                     dietaryRestrictions,
                     blacklist,
                     difficulty,
+                    exclude: excludedNames,
                 });
 
                 for await (const suggestion of stream) {

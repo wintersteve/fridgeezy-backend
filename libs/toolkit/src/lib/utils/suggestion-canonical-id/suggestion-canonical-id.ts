@@ -1,12 +1,22 @@
+import { foldAccents } from "../fold-accents";
+
 /**
- * Dish identity as the DATABASE computes it for `recipe_suggestions` — trim,
- * lowercase, then collapse every run of non-alphanumerics to one underscore.
+ * Dish identity as the DATABASE computes it for `recipe_suggestions` — fold
+ * accents, trim, lowercase, then collapse every run of non-alphanumerics to one
+ * underscore.
  *
  * Byte-identical to the `set_recipe_suggestion_canonical_id` trigger:
  *
  * ```sql
- * new.canonical_id := regexp_replace(lower(trim(new.name)), '[^a-z0-9]+', '_', 'g');
+ * new.canonical_id := regexp_replace(
+ *     lower(trim(fold_accents(new.name))), '[^a-z0-9]+', '_', 'g');
  * ```
+ *
+ * The fold was added on 2026-09-13 (`20260913000002`) and is not cosmetic: it is
+ * what stops an accented letter being read as a SEPARATOR, which had already
+ * given the catalogue `b_chamel` for "Béchamel" beside `bechamel` for the same
+ * dish spelled flat. Both sides moved in one change; they must keep moving
+ * together.
  *
  * ## Why this is not {@link canonicalizeName}
  *
@@ -44,7 +54,7 @@
 export function suggestionCanonicalId(
     value: string | null | undefined
 ): string | null {
-    const trimmed = (value ?? "").trim();
+    const trimmed = foldAccents(value ?? "").trim();
 
     if (!trimmed) return null;
 

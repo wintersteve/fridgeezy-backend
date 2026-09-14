@@ -62,6 +62,27 @@
                     "cwd": "apps/database"
                 }
             },
+            "fold-accent-ids": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/fold-accent-canonical-ids.ts",
+                    "cwd": "apps/database"
+                }
+            },
+            "backfill-recipe-components": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/backfill-recipe-components.ts",
+                    "cwd": "apps/database"
+                }
+            },
+            "check-canonical-id-parity": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/check-canonical-id-parity.ts",
+                    "cwd": "apps/database"
+                }
+            },
             "dedupe-ingredients": {
                 "executor": "nx:run-commands",
                 "options": {

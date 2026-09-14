@@ -6,7 +6,7 @@ import {
     success,
 } from "@fridgeezy/domain";
 import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
-import { canonicalizeName } from "@fridgeezy/toolkit";
+import { canonicalizeName, foldAccents } from "@fridgeezy/toolkit";
 
 import { supabaseAdmin } from "../../client";
 
@@ -31,7 +31,10 @@ function quoteFilterValue(value: string): string {
  * comparing two JS-normalized names -> use `canonicalizeName`.
  */
 const sqlCanonicalId = (input: string): string =>
-    input
+    // Folded first, mirroring `normalize_to_canonical_id` since `20260913000002`
+    // — otherwise an accented letter collapses to a separator and "Béchamel"
+    // stops matching the row stored for "Bechamel".
+    foldAccents(input)
         .replace(/[^a-zA-Z0-9]+/g, "_")
         .replace(/_+/g, "_")
         .toLowerCase();

@@ -21,10 +21,7 @@ import {
 } from "./constraint-rules";
 import { DIFFICULTY_RULE } from "./difficulty-rules";
 import { createFrameQueue, createGate } from "./frame-queue";
-import {
-    buildExistingDishesBlock,
-    listCatalogDishes,
-} from "./list-catalog-dishes";
+import { listCatalogDishes } from "./list-catalog-dishes";
 import {
     DISH_GLOSS_RULE,
     DISH_NAME_ALT_RULE,
@@ -34,9 +31,11 @@ import { persistOrReuseSuggestion } from "./persist-or-reuse-suggestion";
 import { createSlotLedger, type SlotLedger } from "./slot-ledger";
 import { createSuggestionBatch, type SuggestionBatch } from "./suggestion-batch";
 import type { SuggestionOutcome } from "./suggestion-outcome";
+import { buildExistingDishesBlock } from "./suggestion-prompt-blocks";
 import {
     COMPONENT_FILTER_RULE,
     COMPONENT_RULE,
+    COMPONENTS_KEY_RULE,
     COURSE_RULE,
     DISH_FORM_FILTER_RULE,
     DISH_FORM_RULE,
@@ -135,6 +134,7 @@ Each recipe object must include:
 - ${DISH_TOTAL_TIME_RULE}
 - ingredients (array of strings)
 - ${TAGS_KEY_RULE}
+- ${COMPONENTS_KEY_RULE}
 - ${ADAPTED_FOR_RULE}`;
 }
 

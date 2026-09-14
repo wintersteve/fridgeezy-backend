@@ -52,6 +52,15 @@
 #    distinguishable from a real purchase in the table itself.
 # 4. `TARGET=local` cannot reach either deployment: it never resolves a Function
 #    URL and refuses a non-loopback `API_URL`.
+# ## It is not the only writer any more
+#
+# Since 2026-09-13 the API also reconciles `profile_entitlements` against
+# RevenueCat's REST API, whenever `REVENUECAT_SECRET_API_KEY` is set. A row this
+# script fabricated has no purchase behind it, so the first check correctly
+# expires it — usually within seconds, which will look exactly like this script
+# not working. That is the trade, and it is the right way round: leave the key
+# unset locally when you want an entitlement to test WITH, and set it when you
+# want the local database to tell you the truth.
 set -euo pipefail
 
 TARGET="${TARGET:-dev}"

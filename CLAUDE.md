@@ -173,9 +173,19 @@ Database (`apps/database`, all `npx nx run @fridgeezy/database:<target>`):
   candidate by eye and copy it across; the script prints the step, the way
   `env-remote` prints the client's `EXPO_PUBLIC_*` lines.
 
-  Both are pinned to `gemini-3-pro-image-preview` rather than taking the Flash
-  default: the per-dish volume argument behind that default does not reach an
-  asset generated once, ever, and shown on every launch.
+  Both pin the image model explicitly rather than taking the shared default —
+  `gemini-3.1-flash-image` since 2026-09-13, matching it by decision rather than
+  by inheritance. The pin is not about cost: these are generated once, ever, and
+  shown on every launch, so the bill is under a dollar and they could afford any
+  model. What it buys is that a cost-driven change to the shared default cannot
+  silently re-render the launch screen in a different hand from the recipe cards.
+  **So when that default moves, decide about these rather than following.**
+
+  They are committed assets, so nothing regenerates them by accident — but the
+  dark variants go through the low-key gouache path, which `art-direction`
+  already flags as the untested edge of the 2026-08-19 medium change. On a new
+  model that warning compounds: eyeball a re-run of `generate-app-icon` /
+  `generate-splash` before committing its output.
 
   **The dark variants are the whole reason `tone` exists** — see `libs/genai`
   below. Four passes and twelve renders to get a dark ground out of a style built
@@ -678,6 +688,54 @@ that secret is the entire protection and it must match in two places with
 nothing to report drift but every event failing. The rule: the seam makes a route
 *reachable*, the handler makes it *safe*.
 
+### The entitlement row is reconciled, not just received
+
+`profile_entitlements` had ONE writer — the webhook — so it was also the only
+thing that could ever be wrong, and nothing re-asked. The derived activity rule
+(`entitlement_is_active`) self-heals at the expiry the last event happened to
+carry, which is the right guard against a dropped EXPIRATION and no guard at
+all against a row whose expiry is simply wrong.
+
+`reconcileEntitlement` (`modules/billing/services`) reads
+`GET /v1/subscribers/{app_user_id}` and writes what RevenueCat actually says.
+Three triggers, each bounded so the common path costs nothing:
+
+- **`stale`** — the row claims access and has not been verified inside
+  `VERIFY_TTL_MS` (15 min). Only for users who HOLD an entitlement, from both
+  `requireEntitlement` and `requireQuota` — the latter because
+  `ai_quota_status` joins `ai_quota_limits` on the derived tier, so a stale row
+  hands out the subscriber ceiling to somebody who has lapsed.
+- **`refused`** — immediately before a 402, and only for a caller with no active
+  row. This is the purchase-to-webhook window: somebody who paid two seconds ago
+  is entitled at RevenueCat before the event arrives.
+- **`requested`** — `POST /rest/billing/reconcile`, which the app calls from the
+  RevenueCat SDK's customer-info listener. **The device is a trigger, never a
+  source**: it sends no body and names no entitlement, and what is written comes
+  from RevenueCat — which is what lets the route sit on an `account` mount with
+  no gate. It has to be ungated: the caller may be somebody whose subscription
+  has just LAPSED, and that is the one request that can correct the row.
+
+Four things bite:
+
+- **`REVENUECAT_SECRET_API_KEY` is the off switch, and that is deliberate rather
+  than a flag.** Unset, nothing reconciles and the behaviour is exactly what it
+  was. It is the v1 SECRET key, not the app's public one. The startup banner
+  names which mode the process is in.
+- **A gate never fails because of it.** `refreshEntitlement` swallows and
+  returns the row it was handed — a verification that could not be made is not
+  evidence about anybody's subscription, and turning a RevenueCat outage into a
+  refused paying customer is the one failure this must not introduce.
+- **It does NOT touch `last_event_id` / `last_event_at`.** Those belong to the
+  webhook's ordering guard; a reconciler that stamped them would start rejecting
+  real events that legitimately follow it. `saveVerifiedEntitlement` is a
+  separate write from `applyEntitlementEvent` for exactly this reason: one
+  applies NEWS and must respect ordering, the other applies TRUTH and must not.
+- **It expires a fabricated local row.** `infra/send-webhook-event.sh` writes
+  entitlements with no purchase behind them, which is the only way to hold one
+  locally (RevenueCat delivers webhooks to one deployed URL, so a local stack
+  never receives one). With the key set, the first check correctly expires it.
+  Leave the key unset locally when you want a subscription to test WITH.
+
 ### The public site (apps/site)
 
 The marketing/legal pages — landing, `/support`, `/privacy`, `/terms`, plus a
@@ -1063,16 +1121,34 @@ those frames incrementally, which is why frame shapes are part of the contract.
   9:16 for a 9:16 slot. The recipe hero is the exception, and it pays for it
   (see below).
 
-  The default image model is `gemini-3-pro-image-preview`, picked by a blind A/B
-  on 2026-08-04 rather than by preference. Flash renders this art direction as
-  flat, hard-outlined cel shading whatever the prompt says, and six prompt
-  rewrites failed to close the gap — the model was the ceiling, not the wording.
-  Pro costs ~$0.14/image against Flash's ~$0.039, bounded per *dish* rather than
-  per view because `generateAndUploadRecipeImage` short-circuits on an existing
-  object at the deterministic storage path. `GENAI_IMAGE_MODEL` overrides it
-  without a deploy, which matters — Pro is a **preview** endpoint and can be
-  renamed or repriced. The recipe prompt's restraint rules are the variant that
-  degraded best on Flash, so that fallback stays viable.
+  The default image model is `gemini-3.1-flash-image` (Nano Banana 2), set
+  2026-09-13 on the owner's call and **not yet measured against this art
+  direction**. `GENAI_IMAGE_MODEL` overrides it without a deploy, which is how a
+  comparison gets run. Cost is ~$0.067/1K image against Pro's ~$0.13 and Flash
+  2.5's ~$0.039, bounded per *dish* rather than per view because
+  `generateAndUploadRecipeImage` short-circuits on an existing object at the
+  deterministic storage path. Always a GA id, never a `-preview` one: those are
+  what get retired underneath you.
+
+  **The 2026-08-04 blind A/B that used to justify this line no longer governs
+  it.** It ranked Pro over Flash 2.5 — but the rendering-medium line was
+  rewritten on 2026-08-19 specifically to fix Flash rendering this style flat
+  and hard-outlined, and it worked, so that sweep ranked models under a prompt
+  that no longer ships. Anything claiming a model is best here needs a fresh
+  comparison behind it.
+
+  **Ground temperature is the axis to watch on a model swap, ahead of
+  saturation.** Comparing Pro against Flash 2.5 on 2026-09-13, mean subject
+  saturation was effectively identical (0.369 vs 0.352) while the ground
+  diverged: Flash paints ~#F7F2E0, Pro ~#FBF7EE, against a spec of #FDFBF9. Pro
+  is the more faithful and Flash drifts warm — but the app's page ground
+  `#FCFAF6` was derived from Flash's warmth, so Pro's colder field made the same
+  food read as more saturated and less appetising. If a model's output reads
+  cold, warm `ground`; do not touch the palette, which pins hue on purpose.
+
+  `gemini-2.5-flash-image` is the cheap fallback and the variant the current
+  prompt is actually tuned for — but Google now flags it legacy, so it is on a
+  clock. `gemini-3.1-flash-lite-image` (~$0.034) is the untested cheap option.
 
   **Google retires model ids underneath you, and it presents as a 404.**
   `gemini-2.5-flash` began answering *"no longer available to new users"* in

@@ -59,11 +59,25 @@ bottom of this file — the checkboxes here are the summary.
 
 ## Known gaps, deliberately shipped open
 
-- [ ] **The purchase-to-webhook window.** A user is entitled on-device seconds
-      before the webhook lands, so a fresh purchase can see one 402. Fix is a
-      fallback read of RevenueCat's REST API on a miss, bounded to users with no
-      active row so it costs nothing on the common path. Needs a sixth secret and
-      is unmeasurable until real purchases exist.
+- [x] **The purchase-to-webhook window.** Done 2026-09-13, and widened on the
+      way: the webhook was the only writer, so it was also the only thing that
+      could be wrong, in both directions. `reconcileEntitlement`
+      (`modules/billing/services`) reads RevenueCat's REST API and writes
+      `profile_entitlements` — on a refusal (the original gap, bounded to
+      callers with no active row), on a row past its 15-minute `verified_at`
+      TTL, and on `POST /rest/billing/reconcile`, which the app calls from the
+      RevenueCat SDK's customer-info listener. The device only ever triggers a
+      check; what is written comes from RevenueCat.
+
+      Needs **`REVENUECAT_SECRET_API_KEY`** (the v1 secret key, not the app's
+      public one) in SSM and in `apps/api/.env*`. Its absence is the off switch
+      — without it nothing reconciles and the behaviour is exactly what it was
+      — so the startup banner names which mode the process is in.
+
+      **Note what it does to a fabricated local entitlement.** With the key set,
+      a row `infra/send-webhook-event.sh` wrote is correctly expired on the
+      first check, because RevenueCat has never heard of the purchase behind it.
+      Leave the key unset locally when you want a subscription to test with.
 - [ ] **`TRANSFER` is received and not applied** — logged at error level. The
       top-level `app_user_id` does not reliably identify which side of the
       transfer the event is about, so the generic path is a coin flip between

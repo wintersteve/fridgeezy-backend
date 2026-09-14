@@ -153,6 +153,13 @@
                     "cwd": "apps/api"
                 }
             },
+            "check-generator-exclusions": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/generator-exclusions.check.ts",
+                    "cwd": "apps/api"
+                }
+            },
             "check-slot-frames": {
                 "executor": "nx:run-commands",
                 "options": {

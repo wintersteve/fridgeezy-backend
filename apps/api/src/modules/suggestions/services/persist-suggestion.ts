@@ -5,6 +5,7 @@ import { SuggestionsRepository, supabaseAdmin } from "@fridgeezy/supabase";
 
 import { matchIngredients, IngredientMatch } from "./match-ingredients";
 import { matchTags, TagInput, TagMatch } from "./match-tags";
+import { persistComponents } from "./persist-components";
 import { buildSuggestionSignature } from "./suggestion-signature";
 
 /**
@@ -220,6 +221,19 @@ export async function persistSuggestion(
             );
             return persistResult;
         }
+
+        // Which components this dish is built on — additive to the ingredient
+        // list above, never a replacement for it. Fire-and-forget by contract:
+        // the row is written and the card is promised, so a retrieval nicety
+        // must not be able to fail the persist. See `persistComponents`.
+        await persistComponents(
+            {
+                id: persistResult.value,
+                name: suggestion.name,
+                source: "suggestion",
+            },
+            suggestion.components
+        );
 
         // Log successful persistence with match details
         const ingredientStats = {

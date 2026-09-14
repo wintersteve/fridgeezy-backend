@@ -67,6 +67,23 @@ export const DISH_FORM_RULE = `AT MOST 1 dish form tag per recipe, and only when
 export const COMPONENT_RULE = `AT MOST 1 component tag, and ONLY when the recipe is a BUILDING BLOCK rather than something you would sit down and eat: sauce, stock, gravy, roux, slurry, spice blend, paste, rub, marinade, brine, cure, dough, batter, pastry, vinaigrette, dressing, custard, curd, caramel, crumb, pickle, jam, compote, syrup, glaze, icing, puree. Omit it ENTIRELY for a finished dish or meal — that is the common case and needs no tag at all. Béchamel is "sauce" and a roux is "roux"; Lasagne is a finished dish and gets nothing, even though it contains both.`;
 
 /**
+ * What the `components` KEY means, as distinct from the component TAG above.
+ *
+ * The two are near-opposites and sit next to each other in the prompt, which is
+ * exactly why this spells out the pair the tag rule already uses: Lasagne takes
+ * NO component tag (it is a finished dish) and DOES list Béchamel as a
+ * component (it is built on one). A model that conflates them either tags every
+ * gratin as a sauce or declares nothing at all.
+ *
+ * Kept deliberately narrow — a NAMED preparation a cook makes separately — so
+ * that "chopped onion" and "toasted spices" do not qualify. The write path
+ * filters against the classified vocabulary anyway, so an over-eager answer is
+ * dropped rather than stored; the rule exists so the common case does not need
+ * to be.
+ */
+export const COMPONENTS_KEY_RULE = `components (array of strings, omit when there are none): the NAMED preparations this dish is BUILT ON — ones a cook makes separately and then uses. Lasagne is ["Béchamel"], Moussaka is ["Béchamel"], a pizza is ["Pizza Dough"], a ramen is ["Chicken Stock"]. This is NOT the ingredient list and does not replace it: still list the butter, flour and milk under "ingredients". Only name a component the dish genuinely contains, and never name the dish itself — a béchamel is not built on a béchamel. Most dishes have none; omit the key entirely then.`;
+
+/**
  * What a `Dish Form` line in the user's filter block MEANS.
  *
  * Only the two suggestion generators take that block — the recipe generators are

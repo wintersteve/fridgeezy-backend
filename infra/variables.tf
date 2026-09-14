@@ -167,7 +167,7 @@ variable "function_url_cors_allow_origins" {
 variable "genai_image_model" {
   description = "Value for the GENAI_IMAGE_MODEL env var (recipe image generation)."
   type        = string
-  default     = "gemini-2.5-flash-image"
+  default     = "gemini-3.1-flash-image"
 }
 
 variable "llm_provider" {

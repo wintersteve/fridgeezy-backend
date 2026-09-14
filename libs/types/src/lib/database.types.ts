@@ -883,6 +883,7 @@ export type Database = {
           store: string | null
           updated_at: string
           user_id: string
+          verified_at: string | null
         }
         Insert: {
           created_at?: string
@@ -897,6 +898,7 @@ export type Database = {
           store?: string | null
           updated_at?: string
           user_id: string
+          verified_at?: string | null
         }
         Update: {
           created_at?: string
@@ -911,6 +913,7 @@ export type Database = {
           store?: string | null
           updated_at?: string
           user_id?: string
+          verified_at?: string | null
         }
         Relationships: []
       }
@@ -1275,6 +1278,74 @@ export type Database = {
         }
         Relationships: []
       }
+      recipe_components: {
+        Row: {
+          created_at: string
+          ingredient_id: string
+          recipe_id: string
+        }
+        Insert: {
+          created_at?: string
+          ingredient_id: string
+          recipe_id: string
+        }
+        Update: {
+          created_at?: string
+          ingredient_id?: string
+          recipe_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_components_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "recipe_components_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "recipe_components_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "recipe_components_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "recipe_components_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_components_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "recipe_components_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recipe_family_defaults: {
         Row: {
           base_recipe_id: string
@@ -1488,6 +1559,74 @@ export type Database = {
             columns: ["recipe_id"]
             isOneToOne: false
             referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipe_suggestion_components: {
+        Row: {
+          created_at: string
+          ingredient_id: string
+          recipe_suggestion_id: string
+        }
+        Insert: {
+          created_at?: string
+          ingredient_id: string
+          recipe_suggestion_id: string
+        }
+        Update: {
+          created_at?: string
+          ingredient_id?: string
+          recipe_suggestion_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_suggestion_components_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "recipe_suggestion_components_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "recipe_suggestion_components_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["duplicate_id"]
+          },
+          {
+            foreignKeyName: "recipe_suggestion_components_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_alias_collisions_all"
+            referencedColumns: ["keep_id"]
+          },
+          {
+            foreignKeyName: "recipe_suggestion_components_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_suggestion_components_recipe_suggestion_id_fkey"
+            columns: ["recipe_suggestion_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_suggestion_dietary"
+            referencedColumns: ["recipe_suggestion_id"]
+          },
+          {
+            foreignKeyName: "recipe_suggestion_components_recipe_suggestion_id_fkey"
+            columns: ["recipe_suggestion_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_suggestions"
             referencedColumns: ["id"]
           },
         ]
@@ -2142,6 +2281,14 @@ export type Database = {
       }
     }
     Views: {
+      dish_components: {
+        Row: {
+          dish_id: string | null
+          ingredient_id: string | null
+          source: string | null
+        }
+        Relationships: []
+      }
       ingredient_alias_collisions: {
         Row: {
           duplicate_id: string | null
@@ -2319,6 +2466,22 @@ export type Database = {
       }
       display_name_from_identity: { Args: { meta: Json }; Returns: string }
       entitlement_is_active: { Args: { p_user_id: string }; Returns: boolean }
+      find_dishes_using_components: {
+        Args: {
+          p_blacklist?: string[]
+          p_components: string[]
+          p_dietary_tags?: string[]
+          p_exclude_dish_ids?: string[]
+          p_limit?: number
+        }
+        Returns: Database["public"]["CompositeTypes"]["find_recipes_result"][]
+        SetofOptions: {
+          from: "*"
+          to: "find_recipes_result"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       find_near_miss_recipes: {
         Args: {
           p_blacklist?: string[]

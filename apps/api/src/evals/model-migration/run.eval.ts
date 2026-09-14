@@ -38,6 +38,7 @@ import {
     BASELINE,
     BEDROCK_CANDIDATES,
     CONVERSE_CANDIDATES,
+    OPENAI_CANDIDATES,
     Candidate,
     CompletionChunk,
     streamCompletion,
@@ -83,7 +84,7 @@ import {
  *   --skip-authenticity   skip the LLM authenticity judge (the priciest scorer)
  *   --skip-recipes        skip the recipe path (the only one needing Supabase)
  *   --skip-substitutes    skip the substitutes path (needs no Supabase)
- *   --only=<substring>    restrict to candidates whose id matches
+ *   --only=<a>,<b>        restrict to candidates whose id matches any term
  */
 const ARGS = process.argv.slice(2);
 const has = (flag: string) => ARGS.includes(flag);
@@ -91,7 +92,18 @@ const QUICK = has("--quick");
 const SKIP_AUTHENTICITY = QUICK || has("--skip-authenticity");
 const SKIP_RECIPES = has("--skip-recipes");
 const SKIP_SUBSTITUTES = has("--skip-substitutes");
-const ONLY = ARGS.find((a) => a.startsWith("--only="))?.slice("--only=".length);
+/**
+ * Comma-separated, so a decision run can name the baseline AND the candidates it
+ * is being compared against. A single substring could not: the gate needs
+ * `gpt-4.1 (baseline)` in the results to compare anything, and the one substring
+ * that catches it and the GPT-5 entries (`gpt`) also catches the Bedrock
+ * `gpt-oss-120b`, which is blocked on model access on this account.
+ */
+const ONLY = ARGS.find((a) => a.startsWith("--only="))
+    ?.slice("--only=".length)
+    .split(",")
+    .map((term) => term.trim())
+    .filter(Boolean);
 const REPEAT = Math.max(
     1,
     Number(ARGS.find((a) => a.startsWith("--repeat="))?.slice("--repeat=".length) ?? 1)
@@ -420,8 +432,20 @@ function printTable(results: CandidateResult[]): void {
  * grounds for an automated pass/fail on a spend decision.
  */
 function reportGate(results: CandidateResult[]): void {
-    const baseline = results.find((r) => r.candidate.provider === "openai");
-    if (!baseline) return;
+    // Identity, NOT `provider === "openai"`, which is what this used to read.
+    // That held only while gpt-4.1 was the sole OpenAI entry on the roster; the
+    // moment `OPENAI_CANDIDATES` was added it silently elected the first GPT-5
+    // candidate as the thing every other candidate was measured against — and a
+    // gate comparing a candidate to another candidate still prints a tick.
+    const baseline = results.find((r) => r.candidate.id === BASELINE.id);
+
+    if (!baseline) {
+        console.log(
+            "\ngate: skipped — the baseline was filtered out of this run " +
+                `(add it back, or drop --only, to compare against ${BASELINE.id})`
+        );
+        return;
+    }
 
     console.log("\ngate vs baseline (match or beat on every dimension, zero leaks):");
 
@@ -457,14 +481,15 @@ function reportGate(results: CandidateResult[]): void {
 async function main() {
     const roster = [
         BASELINE,
+        ...OPENAI_CANDIDATES,
         ...BEDROCK_CANDIDATES,
         ...CONVERSE_CANDIDATES,
     ].filter(
-        (c) => !ONLY || c.id.includes(ONLY)
+        (c) => !ONLY?.length || ONLY.some((term) => c.id.includes(term))
     );
 
     if (roster.length === 0) {
-        console.error(`No candidate matched --only=${ONLY}`);
+        console.error(`No candidate matched --only=${ONLY?.join(",")}`);
         process.exit(1);
     }
 

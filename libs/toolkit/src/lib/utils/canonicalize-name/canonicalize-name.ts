@@ -1,5 +1,8 @@
+import { foldAccents } from "../fold-accents";
+
 /**
- * Name identity for comparing two JS-normalized names TO EACH OTHER: lowercase,
+ * Name identity for comparing two JS-normalized names TO EACH OTHER: accents
+ * folded to their base letter, lowercase,
  * every run of non-alphanumerics collapsed to one underscore, and leading or
  * trailing underscores stripped. So "Apfelstrudel", "apfelstrudel" and
  * " Apfelstrudel! " are one dish.
@@ -27,7 +30,12 @@
  * punctuation-only value can never match another.
  */
 export function canonicalizeName(value: string | null | undefined): string | null {
-    const normalized = (value ?? "")
+    // Accents are folded to their base letter BEFORE the collapse, or the
+    // collapse would treat them as separators — see `foldAccents`. Without it
+    // "Béchamel" canonicalises to `b_chamel` and "Bechamel" to `bechamel`, so
+    // the two never compare equal anywhere this rule is used: dedup keys,
+    // exclusion lists, tag identity.
+    const normalized = foldAccents(value ?? "")
         .toLowerCase()
         .trim()
         .replace(/[^a-z0-9]+/g, "_")

@@ -5,7 +5,6 @@ import {
     type GenerateSuggestionResponseDto,
 } from "@fridgeezy/schemas";
 
-import { buildSuggestionsUserPrompt } from "./build-suggestions-user-prompt";
 import {
     ADAPTED_FOR_RULE,
     BLACKLIST_RULE,
@@ -22,6 +21,7 @@ import {
     persistOrReuseSuggestion,
     SuggestionOutcome,
 } from "./persist-or-reuse-suggestion";
+import { buildSingleSuggestionUserPrompt } from "./suggestion-prompt-blocks";
 import {
     accumulateSuggestionReveals,
     type PartialSuggestionFields,
@@ -29,6 +29,7 @@ import {
 import {
     COMPONENT_FILTER_RULE,
     COMPONENT_RULE,
+    COMPONENTS_KEY_RULE,
     COURSE_RULE,
     DISH_FORM_FILTER_RULE,
     DISH_FORM_RULE,
@@ -46,7 +47,8 @@ import { DISH_TOTAL_TIME_RULE } from "./timing-rules";
  * card, so revealing them together avoids the row visibly growing a second chip
  * a beat later.
  */
-const SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly ONE authentic, real-world recipe suggestion based on the user's request.
+/** Exported so an eval measures the REAL prompt rather than a copy of it. */
+export const SYSTEM_PROMPT = `You are a recipe suggestion assistant. Generate exactly ONE authentic, real-world recipe suggestion based on the user's request.
 
 The "Ingredients" line below may list literal ingredients, but it may ALSO be a dish name (e.g. "sandwich", "carbonara"), a meal or course concept (e.g. "breakfast", "quick dinner", "random recipe"), or a cuisine. Interpret it flexibly:
 - Literal ingredients -> a real dish that prominently features them.
@@ -87,6 +89,7 @@ Emit the keys in EXACTLY this order:
 - ${DISH_TOTAL_TIME_RULE}
 - ingredients (array of strings)
 - ${TAGS_KEY_RULE}
+- ${COMPONENTS_KEY_RULE}
 - ${DISH_NAME_ALT_RULE}
 - ${ADAPTED_FOR_RULE}`;
 
@@ -105,6 +108,27 @@ export interface StreamSingleSuggestionOptions {
      * it is a property of THIS call, not of the shared request contract.
      */
     dish?: string;
+    /**
+     * The dish this one is being written to sit BESIDE — the anchor of a
+     * "what goes well with X" request.
+     *
+     * Backend-local for the same reason `dish` is: a property of THIS call
+     * rather than of the shared request contract, so it needs no tarball
+     * rebuild. The anchor is separately in `request.exclude`, which is what
+     * stops it being RETURNED; this is what tells the generator what it is
+     * cooking for, which is what stops it writing a dish that contains it.
+     */
+    accompanies?: string;
+    /**
+     * The most time the cook has, in whole minutes.
+     *
+     * Backend-local like `dish` and `accompanies`: a property of THIS call, not
+     * of the shared request contract, so it needs no tarball rebuild. It reaches
+     * the prompt as a ceiling — the catalogue stages enforce the same number
+     * with `withinTime`, and a generated dish that ignored it would be the one
+     * answer nothing downstream could refuse.
+     */
+    maxMinutes?: number;
     /**
      * Overrides `LLM_PROVIDER` for this call only, so the two providers can be
      * A/B'd in one process. Replaces the `client?: OpenAI` this took before,
@@ -207,17 +231,10 @@ function mapFields(stable: Record<string, unknown>): PartialSuggestionFields {
 const MAX_GENERATION_ATTEMPTS = 2;
 
 /**
- * The retry's exclusion line.
- *
- * Deliberately NOT `buildExistingDishesBlock`, whose wording is "Already in the
- * catalog" — these dishes are the opposite of that. They were refused for not
- * being dishes at all, and naming the reason is what stops the model handing
- * back the same SHAPE of answer under a different garnish.
+ * The user turn — including the exclusion and rejection blocks — is assembled by
+ * `buildSingleSuggestionUserPrompt` in `suggestion-prompt-blocks.ts`, which
+ * imports nothing that opens a client so the check can exercise it directly.
  */
-const buildRejectedBlock = (names: string[]): string =>
-    names.length === 0
-        ? ""
-        : `Rejected on this request (not established dishes — do NOT suggest these, nor another plate composed the same way): ${names.join(", ")}`;
 
 /** One generation: stream it, validate it, and try to persist it. */
 async function generateOnce(
@@ -231,13 +248,7 @@ async function generateOnce(
         model: { openai: "gpt-4.1" },
         label: "suggestions.single",
         system: SYSTEM_PROMPT,
-        user: [
-            options.dish ? `Dish: ${options.dish}` : "",
-            buildSuggestionsUserPrompt(request),
-            buildRejectedBlock(rejected),
-        ]
-            .filter(Boolean)
-            .join("\n"),
+        user: buildSingleSuggestionUserPrompt(request, options, rejected),
         provider,
     });
 

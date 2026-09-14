@@ -1,3 +1,5 @@
+import { foldAccents } from "../fold-accents";
+
 /**
  * Conservative singularizer for ONE canonical token.
  *
@@ -32,7 +34,10 @@ export const singularizeToken = (tok: string): string => {
  * a generated column. They are not interchangeable.
  */
 export const ingredientCanonicalId = (name: string): string => {
-    const base = name
+    // Folded first, exactly as `normalize_to_canonical_id` now does in SQL.
+    // Before this, "Jalapeño" and "Jalapeno" were two ingredients — and the dev
+    // catalogue held both, along with Ragu/Ragù and Crème Fraîche/Creme Fraiche.
+    const base = foldAccents(name)
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "_")
         .replace(/^_+|_+$/g, "");

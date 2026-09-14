@@ -4,6 +4,8 @@ import {
 } from "@fridgeezy/supabase";
 import type { NextFunction, Request, Response } from "express";
 
+import { refreshEntitlement } from "../modules/billing/services";
+
 import { isAuthDisabled } from "./require-auth";
 
 /**
@@ -81,20 +83,28 @@ import { isAuthDisabled } from "./require-auth";
  * exactly this — the local stack never receives a real webhook, since RevenueCat
  * delivers to the deployed Function URL.
  *
- * ## Known gap: the purchase-to-webhook window
+ * ## The stored row is no longer the last word
  *
- * A user who has just paid is entitled according to the RevenueCat SDK on their
- * device seconds before the webhook reaches us, so this can return 402 to
- * someone who genuinely just bought a subscription. RevenueCat delivers in a
- * second or two in practice, but it is not synchronous with the purchase and
- * there is no ordering guarantee.
+ * Until 2026-09-13 this read `profile_entitlements` and stopped there, which
+ * made the webhook the only writer and therefore the only thing that could ever
+ * be wrong. Two failures came out of that, in opposite directions, and
+ * `reconcileEntitlement` answers both:
  *
- * The fix, when it is worth building, is a fallback read of RevenueCat's REST
- * API on a miss — authoritative, and bounded to users who have no active row, so
- * it costs nothing on the common path. It is deliberately NOT built here: it
- * needs a sixth SSM secret and its own failure handling, and it is unmeasurable
- * until real purchases exist. Recorded in TODOS.md rather than left to be
- * rediscovered as a support ticket.
+ * - **The purchase-to-webhook window.** A user who has just paid is entitled
+ *   according to the RevenueCat SDK on their device seconds before the event
+ *   reaches us, so this returned 402 to somebody who had genuinely just bought.
+ *   Now a refusal is checked against RevenueCat before it is sent, which is the
+ *   fix TODOS.md described — bounded to callers with no active row, so it costs
+ *   nothing on the common path.
+ * - **A row that claims access it no longer has.** The derived activity rule
+ *   self-heals only at the expiry the last event happened to carry, so a
+ *   refund, a transfer or any dropped event is believed until that date. A row
+ *   past its verification TTL is re-read from RevenueCat before it is trusted.
+ *
+ * Both are absorbed on failure: `refreshEntitlement` never throws, and a
+ * verification that could not be made leaves the stored row exactly as it was.
+ * Neither runs at all without `REVENUECAT_SECRET_API_KEY`, and the startup
+ * banner says which mode the process is in.
  */
 export async function requireEntitlement(
     req: Request,
@@ -131,12 +141,39 @@ export async function requireEntitlement(
     }
 
     try {
-        const entitlement = await findEntitlementByUserId(userId);
+        const stored = await findEntitlementByUserId(userId);
+
+        // A row that claims access and has not been confirmed lately. Bounded to
+        // users who HOLD an entitlement and to one RevenueCat read per TTL, so
+        // it costs nothing for everybody else — and it is the half the webhook
+        // cannot do, since nothing otherwise re-asks before the date the last
+        // event happened to carry.
+        const entitlement = await refreshEntitlement(userId, "stale", stored);
 
         if (!isEntitlementActive(entitlement)) {
+            // Last thing before the refusal, and only for a caller with no
+            // active row: the purchase-to-webhook window is a real second or
+            // two, and somebody who has just paid is entitled at RevenueCat
+            // before the event reaches us. This is the gap TODOS.md recorded as
+            // deliberately shipped open.
+            const verified = await refreshEntitlement(
+                userId,
+                "refused",
+                entitlement
+            );
+
+            if (isEntitlementActive(verified)) {
+                console.log(
+                    `[entitlement] admitted after reconcile — ${req.method} ${req.originalUrl}`
+                );
+
+                next();
+                return;
+            }
+
             console.warn(
                 `[entitlement] rejected: ${req.method} ${req.originalUrl} — ${
-                    entitlement ? "inactive" : "no entitlement"
+                    verified ? "inactive" : "no entitlement"
                 }`
             );
 

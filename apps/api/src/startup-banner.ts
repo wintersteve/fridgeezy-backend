@@ -1,4 +1,5 @@
 import { isAuthDisabled } from "./middleware/require-auth";
+import { isReconcileEnabled } from "./modules/billing/services";
 import { describeRestEndpoints } from "./rest";
 import type { RouteInfo } from "./utils/collect-routes";
 
@@ -89,9 +90,18 @@ function describeEntitlement(routes: RouteInfo[]): string {
         return "⚠ enforced, but NO route carries requireEntitlement or requireQuota — nothing is paid or metered";
     }
 
+    // Two independent halves, and the banner names both because their failure
+    // modes are opposite and both are silent. Without the webhook secret no
+    // event can be RECORDED; without the API key nothing ever RE-ASKS, so a row
+    // that is wrong stays wrong until its own expiry — which is what a local
+    // stack always looks like, since RevenueCat delivers to one deployed URL.
+    const reconcile = isReconcileEnabled()
+        ? " · reconciled against RevenueCat"
+        : " · webhook only, no reconcile (REVENUECAT_SECRET_API_KEY unset)";
+
     return process.env.REVENUECAT_WEBHOOK_SECRET
-        ? `${scope} · active subscription required`
-        : `⚠ ${scope} enforced, but REVENUECAT_WEBHOOK_SECRET is unset — no event can be recorded`;
+        ? `${scope} · active subscription required${reconcile}`
+        : `⚠ ${scope} enforced, but REVENUECAT_WEBHOOK_SECRET is unset — no event can be recorded${reconcile}`;
 }
 
 /**

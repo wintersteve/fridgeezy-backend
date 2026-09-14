@@ -98,6 +98,38 @@ export const GenerateSuggestionResponseSchema = z.object({
     ingredients: z.array(z.string()),
     tags: z.array(z.string()),
     /**
+     * Named COMPONENTS this dish is built on — "Béchamel" for a moussaka,
+     * "Pizza Dough" for a pizza.
+     *
+     * ## It is not an ingredient list and must never become one
+     *
+     * `ingredients` keeps listing the butter, the flour and the milk. This says,
+     * separately, that those add up to a béchamel. Everything downstream of
+     * `recipe_ingredients` — the shopping list, the dietary derivation, the
+     * pantry ranking, the near-miss distance — reads a row there as "a thing you
+     * buy and put in a bowl", and a component is none of those. See
+     * `20260913000003` for what each one does when a component is written as an
+     * ingredient row instead.
+     *
+     * ## Why it exists
+     *
+     * Recipes DECOMPOSE their components, so "give me a recipe with béchamel"
+     * could not be answered from the catalogue at all: `recipe_ingredients`
+     * where `ingredient_id = <Bechamel Sauce>` returned zero rows over a
+     * catalogue holding four dishes built on one. This is the write side of
+     * that; `find_dishes_using_components` is the read side.
+     *
+     * ## Optional, and filtered on arrival
+     *
+     * A model naming a component does not make it one. `persistSuggestion`
+     * accepts a name only when it already matches an ingredient classified
+     * `component_kind = 'dish'`, and drops the dish's own name — the same closed
+     * vocabulary and the same self-reference gate the backfill applies. So an
+     * invented component costs nothing, and an omitted one costs only what the
+     * backfill later restores.
+     */
+    components: z.array(z.string()).optional(),
+    /**
      * Blacklisted ingredients this dish was adapted around — the model swapped
      * each one for an authentic substitute instead of dropping the dish.
      *

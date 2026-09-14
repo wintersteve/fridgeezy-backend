@@ -150,6 +150,42 @@ export const ChatRequestSchema = z.object({
      */
     conversationId: z.uuid().optional(),
     /**
+     * Every dish this conversation has already put on screen, oldest first.
+     *
+     * ## It is BOOKKEEPING, not judgement, and that is the whole point
+     *
+     * The routing model is told to add dishes already shown to `exclude`, and it
+     * has to re-derive that list from the transcript on every turn — from PROSE,
+     * because the client sends assistant turns as plain text with no tool calls
+     * and no cards in them, so the only trace a card ever leaves is whatever the
+     * summary happened to name. Measured 2026-09-13 over three runs of the same
+     * turn: it named the most recent dish every time and the one before it never
+     * once. A conversation that has shown four dishes cannot be held in a
+     * sentence, and asking a model to reconstruct a list it was never given is
+     * the wrong job for it.
+     *
+     * The client already holds this exactly — `collectDishNames` in
+     * `chat-screen.tsx`, "every dish this conversation put on screen, in the
+     * order they arrived and without repeats" — and until now used it only to
+     * title the saved thread.
+     *
+     * ## It is unioned with `exclude`, never a replacement for it
+     *
+     * The routed `exclude` still carries what only the MODEL can know: the
+     * accompanied dish in "what sauce goes with apple strudel", which was never
+     * on screen at all. This carries what only the CLIENT can know. Neither
+     * subsumes the other, so `searchRecipeSuggestions` receives the union.
+     *
+     * **The pin still wins.** A dish named in `dish` is dropped from the merged
+     * exclusion set by the same contradiction guard that has always applied to
+     * `exclude` — otherwise asking a follow-up ABOUT the dish on screen would
+     * become unanswerable the moment this field existed, since the dish on
+     * screen is by definition in this list.
+     *
+     * Optional, so a client that does not send it behaves exactly as before.
+     */
+    shownDishes: z.array(z.string()).optional(),
+    /**
      * A photograph the reader attached to THIS turn.
      *
      * ## Why it is a top-level field and not part of the message

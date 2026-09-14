@@ -4,6 +4,7 @@ import { requireSupabaseUser } from "../middleware/require-auth";
 import { requireEntitlement } from "../middleware/require-entitlement";
 import { BillingPublicRoutes, BillingRoutes } from "../modules/billing";
 import { ChatRoutes } from "../modules/chat";
+import { assertSearchFieldsAreGated } from "../modules/chat/tools";
 import { IngredientsRoutes } from "../modules/ingredients";
 import { PromptsRoutes } from "../modules/prompts";
 import { RecipesPublicRoutes, RecipesRoutes } from "../modules/recipes";
@@ -148,6 +149,13 @@ export function createRestRouter() {
     addDirectRoutes(router);
 
     assertMeteredMountsAreGated();
+
+    // The same promise one level down: a metered route must carry a gate, and a
+    // search field that NARROWS must carry one too. Both throw rather than warn,
+    // for the same reason — a failed boot is identical in dev and production,
+    // where a warning on a cold start is a line nobody reads while a filter
+    // nothing applies quietly returns the wrong dish.
+    assertSearchFieldsAreGated();
 
     return router;
 }

@@ -35,6 +35,7 @@ import {
 import { persistRecipeWithIngredientIds } from "../../../recipes/services/persist-recipe";
 import { fetchEnrichedSuggestion } from "../../services";
 import { DIFFICULTY_RULE } from "../../services/difficulty-rules";
+import { copyComponentsToRecipe } from "../../services/persist-components";
 import { COMPONENT_RULE, COURSE_RULE, DISH_FORM_RULE } from "../../services/tagging-rules";
 
 /**
@@ -534,6 +535,11 @@ export const promoteSuggestion = createStreamHandler({
                     // written before the suggestion it points at is deleted.
                     trackBackgroundTask(
                         (async () => {
+                            // Before the suggestion is deleted below, for the
+                            // same reason `markPromotedFrom` is: these rows
+                            // cascade away with it. See `copyComponentsToRecipe`.
+                            await copyComponentsToRecipe(id, persistResult.value);
+
                             const markResult =
                                 await recipesRepository.markPromotedFrom(
                                     persistResult.value,

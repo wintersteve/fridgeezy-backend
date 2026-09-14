@@ -13,6 +13,32 @@ export interface RoutedSearch {
     ingredients?: string[];
     /** Dish names the search must not return. Read by the routing eval. */
     exclude?: string[];
+    /**
+     * The reader is turning down what they were just shown, so a pinned dish
+     * that is also excluded should be dropped rather than searched for.
+     */
+    refusing?: boolean;
+    /**
+     * The dish a "what goes well with X" request is built around — excluded from
+     * the results by `searchRecipeSuggestions` rather than by the model.
+     */
+    pairsWith?: string;
+    /** Which slot a pairing request wants filled, when the reader said. */
+    course?: string;
+    /**
+     * The origin the dish must belong to. A region widens to its descendants
+     * and a specific cuisine does not — see `resolveCuisineFilter`.
+     */
+    cuisine?: string[];
+    /** The most time the cook has, in whole minutes. A CEILING. */
+    maxMinutes?: number;
+    /** How many cards the reader asked for. Clamped by `MAX_CHAT_RESULTS`. */
+    maxResults?: number;
+    /** Read by the routing eval — the search receives these as FLOORS. */
+    dietaryRestrictions?: string[];
+    blacklist?: string[];
+    /** How much SKILL the dish asks of the cook. Never about the clock. */
+    difficulty?: string;
     /** Set when the turn was routed to `PLAN_MENU` rather than to a dish search. */
     menuTitle?: string;
 }
@@ -62,6 +88,46 @@ export function readRoutedSearch(toolCalls: ToolCall[]): RoutedSearch {
                       (item): item is string => typeof item === "string"
                   )
                 : undefined,
+            refusing:
+                typeof parsed.refusing === "boolean"
+                    ? parsed.refusing
+                    : undefined,
+            pairsWith:
+                typeof parsed.pairsWith === "string"
+                    ? parsed.pairsWith
+                    : undefined,
+            course: typeof parsed.course === "string" ? parsed.course : undefined,
+            cuisine: Array.isArray(parsed.cuisine)
+                ? parsed.cuisine.filter(
+                      (item): item is string => typeof item === "string"
+                  )
+                : undefined,
+            dietaryRestrictions: Array.isArray(parsed.dietaryRestrictions)
+                ? parsed.dietaryRestrictions.filter(
+                      (item): item is string => typeof item === "string"
+                  )
+                : undefined,
+            blacklist: Array.isArray(parsed.blacklist)
+                ? parsed.blacklist.filter(
+                      (item): item is string => typeof item === "string"
+                  )
+                : undefined,
+            difficulty:
+                typeof parsed.difficulty === "string"
+                    ? parsed.difficulty
+                    : undefined,
+            maxResults:
+                typeof parsed.maxResults === "number" &&
+                Number.isFinite(parsed.maxResults) &&
+                parsed.maxResults > 0
+                    ? parsed.maxResults
+                    : undefined,
+            maxMinutes:
+                typeof parsed.maxMinutes === "number" &&
+                Number.isFinite(parsed.maxMinutes) &&
+                parsed.maxMinutes > 0
+                    ? parsed.maxMinutes
+                    : undefined,
         };
     } catch {
         return {};
@@ -120,6 +186,18 @@ export function buildIntentLine(routed: RoutedSearch): string {
 
     if (routed.dish) {
         return `Let me look up ${routed.dish} for you.`;
+    }
+
+    // Before the `component` and `ingredients` branches, because a pairing turn
+    // can carry either — "what sauce goes with apple strudel" sets both — and
+    // the anchor is the more informative half. It is also the line that gave the
+    // 2026-09-13 report away: routed as CONTAINS, the turn opened "Let me see
+    // what you can make with Korean chicken", which is a promise to cook the
+    // chicken INTO something rather than to find it company.
+    if (routed.pairsWith) {
+        return routed.component
+            ? `Let me find the right ${routed.component} for ${routed.pairsWith}.`
+            : `Let me find something to go with ${routed.pairsWith}.`;
     }
 
     if (routed.component) {

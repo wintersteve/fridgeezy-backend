@@ -55,6 +55,13 @@ KEYS=(
     # take the whole API down — but it means a forgotten value shows up as
     # subscriptions silently never being recorded. The startup banner says so.
     REVENUECAT_WEBHOOK_SECRET
+    # The v1 SECRET key from the RevenueCat dashboard — NOT the app's public
+    # `EXPO_PUBLIC_REVENUECAT_*` key, which can only read its own device. Also
+    # not in REQUIRED_KEYS, and its absence is the off switch for entitlement
+    # reconciliation rather than a fault: without it the API is webhook-only,
+    # which is exactly how it behaved before reconciliation existed. The startup
+    # banner names which mode the process is in.
+    REVENUECAT_SECRET_API_KEY
 )
 
 command -v aws >/dev/null 2>&1 || { echo "aws CLI not found on PATH" >&2; exit 1; }

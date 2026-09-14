@@ -205,7 +205,7 @@ ${buildFoodIllustrationStyle({
 };
 
 const MODEL = (process.env.GENAI_IMAGE_MODEL ??
-    "gemini-3-pro-image-preview") as Parameters<
+    "gemini-3.1-flash-image") as Parameters<
     typeof generateImage
 >[0]["model"];
 

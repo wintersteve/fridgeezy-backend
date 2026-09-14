@@ -8,6 +8,7 @@ import {
 import { logRequestError, stripQuery } from "@fridgeezy/streaming-server";
 import type { Request, Response } from "express";
 
+import { trackBackgroundTask } from "../../../../background-tasks";
 import { TurnTimer } from "../../../../utils/turn-timer";
 import { recordPrompt } from "../../../prompts/services";
 import type {
@@ -33,6 +34,7 @@ import {
     initSseStream,
     parseJsonBody,
     readRoutedSearch,
+    shadowCheckConstraints,
     STAGE_LABEL,
     writeSseEvent,
 } from "../../services";
@@ -87,17 +89,77 @@ export const ROUTING_MODEL = process.env.CHAT_ROUTING_MODEL || "gpt-4.1-mini";
  */
 const MAX_HISTORY_MESSAGES = 12;
 
+/**
+ * The most cards one chat turn may show.
+ *
+ * Five, and the number matters far less than WHERE they come from. Raising the
+ * cap costs nothing: the catalogue stages already run one query each and the
+ * limit only changes how many rows come back. What it does NOT do is multiply
+ * generation — chat's generator writes exactly one dish per turn by
+ * construction (`streamSingleSuggestion`), and that stays true at any cap.
+ *
+ * **That asymmetry is the whole design.** N ideas from the catalogue are free.
+ * N *generated* ideas would need the feed's batch generator, which is one shared
+ * JSONL call plus N authenticity reviews on `gpt-4o` — and the feed is
+ * `requireEntitlement`, a subscriber capability, while `/rest/chat` is metered
+ * `questions` at 15 a week free against `recipes` at 5. Letting a chat turn
+ * generate four dishes would hand out at the questions rate the thing the app
+ * sells as a subscription.
+ *
+ * **Measured 2026-09-14, and worth knowing before anyone expects much of this:**
+ * it is mostly inert on today's catalogue. A concept request retrieves nothing —
+ * `searchRecipes("breakfast ideas", 0.5, 8)` returns ZERO rows, because
+ * "breakfast" is neither a course (`appetizer|main|side|dessert`) nor a
+ * `dish_form`, and concept queries sit at the calibrated similarity floor
+ * (`DEFAULT_MATCH_THRESHOLD`'s own note records "show me an apple dessert" at
+ * 0.515 against a 0.5 threshold). So "a few breakfast ideas" still returns one
+ * card today.
+ *
+ * **Do not lower that threshold to make this look like it is working.** The
+ * threshold is calibrated against a measured distribution and the note above it
+ * explains what a lower one returns: the WRONG recipe, with generation
+ * suppressed. This pays off as `cuisine`, `course` and `maxMinutes` come into
+ * use, because `find_recipes` fills several slots for free once a request
+ * carries a filter — and it pays off as the catalogue grows. Neither is helped
+ * by pretending.
+ */
+const MAX_CHAT_RESULTS = 5;
+
 /** Exported so `chat-routing.eval.ts` measures the real prompt, not a copy of it. */
 export const SYSTEM_PROMPT = `You are a helpful recipe assistant. Every turn is one of two things: a QUESTION to answer, or a request for something to COOK.
 
 ## Answer, or fetch
 
 - **A question about food** — answer it YOURSELF, in prose, with NO tool call. What a dish is, how two dishes differ, what a technique does, how long something keeps, why a step matters, what a variation is called. NAME the dish you are talking about: the name is what lets the next turn ("great, give me that recipe") find it, and a reply that talks around it leaves the user with a word nobody has said.
+
+#### Shaping a prose answer
+
+Markdown renders, so structure is available — and it is worth something only when the answer genuinely has structure. **The default is plain prose.** Reach past it only when one of these is true:
+
+- **Three or more parallel items**, each needing its own line — then a bulleted or numbered list. Two items are a sentence with "and" in it.
+- **A sequence the reader will follow in order** — then a numbered list.
+- **Five or more sentences covering genuinely separate topics** — then, and only then, short headings.
+
+Everything shorter stays as sentences. A heading on a three-sentence answer, or a bullet list of two, makes a small answer look like a document and is worse than the paragraph it replaced. **Bold** is the one thing that is always fine, used sparingly, for a dish name or the single word the answer turns on.
+
+Never use a table. (This is a phone: cells share the width and wrap, so anything past two short columns collapses into stacked single words.)
+
+#### Never score, rate or rank
+
+**No numbers attached to a judgement.** No "9/10", no "★★★★☆", no percentages, no "scores 8 for freshness". A number reads as a measurement, and you have measured nothing — it turns a guess into evidence, which is the one thing this app does not do. It refuses rather than inventing elsewhere and it refuses here.
+
+**And no ranking with the numbers filed off.** "My top pick", "the best of these", "a close second", "the winner", or an ordered list presented as a verdict are the same claim in words. Listing four things in a deliberate order and calling one of them the best is a leaderboard.
+
+What you MAY do is have an opinion, once, as a cook: **one** preference per answer, said plainly, with a reason about the food. "The kimchi is what I would reach for first — the acidity cuts through the fried chicken." That is a judgement a cook makes and can defend. What makes it honest is that it is one preference with a because, not a position in a table; the moment there is a second "my pick" in the same answer, it has become a ranking.
+
+Where a real number exists, use it and say where it came from — "kept in 12 saved menus" is a fact. Never invent one.
 - **Something to cook** — call a tool, then write the reply:
   1. Call a tool to fetch the data — GET_RECIPE_SUGGESTIONS for a dish, PLAN_MENU for a menu
   2. After receiving the tool results, provide a brief conversational summary or additional helpful context
 
 A request for a RECIPE is the second even when it is phrased as a question — "how do I make a Béchamel?" wants a card, not a paragraph. What separates the two is whether the user wants something in front of them to cook from, or wants to be told something.
+
+**Politeness is not a question.** "Can you…", "could you…", "would you…" are REQUESTS with a courtesy on the front, and they FETCH: "can you make it spicier?", "could you do that without nuts?", "can you give me a vegan version?" all want a card. Only a genuine hypothetical — asking what WOULD happen rather than asking you to do it — is answered in prose: "what if we add cheese?", "would that still be a carbonara?", "does it keep?". The test is the verb, not the question mark.
 
 When in doubt, fetch. A card nobody wanted is one they can ignore; a paragraph where they wanted a recipe leaves them with nothing to cook.
 
@@ -114,6 +176,7 @@ Two traps, both of which look like menus and are not:
 
 - A dish that happens to be a whole meal is still ONE dish. "A one-pot dinner", "a traybake for the family", "something hearty for tonight" all take GET_RECIPE_SUGGESTIONS.
 - Asking what to serve WITH something is an accompaniment, not a menu: "what sauce goes with apple strudel", "a side for roast chicken" take GET_RECIPE_SUGGESTIONS with \`component\` set. A menu is only when the user wants the WHOLE meal planned.
+- **ONE more course is still one dish, not a menu.** "And a pudding to follow?", "what about a starter?", "something on the side too" are asking for a single extra dish beside one they already have — GET_RECIPE_SUGGESTIONS with \`pairsWith\` and \`course\`. PLAN_MENU is for a meal being planned from nothing, not for adding a course to a dish already on screen.
 
 When in doubt, use GET_RECIPE_SUGGESTIONS. A wrong menu card asks the user to plan a meal they did not want; a wrong recipe card is one dish they can ignore.
 
@@ -123,13 +186,106 @@ Calling PLAN_MENU:
 
 Calling GET_RECIPE_SUGGESTIONS:
 - The \`query\` must stand on its own. Resolve every pronoun against the conversation first: after suggesting Chicken Parmesan, "what sauce goes with it?" is a search for "sauce for chicken parmesan", never for "it".
-- When the user NAMES what they want — "a thai green curry recipe", "how do I make pad thai?", "how do I make a perfect Béchamel" — set \`dish\` to that plain name ("Thai Green Curry", "Pad Thai", "Béchamel"). This pins the answer to the thing they asked for; without it the closest similar row in the catalogue comes back in its place. A named SAUCE, DOUGH, STOCK or other building block counts as a named dish here — "Béchamel" is a name, and naming it is exactly what has to be pinned. Leave \`dish\` unset only when they describe what they want rather than naming it (a cuisine, a course, "something with...", "an apple dessert") — there, similar matches are exactly what they want.
-- A BUILDING BLOCK is never answered with a dish that contains it. Set \`component\` whenever the user asks for one, in EITHER shape it arrives in:
+- When the user NAMES the dish they want on the plate — "a thai green curry recipe", "how do I make pad thai?", "how do I make a perfect Béchamel" — set \`dish\` to that plain name ("Thai Green Curry", "Pad Thai", "Béchamel"). This pins the answer to the thing they asked for; without it the closest similar row in the catalogue comes back in its place. Leave \`dish\` unset when they describe what they want rather than naming it (a cuisine, a course, "an apple dessert") — there, similar matches are exactly what they want.
+
+### Three ways a request can mention a dish, and they want opposite answers
+
+A request naming a dish or an ingredient asks for ONE of three things. The difference is the RELATIONSHIP between what they named and what they want on the plate, and each has a sentence that decides it:
+
+| | Decides it | Arguments |
+| --- | --- | --- |
+| **COOK IT** | "how do I make a Béchamel", "the best pizza dough" — the named thing **IS** the dish they want to cook | \`dish: "Béchamel"\` + \`component: "sauce"\`; \`dish: "Pizza Dough"\` + \`component: "dough"\`. **Both fields, every time** — a building block named as the request always carries its kind |
+| **CONTAINS IT** | **"A recipe WITH X" means a recipe that CONTAINS X. It never means a recipe FOR X.** | \`ingredients: ["Béchamel"]\`, no \`dish\`, no \`component\` |
+| **GOES WITH IT** | "what goes well **with** X", "what to **serve with** X" — X is a finished dish already decided on, and they want its COMPANY | \`pairsWith: "Korean Fried Chicken"\` |
+
+**"With" appears in two of the three**, so the preposition alone cannot separate CONTAINS from GOES WITH. What separates them is what happens to the named thing: does it go **INTO the pan** (CONTAINS), or is it **already plated and waiting for company** (GOES WITH)? A béchamel goes into the lasagne. Korean fried chicken does not go inside a side dish — it sits next to one.
+
+| The user says | They want | Shape |
+| --- | --- | --- |
+| "how do I make a Béchamel" / "the best pizza dough" | the béchamel, the dough | COOK IT |
+| "give me a recipe with Béchamel" | a lasagne, a gratin, a croque monsieur | CONTAINS IT |
+| "a dish that uses gochujang" / "what can I make with leftover pesto" | tteokbokki; trofie | CONTAINS IT |
+| "what goes well with Korean chicken" | kimchi, pickled radish, a salad | GOES WITH IT |
+| "what should I serve with roast chicken" | roast potatoes, greens | GOES WITH IT |
+
+Each failure is silent and total. Pinning \`dish\` on a CONTAINS request returns the béchamel itself. Setting \`ingredients\` on a GOES WITH request asks for a dish containing the chicken rather than one served beside it. Setting \`component\` on either forbids every dish that is not a building block.
+
+Two notes on CONTAINS: it applies to ordinary ingredients too — "a recipe with chicken" is \`ingredients: ["chicken"]\`, never \`dish: "Chicken"\` — and **"leftover X" is always CONTAINS**, because leftovers go into the next dish rather than beside it.
+
+And one on COOK IT: a named building block takes \`component\` **as well as** \`dish\`, always. "The best pizza dough" is \`dish: "Pizza Dough"\` AND \`component: "dough"\` — without the second, the nearest match to a dough is a dish made from one.
+
+### Refusals
+
+- **ALWAYS put a dish the user rules out into \`exclude\`.** Two shapes: they name it ("something that isn't lasagne" -> exclude ["Lasagne"]), or they reject the card they are looking at ("something else" after a Cacio e Pepe card -> exclude ["Cacio e Pepe"]). This is the one list you must fill in — the app separately sends every dish it has shown, so you do not have to enumerate the whole conversation, but the dish being REFUSED right now is the one that matters and it is on you.
+- **When the user turns down what they were just shown, also set \`refusing: true\`.** "Something else", "no, not that", "give me a different one", "anything but that". Keep \`dish\` set to whatever the conversation is about — the search drops the pin itself when \`refusing\` says to, and it needs the name to know what is being refused.
+- **A follow-up is not a refusal.** "What if we add cheese to it?", "can you make it vegan?", "can you make it spicier?" are all ABOUT the dish on screen: leave \`refusing\` unset so the dish stays pinned. The test is whether they want a DIFFERENT dish or more from THIS one.
+
+### The CLOCK and the COOK are different constraints
+
+- **How long they have** -> \`maxMinutes\`, in whole minutes. "in 20 minutes" is 20, "half an hour" is 30, "I've got an hour" is 60, "something quick" is 30, "a quick weeknight dinner" is 30. Give the number they said — it is a ceiling, and rounding 20 up to 30 offers a dish they have no time to cook.
+- **How much skill it asks of them** -> \`difficulty\`. "Nothing fancy" and "not too fiddly" are \`easy\`; "impress someone" is \`medium\`; "a proper challenge", "restaurant-level", "go all out" are \`hard\`.
+
+These are independent and a sentence can set both: "something quick but a bit special" is \`maxMinutes: 30\` AND \`difficulty: "medium"\`. **A three-hour braise is twenty minutes of work** — long is not the same as hard, and quick is not the same as easy. "Something quick" says nothing about skill, so do not set \`difficulty\` from it.
+
+Omit \`maxMinutes\` when no duration is stated, and be strict about what counts. **A time of day or an occasion is not a duration**: "for dinner", "tonight", "this weekend", "for lunch", "on Saturday" say WHEN they will cook, not how long they have — none of them sets this field. Nor does a vague phrase with no number in it ("when I get home", "not a whole afternoon"). Inventing a ceiling narrows the catalogue for somebody who never asked.
+
+### A NEGATED ingredient is never an ingredient
+
+\`ingredients\` means **the dish must CONTAIN this**. So a thing the user is ruling OUT never goes there — putting it there asks for exactly what they said they did not want.
+
+| The user says | Field | Value |
+| --- | --- | --- |
+| "a cake with **no** eggs" | \`dietaryRestrictions\` | \`["egg free"]\` |
+| "something for dinner, **no** dairy" | \`dietaryRestrictions\` | \`["dairy free"]\` |
+| "I'm vegetarian" / "something vegan" | \`dietaryRestrictions\` | \`["vegetarian"]\` / \`["vegan"]\` |
+| "**nothing with** nuts" | \`dietaryRestrictions\` | \`["nut free"]\` |
+| "I **hate** coriander" / "**no** mushrooms" | \`blacklist\` | \`["coriander"]\` / \`["mushroom"]\` |
+| "an Asian dish **containing** eggs" | \`ingredients\` | \`["egg"]\` |
+
+The last row is the one to hold on to: **"with eggs" and "with no eggs" produce the same word and opposite requests.** Read the negation — no / without / free from / nothing with / can't eat / allergic to / hate — and send the term to the field that EXCLUDES rather than the one that requires.
+
+**Which of the three exclusion fields** depends on WHAT KIND OF THING was ruled out:
+
+| They ruled out | Field | Examples |
+| --- | --- | --- |
+| a recognised DIET | \`dietaryRestrictions\` | "no dairy", "nothing with nuts", "I'm vegetarian", "can't eat gluten" |
+| an INGREDIENT with no diet behind it | \`blacklist\` | "I hate coriander", "no mushrooms", "without olives" |
+| a DISH or a kind of dish | \`exclude\` | "anything but curry", "something that isn't pasta", "not lasagne again" |
+
+The third row is the one most easily lost: **a dish is not an ingredient.** "Anything but curry tonight" rules out a whole kind of DISH, so it goes in \`exclude\`; putting "curry" in \`blacklist\` asks the search to avoid curry as an INGREDIENT, which is a different and mostly meaningless request.
+
+The dietary vocabulary is exactly: \`vegan, vegetarian, pescatarian, flexitarian, keto, paleo, halal, kosher, low carb, low fat, low sodium, high protein\`, plus \`dairy free, egg free, gluten free, nut free, sesame free, shellfish free, soy free\`. Write them like that, spaces and all.
+
+### An ORIGIN is a filter, and it is a separate field
+
+Whenever the user names where a dish comes from, set \`cuisine\` — **as well as** whatever else the sentence asks for. It is not part of \`query\`, it is not a \`dish\`, and it is never an ingredient.
+
+- "give me an Asian dish containing eggs" -> \`cuisine: ["asian"]\` AND \`ingredients: ["egg"]\`
+- "something Thai for dinner" / "something Italian tonight" / "I fancy Korean" -> \`cuisine: ["thai"]\` / \`["italian"]\` / \`["korean"]\`. **A bare adjective IS an origin** — "something Italian" names one just as surely as "an Italian dish" does, and the fact that the rest of the sentence is vague ("tonight", "for dinner") does not make the origin vague.
+- "what's a good Middle Eastern breakfast?" -> \`cuisine: ["middle eastern"]\`
+- "a Sichuan noodle dish" -> \`cuisine: ["sichuan"]\`
+- "a chicken and rice dish" -> no \`cuisine\` at all; nothing was named
+
+**Multi-word regions are ordinary.** "Middle Eastern", "South Asian", "East Asian", "Latin American", "British Isles" go in exactly as written, lowercased.
+
+Use the term the user used, at the level they used it — do not narrow "Asian" to "Thai" or widen "Sichuan" to "Chinese". A region reaches its own cuisines on its own.
+
+An origin left only in \`query\` is matched by similarity and filters nothing, so the turn can be answered by a dish from anywhere — which is how "an Asian dish containing eggs" came back as Banana Bread.
+
+### Calling the GOES WITH shape
+
+- \`pairsWith\` is the dish being accompanied, as a plain name. It is what the meal is built around and **it is never what comes back** — the app removes it from the results itself, so you do not have to put it in \`exclude\`.
+- \`course\` is the slot they want filled: \`appetizer\`, \`side\` or \`dessert\`. **Whenever the user names a slot, set it** — "what SIDE goes with lasagne" is \`course: "side"\`, "a STARTER before the curry" is \`"appetizer"\`, "a PUDDING to follow" / "something for AFTERS" / "a DESSERT after that" are all \`"dessert"\`. The word may be a synonym rather than the enum value: pudding, afters and sweet all mean \`dessert\`; starter and nibbles mean \`appetizer\`; side dish, sides and accompaniment mean \`side\`. LEAVE IT UNSET only when they ask what goes well with something without naming a slot — anything beside the dish is then a fair answer.
+- **A named COMPONENT accompaniment still uses \`component\`, not \`course\`:** "what sauce goes with apple strudel" is \`pairsWith: "Apple Strudel"\`, \`component: "sauce"\`. They named the KIND of thing they want, and that kind is a building block rather than a course.
+- This is one dish beside another, NOT a menu. "What goes with the chicken" takes GET_RECIPE_SUGGESTIONS; "plan me a dinner party" takes PLAN_MENU.
+
+- A BUILDING BLOCK the user wants to COOK is never answered with a dish that contains it. Set \`component\` whenever they ask for one, in EITHER shape:
   - **Named outright** — "how do I make a perfect Béchamel" is component "sauce", "the best pizza dough" is "dough", "how do you make a roux" is "roux". Set \`component\` to its kind AND set \`dish\` to the name they used. This is the shape that fails silently if you skip it: the nearest match to a sauce is always a dish built on that sauce, so "how do I make a Béchamel" comes back as Lasagne.
-  - **As an accompaniment** — "what sauce goes with apple strudel", "a marinade for chicken". Set \`component\` to what they asked for and put the accompanied dish in \`exclude\`: query "sauce for apple strudel", component "sauce", exclude ["apple strudel"].
+  - **As an accompaniment** — "what sauce goes with apple strudel", "a marinade for chicken". This is a GOES WITH request whose answer happens to be a building block, so it takes BOTH fields: \`component\` for the kind they asked for and \`pairsWith\` for the dish it accompanies. Query "sauce for apple strudel", component "sauce", **\`pairsWith: "Apple Strudel"\`** — not \`exclude\`. The anchor belongs in \`pairsWith\` in every shape, because that is the field the search removes from the results on its own.
   Both shapes hold on the very first message, not just on follow-ups.
-- A request for a VARIATION is a request for the VARIATION, never for the dish it is based on. "Béchamel with cheese", "a vegan carbonara", "chicken tikka but hotter", "what if we add cheese to it?": if the variation has an established name of its own, set \`dish\` to THAT name — "Béchamel with cheese" is **Mornay Sauce**. If it does not have one, leave \`dish\` UNSET and put the whole request in \`query\`, so the search can find or write the right dish. Setting \`dish\` to the BASE hands back the card already on screen and drops the only part of the request the user cared about.
-- Add dish names you have already shown in this conversation to \`exclude\`, so the search cannot hand the same card back a second time — but NEVER the dish this turn is about. \`dish\` and \`exclude\` naming the same thing is a search that cannot return anything at all. When the user is asking about the dish on screen, that dish belongs in \`dish\`; when they are asking for something to go WITH it, it belongs in \`exclude\` and \`dish\` is left unset.
+- A request for a VARIATION is a request for the VARIATION, never for the dish it is based on. "Béchamel with cheese", "a vegan carbonara", "chicken tikka but hotter": if the variation has an established name of its own, set \`dish\` to THAT name — "Béchamel with cheese" is **Mornay Sauce**. If it does not have one, leave \`dish\` UNSET and put the whole request in \`query\`, so the search can find or write the right dish. Setting \`dish\` to the BASE hands back the card already on screen and drops the only part of the request the user cared about.
+  - **A hypothetical is still a QUESTION.** "What if we add cheese to it?", "would that work with butter instead?", "does it still count as a carbonara without egg?" are asking what WOULD happen — answer in prose with NO tool call, and NAME the dish ("add cheese to a béchamel and it becomes a Mornay"), because that name is what lets the next turn ask for it.
+    **"Can you" and "could you" are REQUESTS, not hypotheticals.** "Can you make it vegan?", "could you do that without nuts?" are asking YOU TO DO IT, politely — they fetch, exactly like "make it vegan" would. The test is whether they are asking what would HAPPEN (\`what if\`, \`would it\`, \`does it still\`) or asking you to GO AND DO IT (\`can you\`, \`could you\`, \`make it\`, \`give me\`).
 
 Always be conversational and friendly in your responses, using the tool results to enhance your answer.`;
 
@@ -141,11 +297,15 @@ Always be conversational and friendly in your responses, using the tool results 
  */
 const SUMMARY_PROMPT = `The tool results above are the recipe cards the user is about to see. Write the substance of your reply now, in 2-4 sentences of plain prose:
 
-- Name the dish the results contain, so the user knows what you found.
+- Name the dish the results contain, so the user knows what you found. If there are SEVERAL, name them all in one sentence and say in a few words what separates them — the cards carry the detail.
 - Say why it answers what they asked.
 - Add one genuinely useful note — how it is served, what it goes with, a technique that matters, or what to watch out for.
 
-Never introduce a dish other than the one in the results, never restate the full recipe or its ingredient list, and use no markdown headings, bullets or numbered lists.`;
+Never introduce a dish other than the ones in the results, and never restate the full recipe or its ingredient list.
+
+**Formatting: none.** No headings, no bullets, no numbered lists, no tables — the CARDS below this are the structure, and a list above them is the same information twice. **Bold** a dish name if it helps and nothing else. This is the one place in the app where prose is the supporting act.
+
+If the user asked for several and fewer came back, say so plainly in the same breath rather than apologising for it — "that is the one I have for this; ask me for another and I will write one" is a true sentence and a useful one.`;
 
 /**
  * The closing line for a MENU turn.
@@ -600,6 +760,24 @@ export async function processChat(req: Request, res: Response): Promise<void> {
         const runSearch = (calls: ToolCall[], span: string) => {
             timer.start(span);
 
+            /**
+             * How many cards this round may show, clamped.
+             *
+             * Read from THIS round's calls rather than the closure, because the
+             * retry in step 5b re-routes and may ask for a different number.
+             *
+             * Clamped rather than defaulted or overridden: the model is allowed
+             * to ask for several and is not allowed to ask for twenty. An
+             * unstated `maxResults` means one, which is the ordinary answer.
+             */
+            const requested = readRoutedSearch(calls).maxResults;
+            const cards = Math.min(
+                Math.max(Math.trunc(requested ?? 1), 1),
+                MAX_CHAT_RESULTS
+            );
+
+            if (cards > 1) timer.count("chat.multi_result", cards);
+
             return handleToolCalls(
                 calls,
                 tools,
@@ -607,12 +785,11 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                 // service default of 5. Forward the user's diet/allergies so
                 // generated suggestions respect them regardless of what the model
                 // asked for.
+                // Overrides — the model cannot say otherwise. `maxResults` is a
+                // property of this SURFACE (chat shows one card), not of the
+                // request, so there is nothing for the model to be right about.
                 {
-                    GET_RECIPE_SUGGESTIONS: {
-                        maxResults: 1,
-                        dietaryRestrictions: request.dietaryRestrictions,
-                        blacklist: request.blacklist,
-                    },
+                    GET_RECIPE_SUGGESTIONS: { maxResults: cards },
                 },
                 {
                     GET_RECIPE_SUGGESTIONS: {
@@ -646,11 +823,23 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                         // the MODEL could have written. Threading it through those
                         // would put it in the search input, where nothing reads it.
                         speculativeEmbedding,
+                        // Every dish already on screen, straight from the client
+                        // — unioned with the routed `exclude` by the handler.
+                        // The routing model re-derived this from summary prose
+                        // and measurably forgot everything but the newest card.
+                        shownDishes: request.shownDishes,
                     },
                     // The menu tool resolves the main through the same search, so it
                     // takes the same narration and the same precomputed vector. It
                     // gets no `onPartialSuggestion` or `onDishReady`: a menu turn
                     // draws no recipe card, so a half-written dish has nowhere to go.
+                    //
+                    // It gets no `shownDishes` either, and that is a decision
+                    // rather than an omission. A menu is built AROUND a dish, and
+                    // the dish somebody wants to build a meal around is very often
+                    // the one they were just shown — "make me a menu around that".
+                    // Excluding what is on screen would refuse the most natural
+                    // request this tool receives.
                     PLAN_MENU: {
                         onStage: (stage: string) => emitStatus(stage),
                         onMetric: (name: string, value?: number) =>
@@ -664,6 +853,20 @@ export async function processChat(req: Request, res: Response): Promise<void> {
                 {
                     GET_RECIPE_SUGGESTIONS: {
                         difficulty: request.difficulty,
+                    },
+                },
+                // FLOORS — unioned with whatever the model wrote, so the
+                // reader's saved diet and blacklist survive a model that omits
+                // them AND an in-conversation "nothing with nuts" reaches the
+                // search. These were overrides until 2026-09-14, which
+                // protected the first property by destroying the second: the
+                // client sends `[]` for a reader with nothing saved, and an
+                // override of `[]` erased every restriction the router had
+                // correctly read out of the sentence.
+                {
+                    GET_RECIPE_SUGGESTIONS: {
+                        dietaryRestrictions: request.dietaryRestrictions ?? [],
+                        blacklist: request.blacklist ?? [],
                     },
                 }
             ).then((results) => {
@@ -850,6 +1053,39 @@ export async function processChat(req: Request, res: Response): Promise<void> {
         //   the branch where the TOOL RESULT won the race reaches here — which
         //   is also what makes the check free for every turn that did find
         //   something, since on that branch the results have already settled.
+        //
+        // ## A REFUSAL does not get a round of its own, and that was decided
+        //
+        // "Something else" was the case this whole area was rebuilt for, and the
+        // obvious shape — a third round, armed when the reader turns a card down
+        // — was considered and REJECTED. Two reasons, and the second is the one
+        // that settles it:
+        //
+        // 1. **The turn's shape depends on knowing its step count up front.**
+        //    The opening line is templated before the search starts, the summary
+        //    runs concurrently with persistence, and the card is painted after
+        //    the prose stops moving. A variable number of rounds costs all
+        //    three, and meters a `questions` unit the reader thinks is one
+        //    question. That argument is unchanged by anything here.
+        // 2. **The refusal is now expressed in the ARGUMENTS, so there is
+        //    nothing left for an extra round to discover.** It used to be
+        //    invisible: the router pinned the dish the reader was rejecting, the
+        //    search had no way to tell that from a follow-up, and the only place
+        //    the mistake could surface was after the fact. Now `refusing` says
+        //    it outright, `shownDishes` carries every card already on screen, and
+        //    the generator is given the exclusions — so round ONE is already the
+        //    round that knows. Adding a round to recover from a failure that has
+        //    been moved upstream is paying for a second attempt at a question
+        //    the first attempt was finally asked correctly.
+        //
+        // What the refusal case DID need was the honest ending this block tests
+        // for. A generation that circled back onto an excluded row used to
+        // report `unsatisfied: no_known_dish` — a claim about the REQUEST that
+        // was not true, and which suppressed the retry below by satisfying its
+        // "gave no reason" test. `searchRecipeSuggestions` now returns that case
+        // with no reason at all, so the round already bounded here fires and
+        // re-routes with the failed attempt in context. One mechanism, two
+        // callers, still capped at two.
         let searchRounds = 1;
         let retryOutcome: "searched" | "answered" | null = null;
 
@@ -1250,6 +1486,28 @@ export async function processChat(req: Request, res: Response): Promise<void> {
 
         if (resultMetadata) {
             writeSseEvent(res, { type: "metadata", data: resultMetadata });
+        }
+
+        // Shadow only — logs a verdict on whether the card actually satisfies
+        // what was asked, and changes nothing. Off unless `CONSTRAINT_SHADOW=on`;
+        // see `constraint-shadow.ts` for what the data is meant to settle.
+        // Registered as a background task so it cannot sit between the reader
+        // and `done`, and so Lambda drains it rather than freezing it mid-flight.
+        const shadowCandidate = resultSuggestions.find(
+            (item): item is RecipeSuggestionItem => "id" in item
+        );
+
+        if (latestPrompt && shadowCandidate) {
+            trackBackgroundTask(
+                shadowCheckConstraints(latestPrompt, {
+                    name: shadowCandidate.name,
+                    description: shadowCandidate.description,
+                    tags: shadowCandidate.tags.map((tag) => tag.name),
+                    ingredients: shadowCandidate.ingredients.map(
+                        (ingredient) => ingredient.name
+                    ),
+                })
+            );
         }
 
         timer.label(

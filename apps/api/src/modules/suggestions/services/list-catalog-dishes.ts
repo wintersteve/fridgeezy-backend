@@ -167,25 +167,14 @@ export async function listCatalogDishes(query: string): Promise<string[]> {
 }
 
 /**
- * Render the exclusion list as a user-prompt block (empty when there is none).
+ * The prompt blocks that used to live here are now in
+ * `suggestion-prompt-blocks.ts`, which imports nothing that opens a client.
  *
- * Deduplicated case-insensitively because the caller merges several sources —
- * the catalogue, the client's own "already on screen" list, and the dishes an
- * earlier pass of this same request already emitted.
+ * This module constructs a Supabase client at import, so anything importing a
+ * block builder from here dragged the whole persistence graph in with it —
+ * which is exactly what made `check-generator-exclusions` unrunnable without a
+ * database. Same split, and the same reason, as `suggestion-reveals.ts`.
+ *
+ * Deliberately NOT re-exported from here: a re-export would make the broken
+ * import path keep working, and it is the import path that is the hazard.
  */
-export function buildExistingDishesBlock(names: string[]): string {
-    const unique = [
-        ...new Map(
-            names
-                .map((name) => name.trim())
-                .filter(Boolean)
-                .map((name) => [name.toLowerCase(), name])
-        ).values(),
-    ];
-
-    if (unique.length === 0) {
-        return "";
-    }
-
-    return `Already in the catalog (do NOT suggest these, nor a variation, translation or spelling variant of one): ${unique.join(", ")}`;
-}

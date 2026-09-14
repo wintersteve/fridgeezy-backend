@@ -152,21 +152,24 @@ ${buildFoodIllustrationStyle({
 };
 
 /**
- * Pinned to Pro, unlike everything else in this directory.
+ * Pinned to the same model `generate-image` defaults to, rather than left to
+ * take that default implicitly.
  *
- * `generate-image` defaults to Flash on a volume argument — cost is bounded per
- * dish, and at thousands of dishes the 3.6x matters. That argument does not
- * reach this asset. There are two images here, they are generated once ever,
- * and they are the first thing every user sees on every launch. Pro is the
- * known-better answer for this art direction (measured 2026-08-04) and the
- * whole bill is under a dollar.
+ * The pin is not about cost. There are two images, they are generated once ever,
+ * and they are the first thing every user sees on every launch, so the whole
+ * bill is under a dollar — this asset could afford any model on offer. What the
+ * pin buys is that a cost-driven change to the shared default cannot silently
+ * re-render the launch screen in a different hand from the recipe cards.
  *
- * Still overridable, because Pro is a *preview* endpoint that can be renamed.
+ * **So when the default moves, decide about this one rather than following.**
+ * It tracked Pro while that was the default and moved to Nano Banana 2 on
+ * 2026-09-13 deliberately, on the owner's call.
+ *
+ * Still overridable, so a sweep can point it at a candidate model without a
+ * code change.
  */
 const MODEL = (process.env.GENAI_IMAGE_MODEL ??
-    "gemini-3-pro-image-preview") as Parameters<
-    typeof generateImage
->[0]["model"];
+    "gemini-3.1-flash-image") as Parameters<typeof generateImage>[0]["model"];
 
 /**
  * How many candidates per variant. These are curated art, not derived data —
@@ -193,7 +196,9 @@ if (only && !(only in VARIANTS)) {
     process.exit(1);
 }
 
-const targets = (only ? [only] : (Object.keys(VARIANTS) as Variant[])) as Variant[];
+const targets = (
+    only ? [only] : (Object.keys(VARIANTS) as Variant[])
+) as Variant[];
 
 const OUT_DIR = join(process.cwd(), "operations", "output", "splash");
 
@@ -274,7 +279,9 @@ async function main() {
     }
 
     console.log("\n=== Summary ===\n");
-    console.log(`${results.length} of ${candidates * targets.length} written to`);
+    console.log(
+        `${results.length} of ${candidates * targets.length} written to`
+    );
     console.log(`  ${OUT_DIR}\n`);
 
     for (const file of results) console.log(`  ${file}`);

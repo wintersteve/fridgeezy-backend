@@ -1,5 +1,11 @@
-import { IngredientsRepository, supabaseAdmin } from "@fridgeezy/supabase";
+import {
+    IngredientsRepository,
+    RecipesRepository,
+    supabaseAdmin,
+} from "@fridgeezy/supabase";
 import { ingredientCanonicalId, splitIngredientName } from "@fridgeezy/toolkit";
+
+import { fetchMenuPairings } from "./fetch-menu-pairings";
 
 /** A catalogue row as returned by `find_recipes`, narrowed to what chat needs. */
 export interface CatalogueRecipe {
@@ -82,6 +88,231 @@ export async function resolveIngredientIds(
     }
 
     return [...new Set(ids)];
+}
+
+/**
+ * A component the caller named, with both of the names it answers to.
+ *
+ * Both canonical ids are carried because the caller needs them for two different
+ * jobs: `id` finds the dishes BUILT ON it, and the two name keys are what let a
+ * caller refuse the component ITSELF — a request for "a recipe with béchamel"
+ * must not be answered with the béchamel, and similarity search will offer it
+ * first every time.
+ */
+export interface ResolvedComponent {
+    id: string;
+    /** How a recipe would LIST it: `bechamel_sauce`. */
+    canonicalId: string;
+    /** How a cook would ASK for it: `bechamel`. Null when unclassified. */
+    dishCanonicalId: string | null;
+}
+
+/**
+ * Resolve names to the ingredient rows that are COMPONENTS — "béchamel" to the
+ * `Bechamel Sauce` row.
+ *
+ * Separate from {@link resolveIngredientIds} because it matches on a different
+ * column and would otherwise resolve nothing. A component is stored under the
+ * name a recipe would LIST it by ("Bechamel Sauce"), while `component_dish`
+ * holds the name a cook would ASK for ("Béchamel") — and it is the second that
+ * a user types. Measured 2026-09-13: `resolveIngredientIds(["béchamel"])`
+ * returns an empty array, because the canonical id is `bechamel` and the row's
+ * is `bechamel_sauce`, so the ingredient stage was skipped entirely rather than
+ * returning nothing.
+ *
+ * Both columns are tried, so either spelling lands. `component_dish_canonical_id`
+ * is a generated column over `normalize_to_canonical_id`, which folds accents
+ * since `20260913000002` — before that, "béchamel" produced `b_chamel` here and
+ * matched nothing whichever column was used.
+ */
+export async function resolveComponents(
+    names: string[]
+): Promise<ResolvedComponent[]> {
+    const canonical = [
+        ...new Set(
+            names
+                .map((name) => ingredientCanonicalId(splitIngredientName(name).name))
+                .filter(Boolean)
+        ),
+    ];
+
+    if (canonical.length === 0) return [];
+
+    const { data, error } = await supabaseAdmin
+        .from("ingredients")
+        .select("id, canonical_id, component_dish_canonical_id")
+        .eq("component_kind", "dish")
+        .or(
+            `canonical_id.in.(${canonical.join(",")}),component_dish_canonical_id.in.(${canonical.join(",")})`
+        );
+
+    if (error) {
+        console.error("[FindCatalogueRecipes] component lookup failed:", error.message);
+
+        return [];
+    }
+
+    return (data ?? []).map((row) => ({
+        id: row.id as string,
+        canonicalId: row.canonical_id as string,
+        dishCanonicalId: (row.component_dish_canonical_id as string | null) ?? null,
+    }));
+}
+
+/**
+ * Dishes BUILT ON the given components — the answer to "a recipe with béchamel".
+ *
+ * Deliberately not part of `findCatalogueRecipes`: `find_recipes`' ingredient
+ * array is a conjunctive FILTER whose short pages tell the client's search
+ * screen to start generating, and widening it in place would quietly stop that.
+ * See the `20260913000004` header.
+ *
+ * Never throws — an empty list just means the search falls through to
+ * generating, which is what it did before this path existed.
+ */
+export async function findDishesUsingComponents(options: {
+    componentIds: string[];
+    blacklist?: string[];
+    dietaryTagIds?: string[];
+    excludeDishIds?: string[];
+    limit?: number;
+}): Promise<CatalogueRecipe[]> {
+    const {
+        componentIds,
+        blacklist = [],
+        dietaryTagIds = [],
+        excludeDishIds = [],
+        limit = 5,
+    } = options;
+
+    try {
+        if (componentIds.length === 0) return [];
+
+        const blacklistIds = blacklist.length
+            ? await resolveIngredientIds(blacklist)
+            : [];
+
+        const { data, error } = await supabaseAdmin.rpc(
+            "find_dishes_using_components",
+            {
+                p_components: componentIds,
+                p_blacklist: blacklistIds,
+                p_dietary_tags: [...new Set(dietaryTagIds)],
+                p_exclude_dish_ids: excludeDishIds,
+                p_limit: limit,
+            }
+        );
+
+        if (error) {
+            console.error(
+                "[FindCatalogueRecipes] find_dishes_using_components failed:",
+                error.message
+            );
+
+            return [];
+        }
+
+        return (data ?? []).map((row) => ({
+            id: row.id as string,
+            name: row.name as string,
+            description: (row.short_description || row.description || "") as string,
+            image: (row.image as string | null) ?? null,
+            difficulty: row.difficulty as "easy" | "medium" | "hard",
+            source: row.source === "recipe" ? "recipe" : "suggestion",
+            totalTimeMinutes: (row.total_time_minutes as number | null) ?? null,
+            ingredients: toNamedRows(row.ingredients),
+            tags: toNamedRows(row.tags),
+        }));
+    } catch (error) {
+        console.error("[FindCatalogueRecipes] component lookup failed:", error);
+
+        return [];
+    }
+}
+
+/**
+ * Dishes people have actually put on a plate BESIDE this one.
+ *
+ * The same retrieval the compose screen runs before it generates
+ * (`menu_pairings_for_recipe`, via {@link fetchMenuPairings}), reached from chat
+ * so that "what goes well with the chicken" and "Serve it with…" give the same
+ * answer rather than two different ones from two code paths.
+ *
+ * ## Empty is the NORMAL case, not the edge case
+ *
+ * This ranks by how many saved menus hold the pairing, so it answers only as
+ * well as the menu corpus has been filled. Measured 2026-09-13: the live dev
+ * project holds **0 menus, 0 menu_courses and 0 saved_menus**, and local holds
+ * 2 courses. So today this returns nothing essentially always, and the caller
+ * MUST treat an empty array as "no opinion yet" and go on to generate — never as
+ * an answer, and never as a reason to stop.
+ *
+ * That is why it returns `[]` rather than throwing or signalling on every
+ * failure path, including the one where the anchor cannot be resolved to a
+ * recipe at all. A dish the reader named that the catalogue has never promoted
+ * is the common case in chat, and it is not an error.
+ *
+ * The value is real but it ACCRUES: every menu somebody composes makes the next
+ * pairing question cheaper, until the common answer stops costing a generation.
+ */
+export async function findPairingsForDish(options: {
+    /** The anchor, by name — resolved to a recipe row here. */
+    dishName: string;
+    /** Which slots to fill. Empty means all three. */
+    courses?: string[];
+    exclude?: string[];
+    blacklist?: string[];
+    dietaryRestrictions?: string[];
+    limit?: number;
+}): Promise<CatalogueRecipe[]> {
+    const {
+        dishName,
+        courses,
+        exclude = [],
+        blacklist = [],
+        dietaryRestrictions = [],
+        limit = 5,
+    } = options;
+
+    try {
+        // The anchor has to be a RECIPE row: `menu_pairings_for_recipe` keys on
+        // `recipes.id`. A dish that only exists as a suggestion has never been
+        // in a saved menu either, so there is nothing to find for it.
+        const found = await new RecipesRepository().findBaseRecipes([dishName]);
+
+        if (!found.success || found.value.length === 0) return [];
+
+        const pairings = await fetchMenuPairings({
+            recipeId: found.value[0].id,
+            // The whole table when the reader did not say which slot — "what
+            // goes well with this" admits a starter, a side or a pudding.
+            courseTypes:
+                courses?.length ? courses : ["appetizer", "side", "dessert"],
+            perCourse: Math.max(limit, 1),
+            exclude,
+            excludeKeys: [],
+            blacklist,
+            dietaryRestrictions,
+            // Orders, never narrows — the SQL treats it as a tiebreak.
+            difficulty: null,
+        });
+
+        return pairings.slice(0, limit).map((pairing) => ({
+            id: pairing.id,
+            name: pairing.name,
+            description: pairing.shortDescription || pairing.description,
+            image: pairing.image,
+            difficulty: pairing.difficulty,
+            source: pairing.isRecipe ? "recipe" : "suggestion",
+            totalTimeMinutes: pairing.totalTimeMinutes,
+            ingredients: pairing.ingredients,
+            tags: pairing.tags,
+        }));
+    } catch (error) {
+        console.error("[FindCatalogueRecipes] pairing lookup failed:", error);
+
+        return [];
+    }
 }
 
 /**

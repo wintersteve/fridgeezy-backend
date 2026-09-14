@@ -12,8 +12,9 @@ Phase 1 does not ship until a candidate matches or beats the baseline here.
 # plumbing check — one fixture per path, no authenticity judging
 npx nx run @fridgeezy/api:eval-model-migration -- --quick
 
-# a run you can actually decide on
+# a run you can actually decide on (name the baseline too — the gate needs it)
 npx nx run @fridgeezy/api:eval-model-migration -- --repeat=5
+npx nx run @fridgeezy/api:eval-model-migration -- --repeat=5 --only='gpt-4.1,gpt-5.4'
 ```
 
 Or directly, from `apps/api`: `npx jiti src/evals/model-migration/run.eval.ts …`
@@ -25,7 +26,7 @@ Or directly, from `apps/api`: `npx jiti src/evals/model-migration/run.eval.ts �
 | `--skip-authenticity` | Skip the LLM authenticity judge — the priciest scorer |
 | `--skip-recipes` | Skip the recipe path — the only one needing Supabase |
 | `--skip-substitutes` | Skip the substitutes path |
-| `--only=<substring>` | Restrict to candidates whose id matches |
+| `--only=<a>,<b>` | Restrict to candidates whose id matches any term. **Include the baseline** — the gate has nothing to compare against without it, and says so rather than ticking |
 
 **This costs real money on both providers.** Start with `--quick`.
 

@@ -1,9 +1,16 @@
 import {
     fetchQuotaStatus,
+    findEntitlementByUserId,
+    isEntitlementActive,
     recordAiUsage,
     type QuotaBucket,
 } from "@fridgeezy/supabase";
 import type { NextFunction, Request, Response } from "express";
+
+import {
+    isReconcileEnabled,
+    refreshEntitlement,
+} from "../modules/billing/services";
 
 import { isAuthDisabled } from "./require-auth";
 
@@ -127,6 +134,33 @@ export function requireQuota(bucket: QuotaBucket) {
             return;
         }
 
+        // Before the allowance is read, because the allowance DEPENDS on it:
+        // `ai_quota_status` joins `ai_quota_limits` on the tier
+        // `entitlement_is_active` derives, so a row still claiming a lapsed
+        // subscription hands out the subscriber ceiling — 60 recipes a week
+        // against a free account's 2 — while the client, reading the same RPC,
+        // draws no allowance at all and the two disagree in the user's favour.
+        // Bounded to users who hold an entitlement and to one RevenueCat read
+        // per TTL, and it never throws.
+        let stored;
+
+        try {
+            // Guarded rather than left to `refreshEntitlement` to no-op, because
+            // the READ is the cost here: this runs on every metered request, and
+            // a deployment with no RevenueCat key would be paying an extra
+            // select per AI call for a check it cannot make.
+            if (isReconcileEnabled()) {
+                stored = await findEntitlementByUserId(userId);
+
+                await refreshEntitlement(userId, "stale", stored);
+            }
+        } catch (cause) {
+            // The read failing is not a reason to refuse anybody: the RPC below
+            // makes its own decision from the database, and this was only ever
+            // an attempt to make that decision a fresher one.
+            console.error("[quota] entitlement refresh failed", cause);
+        }
+
         let status;
 
         try {
@@ -142,7 +176,43 @@ export function requireQuota(bucket: QuotaBucket) {
             return;
         }
 
-        const entry = status.find((row) => row.bucket === bucket);
+        let entry = status.find((row) => row.bucket === bucket);
+
+        // A free account at its limit is exactly who may have just subscribed,
+        // and the webhook can be a second or two behind the purchase — the
+        // purchase-to-webhook window TODOS.md recorded as shipped open. Asked
+        // only here, at the moment of refusal, so it costs nothing on the path
+        // everybody else takes; `refused` mode declines to ask at all for a
+        // caller who already holds an active row, which is a subscriber meeting
+        // their fair-use ceiling.
+        if (entry && entry.used >= entry.allowance && entry.tier !== "subscriber") {
+            const verified = await refreshEntitlement(
+                userId,
+                "refused",
+                stored ?? null
+            );
+
+            // Re-read rather than adjusting the entry in hand: the tier decides
+            // which `ai_quota_limits` row applies, so a subscription that has
+            // just been confirmed changes the ALLOWANCE, not merely the verdict.
+            if (isEntitlementActive(verified)) {
+                try {
+                    status = await fetchQuotaStatus(userId);
+                    entry = status.find((row) => row.bucket === bucket);
+
+                    if (entry && entry.used < entry.allowance) {
+                        console.log(
+                            `[quota] admitted after reconcile — ${req.method} ${req.originalUrl}`
+                        );
+                    }
+                } catch (cause) {
+                    // Keep the first answer. It is the one the user was always
+                    // going to get, and refusing with a 503 instead would be a
+                    // worse reply to a request we had already decided.
+                    console.error("[quota] re-check after reconcile failed", cause);
+                }
+            }
+        }
 
         if (!entry) {
             // A bucket with no row in `ai_quota_limits` — a half-applied

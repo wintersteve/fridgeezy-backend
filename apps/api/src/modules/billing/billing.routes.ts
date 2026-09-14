@@ -2,15 +2,24 @@ import { Router } from "express";
 
 import { BillingController } from "./billing.controller";
 
-/**
- * No gated routes yet.
- *
- * Exported anyway, and mounted, so that billing follows the same shape as every
- * other module: a module whose only router is the public one would have to be
- * mounted a different way, and a special case is how a route ends up outside the
- * loop that applies authentication.
- */
 const router = Router();
+
+/**
+ * "My subscription may have changed — look again."
+ *
+ * Authenticated and free, on the `account` mount, and it must stay both. The
+ * caller is somebody whose device has just been told by RevenueCat that their
+ * customer changed, which includes the case where a subscription has just
+ * LAPSED — putting that behind `requireEntitlement` would mean the one request
+ * that can correct a wrong row is refused precisely when the row is wrong.
+ *
+ * It is not metered either. A quota is for model spend; this is one HTTP read
+ * of RevenueCat, already rate-bounded per user in `reconcileEntitlement`.
+ *
+ * POST rather than GET because it WRITES `profile_entitlements` — nothing about
+ * it is safe to retry from a cache or a link.
+ */
+router.post("/reconcile", BillingController.reconcile);
 
 export const BillingRoutes = router;
 

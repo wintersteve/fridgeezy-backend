@@ -55,6 +55,19 @@ export interface Candidate {
     thinking?: "adaptive" | "disabled";
     /** Claude only. Errors on Haiku 4.5 and Sonnet 4.5 — leave unset there. */
     effort?: "low" | "medium" | "high" | "max";
+    /**
+     * OpenAI only, and a SEPARATE field from `effort` above because the value
+     * sets genuinely differ — GPT-5.x rejects Claude's `"max"` and rejects
+     * `"minimal"` too, answering with the list it does take: `none`, `low`,
+     * `medium`, `high`, `xhigh`. One widened union would have been a type that
+     * compiles for every provider and is valid for neither.
+     *
+     * `"none"` is the only value worth putting on a streaming JSONL path: the
+     * reasoning tokens are billed as output and arrive before the first visible
+     * line, so any other setting trades the latency this is being evaluated to
+     * win. See `OPENAI_CANDIDATES`.
+     */
+    reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
 }
 
 /**
@@ -76,6 +89,78 @@ export const BASELINE: Candidate = {
     provider: "openai",
     model: "gpt-4.1",
 };
+
+/**
+ * OpenAI models newer than the baseline, on the same API the app already uses.
+ *
+ * These are NOT part of the Bedrock migration this harness was built for — they
+ * are here because the harness is the only instrument that scores structure
+ * adherence on the real prompts, and a latency-motivated model swap needs exactly
+ * that. Ad-hoc timing said `gpt-5.4-mini` at `reasoning_effort: "none"` runs the
+ * promote prompt in 5.4-6.2s against gpt-4.1's 6.9-8.3s — but **one of four
+ * sample runs stopped after the header line**, which is the failure this harness
+ * measures as `jsonl` and nothing else measures at all.
+ *
+ * `gpt-5.4` is on the roster beside the mini as the control: if the mini truncates
+ * and the full model does not, the cause is model capacity rather than the prompt
+ * or the `none` setting.
+ *
+ * ## Both FAILED the gate — measured 2026-09-12, `--repeat=5`, 13 fixtures
+ *
+ * | candidate | jsonl | tags | ingr | real | nutr | elapsed |
+ * |---|---|---|---|---|---|---|
+ * | gpt-4.1 (baseline) | 91% | 100% | 100% | 83% | 100% | 235.6s |
+ * | gpt-5.4-mini / none | **71%** | 93% | 100% | 80% | 100% | 155.9s |
+ * | gpt-5.4 / none | 98% | **60%** | 100% | 96% | 100% | 291.7s |
+ *
+ * The mini is genuinely faster — 0.66x the baseline's wall clock, which is the
+ * whole reason it was tried — and it drops a fifth of the lines it should emit.
+ * That is the ad-hoc "stopped after the header" observation reproducing as a
+ * systematic 20-point structure regression, and in the app a dropped line is a
+ * recipe missing its method rather than an error anyone sees.
+ *
+ * The full model inverts it: better structure (98%) and better authenticity (96%)
+ * than the baseline, and **slower than what it would replace** (1.24x), which
+ * disqualifies it from the only argument for moving.
+ *
+ * Its tag cardinality is 40 points down and that is NOT the noise the README
+ * warns about on this column: tags are scored per SUGGESTION inside the
+ * per-fixture loop, so `--repeat=5` over 5 fixtures at 4 suggestions each is ~100
+ * samples per candidate — baseline 100/100 against roughly 60/100. The scorer is
+ * also aligned with the prompt (1 course, 1-2 cuisine, <=1 component), so this is
+ * the model failing a rule it was given rather than a scorer being stricter than
+ * the instruction.
+ *
+ * Worth knowing WHERE that lands: tags are scored on the SUGGESTION path only,
+ * which is the classification every discovery surface reads — `find_recipes`
+ * filtering, the course slots a menu buckets into, the dish-form facets. A
+ * mis-tagged dish is not visibly broken, it is merely filed wrong, which is the
+ * same silent class as a recipe losing its dietary chips.
+ *
+ * The counterweight is that the authenticity gain is largely absorbed by
+ * machinery that already exists: `verifySuggestionAuthenticity` gates the
+ * inauthentic dishes in production today, so 13 points there buys fewer rejected
+ * generations rather than quality a reader sees. The tags regression is gated by
+ * nothing.
+ *
+ * **Neither is worth shipping and production stays on gpt-4.1.** Keep both rows:
+ * re-running them against a newer model is the cheapest way to re-ask, and the
+ * numbers above are what stops the next person paying for the same answer.
+ */
+export const OPENAI_CANDIDATES: Candidate[] = [
+    {
+        id: "gpt-5.4-mini / no-reasoning",
+        provider: "openai",
+        model: "gpt-5.4-mini",
+        reasoningEffort: "none",
+    },
+    {
+        id: "gpt-5.4 / no-reasoning",
+        provider: "openai",
+        model: "gpt-5.4",
+        reasoningEffort: "none",
+    },
+];
 
 /**
  * Confirmed invocable on this account in eu-central-1 (probed 2026-07-30).
@@ -165,6 +250,12 @@ async function* streamOpenAi(
     // Deliberately mirrors the production call in generate-suggestions-stream.ts:
     // no max_tokens, no sampling overrides. The point of the baseline is to be
     // what production does today, not a tuned version of it.
+    //
+    // `reasoning_effort` is the one addition, and it is not a tuning knob: a
+    // GPT-5.x model cannot be evaluated without it. Left unset those models
+    // reason by default, which is a different candidate from the one anybody
+    // would ship on a streaming path. Absent on the baseline, so gpt-4.1 is
+    // still called exactly as production calls it.
     const stream = await openai.chat.completions.create({
         model: candidate.model,
         messages: [
@@ -172,6 +263,9 @@ async function* streamOpenAi(
             { role: "user", content: user },
         ],
         stream: true,
+        ...(candidate.reasoningEffort
+            ? { reasoning_effort: candidate.reasoningEffort }
+            : {}),
     });
 
     for await (const chunk of stream) {

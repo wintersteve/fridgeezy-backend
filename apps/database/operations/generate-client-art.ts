@@ -166,10 +166,23 @@ ${buildFoodIllustrationStyle({
      * re-running it. It also happens to be the truer picture — the card is
      * selling a table laid for an evening, which is a thing you look down at.
      *
-     * **Portrait, and stacked DOWN the frame.** The first version was square
-     * with the three dishes side by side, and cover-cropping that into the band
-     * showed one dish at about three times life size — the whole arrangement,
-     * which is the point of the picture, was outside the crop.
+     * **Portrait, and a HIERARCHY rather than a row.** The first version was
+     * square with three dishes side by side, and cover-cropping that into the
+     * band showed one dish at about three times life size — the whole
+     * arrangement, which is the point of the picture, was outside the crop.
+     * The second stacked three equal vessels down the frame, which fixed the
+     * scale and not the subject: a narrow vertical slice through three equal
+     * circles keeps the middle one, and a single bowl is not a menu.
+     *
+     * This version gives the picture a subject that survives being cut — ONE
+     * large plate with three small bowls gathered beneath it. The size
+     * difference is the information, so any slice holding part of the hero and
+     * part of a companion still reads as *a dish and the meal around it*, which
+     * is the sentence the card itself makes ("One dish, a whole menu.").
+     * Chosen over two alternatives rendered beside it on 2026-09-14: a
+     * six-vessel ribbon (more robust to the crop, but it says "many courses"
+     * rather than "one dish plus"), and a vessel-less field of components
+     * (nothing to bisect, but the least like the rest of the app).
      *
      * `3:4` rather than `9:16`, and the difference matters: the ratio has to
      * match the band's VISIBLE region on the card (about 0.9 wide to high),
@@ -183,31 +196,98 @@ ${buildFoodIllustrationStyle({
      */
     menu: {
         aspectRatio: "3:4",
-        prompt: `Editorial illustration of a small meal laid out together — several finished dishes, seen from directly above, in a tall upright frame.
+        prompt: `Editorial illustration of one large dish surrounded by the smaller dishes that go with it, seen from directly above, in a tall upright frame.
 
 SUBJECT
-- THREE ceramic vessels and no more: a small shallow bowl, a larger round plate, and a second small bowl. Read together they are a starter, a main and a dessert.
-- They are stacked ONE ABOVE ANOTHER down the tall frame — one near the top, one in the middle, one near the bottom — not side by side in a row across it.
-- Each holds a different finished dish, so the three differ clearly in colour — one green and leafy, one warm and golden, one soft pink or berry.
-- Neighbouring vessels sit close enough to overlap slightly at their rims, so the three read as one gathered arrangement.
+- ONE large round ceramic plate holding a generous main dish, sitting high in the tall frame and clearly the biggest thing in the picture. It is wide enough to be cropped by the left and right edges.
+- Gathered below and slightly behind it, THREE much smaller bowls holding side dishes, overlapping the big plate's lower rim and each other.
+- The size difference is obvious and deliberate: one hero and its companions, not four equal dishes.
+- The main is warm and golden; the small bowls differ clearly from it and from each other — one green and leafy, one soft pink or berry, one pale and creamy.
 - No table, no cloth, no cutlery, no hands, no glasses, no second arrangement.
 ${SINGLE_IMAGE_RULE}
 
 ${buildFoodIllustrationStyle({
     camera: "overhead",
     framing:
-        "the tall frame is filled top to bottom by the three stacked vessels, with almost no empty ground left anywhere. The widest vessel runs right up to the left and right edges and may be cropped by them, and the top and bottom vessels may be cropped by the top and bottom edges. The arrangement is never a small group floating in a margin.",
+        "the large plate and its cluster of small bowls fill the tall frame top to bottom with almost no empty ground left. The large plate is cropped by the left and right edges and the lowest bowls are cropped by the bottom edge. The arrangement is never a small group floating in a margin.",
     renderingEmphasis:
-        "The circles of the three rims are the strongest shapes in the picture and stay crisp against each other.",
-    mood: "generous and companionable — an evening's cooking, all out at once.",
+        "The big plate's circle dominates; the small rims cluster against its lower edge and stay crisp.",
+    mood: "generous and hospitable — one good dish, and everything that came with it.",
 })}`,
+    },
+    /**
+     * The first-run welcome screen, which is a PAIR.
+     *
+     * It is full-bleed across the top of the page and graded into the page
+     * ground, so unlike every other scene here it is never a subject in a
+     * margin — an even border would be a strip of cream above the fold.
+     *
+     * **Two files, because the ground is baked in.** The light one is a cream
+     * field; behind a dark-theme page it is a lit slab above dark copy. The
+     * screen picks between them on `rt.themeName`, the way the app icon and the
+     * splash already do. `1:1` rather than a phone aspect: the screen
+     * cover-crops it to about 58% of the window height at whatever width the
+     * device is, so a square gives the crop room in both directions.
+     *
+     * Both are framed to bleed and the dark one carries the low-key medium —
+     * see `RENDERING_MEDIUM`, where watercolour over a dark ground is what puts
+     * a pale border back.
+     */
+    welcome: {
+        aspectRatio: "1:1",
+        prompt: `Editorial illustration of an evening meal on the table, seen from directly above, filling the whole frame.
+
+SUBJECT
+- A generous overhead arrangement: one large plated main, two smaller bowls, a scatter of herbs and a small pool of sauce, gathered close together.
+- The arrangement runs off all four edges — vessels are cropped by the frame on every side — so it reads as part of a larger table.
+- Colours differ clearly between the dishes: one warm and golden, one green and leafy, one soft pink or berry.
+- No cutlery, no cloth, no hands, no glasses.
+- ONE single illustration, not a grid, a contact sheet, a set of panels or a collection of separate pictures.
+
+FIXED STYLE — identical in every image
+- Camera: perfectly overhead bird's-eye, 90 degrees, straight down. No perspective tilt at all: a round vessel reads as a true circle, a rectangular one as a true rectangle, and nothing shows a side wall or a front face. Every vessel lies flat to the picture plane.
+- Vessel: matte handmade ceramic in creamy off-white (#FFF5EE) with subtle artisanal texture and a slightly irregular hand-thrown rim. Its shape follows the dish (flat plate, shallow bowl, deep bowl); its material and colour never change. Use plain clear glassware only for drinks and layered desserts.
+- Framing: the arrangement covers the entire square and is cropped by all four edges. There is no empty margin anywhere and nothing floats in the middle of bare ground.
+- Background: flat warm cream (#FDFBF9), completely empty — its colour is pigment settled into a fine, quiet, even tooth, and that tooth continues unbroken beneath everything else in the picture, at the same scale everywhere. No table surface, marble, wood grain, cloth, cutlery, napkins, hands, or stray garnish outside the vessel. No borders, frames or inset panels — the background runs to all four edges of the image.
+- Light: soft diffuse studio daylight from the upper left, casting exactly one gentle, soft-edged, low-contrast shadow from the vessel toward the lower right. No other shadows anywhere — no dappled light, no foliage or window patterns, no shadows from objects outside the frame. No hard specular highlights.
+- Palette: the vessel, background and linework are fixed — cream #FFF5EE, warm stone #FAF8F6, ground #FDFBF9, with warm grey #5C5450 only as sparse, fine linework — never a near-black outline; peach #F4A67A and sage green #93C5A8 are the accent tones. The food keeps its own true hues, rendered in the same warm register. No saturated primaries, no neon, no pure black.
+- Tone: high-key, pastel and softly washed throughout. Every value sits in the upper, lighter half of the range, as if a thin veil of warm cream were laid over the whole image — colours are chalky, faded and gently muted rather than rich, punchy or glossy. Even the darkest element stays a soft warm mid-tone; contrast between light and dark is low and edges between colours are soft. This is a treatment of saturation and value only: it must never change *which* colour a food is, only how pale and quiet it reads.
+- Rendering: refined modern editorial illustration — true watercolour and gouache worked into the tooth of cold-press paper — the surface the whole picture is made on, never a sheet or a page lying inside it. No wash is an even fill: pigment granulates into that tooth, each wash loads unevenly and dries a little lighter through its middle and a shade deeper where it pooled or stopped, and a dry brush skips and breaks where it crosses the grain. Where a wash dried back on itself it leaves a slightly harder rim inside its own colour, half a step deeper — never a dark contour and never an outline around a shape — and the paper takes the ground colour named above, with only its tooth showing. The warm grey linework is drawn over that same tooth, sparse and fine, breaking where the tooth rides high, open rather than a sealed continuous outline, and never darkening toward black even at its heaviest. The tooth is one fine, quiet, even scale in every image and runs unbroken to all four edges with no edge, corner or shadow of its own; shapes stay simple, minimal, airy and warm. The overlapping rims are the strongest shapes; the picture is densest in the middle and quietens toward the lower edge, where type will sit over it. Not photorealistic, not 3D-rendered, not cartoonish, not high-contrast.
+
+Mood: warm and generous — the moment everything reaches the table.
+
+Render the illustration only. No text, letters, numbers, labels, logos, watermarks, borders or frames. The hex colour codes above are instructions to you, not things to depict — never write, print or paint a colour code, caption or swatch anywhere in the picture.`,
+    },
+
+    welcomeDark: {
+        aspectRatio: "1:1",
+        prompt: `Editorial illustration of an evening meal on the table, seen from directly above, glowing out of a deep dark field and filling the whole frame.
+
+SUBJECT
+- A generous overhead arrangement: one large plated main, two smaller bowls, a scatter of herbs and a small pool of sauce, gathered close together and lit from within so they rise out of the darkness.
+- The arrangement runs off all four edges — vessels are cropped by the frame on every side — so it reads as part of a larger table.
+- Colours stay warm and deepened: golden, amber, a little sage.
+- No cutlery, no cloth, no hands, no glasses.
+- ONE single illustration, not a grid, a contact sheet, a set of panels or a collection of separate pictures.
+
+FIXED STYLE — identical in every image
+- Camera: perfectly overhead bird's-eye, 90 degrees, straight down. No perspective tilt at all: a round vessel reads as a true circle, a rectangular one as a true rectangle, and nothing shows a side wall or a front face. Every vessel lies flat to the picture plane.
+- Vessel: matte handmade ceramic in creamy off-white (#FFF5EE) with subtle artisanal texture and a slightly irregular hand-thrown rim. Its shape follows the dish (flat plate, shallow bowl, deep bowl); its material and colour never change. Use plain clear glassware only for drinks and layered desserts.
+- Framing: the arrangement covers the entire square and is cropped by all four edges. There is no pale margin anywhere and no lighter border of any kind at the edges of the square.
+- Background: flat deep warm brown-black (#141110), completely empty — its colour is pigment settled into a fine, quiet, even tooth, and that tooth continues unbroken beneath everything else in the picture, at the same scale everywhere. No table surface, marble, wood grain, cloth, cutlery, napkins, hands, or stray garnish outside the vessel. No borders, frames or inset panels — the background runs to all four edges of the image.
+- Light: soft ambient glow with no visible source and no cast shadow anywhere — the vessel is lit from within rather than from outside, so nothing throws a shadow onto the ground and the ground is never lit into a pool. No dappled light, no foliage or window patterns, no hard specular highlights.
+- Palette: the background and linework are fixed — ground #141110, with warm dark grey #3A322C only as sparse, fine linework; peach #F4A67A and sage green #93C5A8 are the accent tones, and they sit as soft glows rising out of the dark rather than as bright shapes laid on top of it. The food keeps its own true hues, deepened into the same warm register. No saturated primaries, no neon, and no cream or white anywhere.
+- Tone: low-key and deep throughout. Every value sits in the lower, darker half of the range: the ground is the darkest thing in the picture and everything else rests only a little above it, the way pigment glows on dark water. There is no cream, no white and no pale wash anywhere — nothing is bleached toward the light end. Colours stay chalky and gently muted rather than rich, punchy or glossy; even the lightest element stays a soft warm mid-tone, and contrast between light and dark is low with soft edges between colours. This is a treatment of saturation and value only: it must never change *which* colour a food is, only how deep and quiet it reads.
+- Rendering: refined modern editorial illustration — delicate hand-drawn linework, and soft OPAQUE gouache and chalk pastel laid down over a dark ground. The pigment is body colour that covers the darkness beneath it, never a transparent wash that lets a pale paper glow through — every soft edge is pigment blending into pigment. Clean flat-leaning shapes; minimal and warm. This is not watercolour, and there is no white or cream paper anywhere in the picture. The dishes are the only light in the picture; it is densest in the middle and settles into near-empty dark toward the lower edge, where type will sit over it. Not photorealistic, not 3D-rendered, not cartoonish, not high-contrast.
+
+Mood: warm and quiet — the moment everything reaches the table, at night.
+
+Render the illustration only. No text, letters, numbers, labels, logos, watermarks, borders or frames. The hex colour codes above are instructions to you, not things to depict — never write, print or paint a colour code, caption or swatch anywhere in the picture.`,
     },
 };
 
 const MODEL = (process.env.GENAI_IMAGE_MODEL ??
-    "gemini-3.1-flash-image") as Parameters<
-    typeof generateImage
->[0]["model"];
+    "gemini-3.1-flash-image") as Parameters<typeof generateImage>[0]["model"];
 
 const OUT_DIR = join(process.cwd(), "operations", "output", "client-art");
 
@@ -247,7 +327,10 @@ async function main() {
             }
 
             const file = `${name}.${extensionFor(mimeType)}`;
-            writeFileSync(join(OUT_DIR, file), Buffer.from(base64Data, "base64"));
+            writeFileSync(
+                join(OUT_DIR, file),
+                Buffer.from(base64Data, "base64")
+            );
             console.log(`✓ ${file}`);
         } catch (error) {
             failed++;

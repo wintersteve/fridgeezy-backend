@@ -20,6 +20,8 @@ export * from './near-miss-swappable-properties';
 export * from './pantry-items';
 export * from './pantry-staples';
 export * from './profile-blacklisted-ingredients';
+export * from './profile-chat-conversations';
+export * from './profile-cooked-log';
 export * from './profile-dietary-preferences';
 export * from './profile-entitlements';
 export * from './profile-ingredient-substitutions';

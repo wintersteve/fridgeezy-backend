@@ -833,6 +833,87 @@ export type Database = {
           },
         ]
       }
+      profile_chat_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          messages: Json
+          profile_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          messages: Json
+          profile_id: string
+          title: string
+          updated_at: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          messages?: Json
+          profile_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_chat_conversations_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profile_cooked_log: {
+        Row: {
+          cooked_at: string
+          cooked_on: string
+          id: string
+          profile_id: string
+          recipe_id: string | null
+        }
+        Insert: {
+          cooked_at?: string
+          cooked_on: string
+          id?: string
+          profile_id: string
+          recipe_id?: string | null
+        }
+        Update: {
+          cooked_at?: string
+          cooked_on?: string
+          id?: string
+          profile_id?: string
+          recipe_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_cooked_log_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_cooked_log_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "profile_cooked_log_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profile_dietary_preferences: {
         Row: {
           created_at: string

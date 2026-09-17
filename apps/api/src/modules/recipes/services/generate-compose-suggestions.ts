@@ -40,26 +40,7 @@ import { compileBlacklist } from "./blacklist";
 import { borrowMenuTitle } from "./borrow-menu-title";
 import { fetchMenuPairings, type MenuPairing } from "./fetch-menu-pairings";
 import { fetchRecipeMetadata } from "./fetch-recipe-metadata";
-
-/**
- * What to call the whole dinner.
- *
- * Local to compose because compose is the only caller — the same reason the chat
- * tools live under `chat`. It sits apart from `naming-rules.ts` deliberately:
- * those rules name a DISH, and this one contradicts the most important of them.
- *
- * `DISH_NAME_RULE` strips the cuisine out of a dish name because the card prints
- * it as an eyebrow directly above the title. A menu heading has no eyebrow —
- * nothing beside it says where the meal is from — so here the origin is the most
- * useful thing the title can carry. Do not "fix" this to match its sibling.
- */
-const MENU_TITLE_RULE = `menu_title — a name for the WHOLE MEAL, alone on the FIRST line as {"menu_title": "..."} and carrying no other keys. Rules:
-  - 2 to 4 words. It is drawn as a card heading and as a navigation title, and both truncate.
-  - Name the MEAL, never the main dish. The main course's name is printed directly beneath this heading, so repeating it says nothing: "Coq au Vin" is not a menu title.
-  - The cuisine, region or occasion IS worth carrying here, unlike in a dish name — nothing else beside this heading gives the meal an origin. "A Sunday in Burgundy", "Trattoria Lunch", "Thai Table", "Bistro Supper".
-  - Say what the meal IS; do not praise it. "Autumn Sunday Roast" names a meal, "A Symphony of Autumn Flavours" reviews one.
-  - Never claim an occasion the dishes do not support. No "Christmas", "Wedding" or "Birthday" unless these are actually those dishes.
-  - No superlatives and no filler: not "Ultimate", "Perfect", "Delicious", "Feast", "Extravaganza", "Experience", "Journey". No exclamation marks, no closing punctuation. Title Case.`;
+import { cleanMenuTitle, MENU_TITLE_RULE } from "./menu-title";
 
 /**
  * The meal's title, as the model emits it.
@@ -75,43 +56,6 @@ const ComposeMenuTitleSchema = z.object({
 });
 
 const MENU_TITLE_SCHEMA_INDEX = 1;
-
-/**
- * Long enough for four words, short enough for a navigation bar.
- */
-const MENU_TITLE_MAX_LENGTH = 60;
-
-/**
- * The title fit to show, or null to fall back to the main course's name.
- *
- * Sanitises rather than rejects, because this is a nicety riding on an expensive
- * stream: the frame is `parse`d inside the use case's streaming loop, where a
- * throw is caught as a STREAM FAILURE — so a rambling title would abort a
- * composition whose courses had all succeeded, and turn a cosmetic problem into
- * a paid one. Nothing downstream may depend on a title arriving.
- */
-const cleanMenuTitle = (raw: string): string | null => {
-    const cleaned = raw
-        .replace(/\s+/g, " ")
-        .trim()
-        // Models like to hand a title back already quoted.
-        .replace(/^["'\u201c\u201d\u2018\u2019]+|["'\u201c\u201d\u2018\u2019]+$/g, "")
-        .trim();
-
-    if (!cleaned) return null;
-
-    // Dropped, not truncated. A heading cut off mid-word is worse than the main
-    // course's name, which is what the client falls back to — and the fallback
-    // is already the behaviour every menu saved before this shipped has.
-    if (cleaned.length > MENU_TITLE_MAX_LENGTH) {
-        console.warn(
-            `[Compose] Dropped menu title (${cleaned.length} chars): "${cleaned.slice(0, 80)}"`
-        );
-        return null;
-    }
-
-    return cleaned;
-};
 
 /**
  * Schema for LLM-generated composition suggestions (JSONL format)

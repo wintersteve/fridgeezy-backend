@@ -124,6 +124,11 @@ function formatRoutes(routes: RouteInfo[]): string[] {
     // The two are mutually exclusive by construction: an open route is on a
     // `publicRouter`, which is mounted ahead of the auth gate, so it can have no
     // entitlement to check.
+    //
+    // `free` is a third exception and is marked for the same reason as the other
+    // two: a route under a metered mount that costs nothing is a claim somebody
+    // made, and it should be re-read on every boot rather than only in the diff
+    // that made it. Signed in, but no further cost — not the same thing as open.
     return routes.map((route) => {
         const mark = route.isPublic
             ? "  ← open"
@@ -131,7 +136,9 @@ function formatRoutes(routes: RouteInfo[]): string[] {
               ? "  ← premium"
               : route.quotaBucket
                 ? `  ← metered (${route.quotaBucket})`
-                : "";
+                : route.freeReason
+                  ? `  ← free (${route.freeReason})`
+                  : "";
         const path = mark ? route.path.padEnd(pathWidth) : route.path;
 
         return `  ${method(route).padEnd(width)}  ${path}${mark}`;

@@ -297,7 +297,7 @@ where name in ('italian', 'greek', 'spanish', 'portuguese', 'turkish')
 -- Western European cuisines
 update tags
 set parent_id = ( select id from tags where name = 'western european' and type = 'cuisine' )
-where name in ('french', 'german', 'austrian', 'swiss', 'dutch', 'belgian', 'luxembourgish')
+where name in ('french', 'german', 'swiss', 'dutch', 'belgian', 'luxembourgish')
   and type = 'cuisine';
 
 -- British Isles cuisines
@@ -313,10 +313,21 @@ where name in ('swedish', 'norwegian', 'danish', 'finnish', 'icelandic')
   and type = 'cuisine';
 
 -- Eastern European cuisines
+-- The Central European five (polish, czech, slovak, hungarian, austrian) used to
+-- be here and in 'western european'; see the block below and migration
+-- 20260917000001. bulgarian and romanian lean Balkan and are knowingly left.
 update tags
 set parent_id = ( select id from tags where name = 'eastern european' and type = 'cuisine' )
-where name in ('polish', 'czech', 'slovak', 'hungarian', 'romanian', 'bulgarian', 'russian', 'ukrainian',
-               'belarusian')
+where name in ('romanian', 'bulgarian', 'russian', 'ukrainian', 'belarusian')
+  and type = 'cuisine';
+
+-- Central European cuisines
+-- german and swiss straddle (the north reads Dutch/Danish, the south Bavarian)
+-- and slovenian reads Austro-Hungarian as easily as Balkan; all three are left
+-- where they are, because an arguable move is worth less than an unarguable one.
+update tags
+set parent_id = ( select id from tags where name = 'central european' and type = 'cuisine' )
+where name in ('austrian', 'czech', 'slovak', 'hungarian', 'polish')
   and type = 'cuisine';
 
 -- Balkan cuisines

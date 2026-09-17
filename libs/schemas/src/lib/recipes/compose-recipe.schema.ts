@@ -126,11 +126,33 @@ export type ComposeRecipeRequestDto = z.infer<
 >;
 
 /**
- * Ingredient/Tag schema for composed results
+ * Ingredient schema for composed results
  */
 const ComposeItemSchema = z.object({
     id: z.string(),
     name: z.string(),
+});
+
+/**
+ * Tag schema for composed results — an ingredient plus its KIND.
+ *
+ * Split off `ComposeItemSchema` on 2026-09-16. The two shared a shape and are
+ * not the same thing: an ingredient has no type and a tag's type is what
+ * `RecipeCard`'s eyebrow is derived from, so sharing the schema quietly
+ * declared that the kind never arrives. It does now — `menu_pairings_for_recipe`
+ * and `pairing_candidates_for_recipe` both carry it since `20260916000005` —
+ * and a client reading the shared shape would have dropped it on the way to the
+ * card.
+ *
+ * Optional, because a course the model INVENTED is tagged by the suggestion
+ * writer rather than by an RPC, and those frames may still arrive without one.
+ * A tag with no type is simply not read by `groupRecipeTags`, which is the
+ * no-eyebrow degradation these cards already had.
+ */
+const ComposeTagSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string().optional(),
 });
 
 /**
@@ -163,7 +185,7 @@ export const ComposeRecipeExistingResultSchema = z.object({
     /** Total minutes, for the time pill beside the difficulty one. */
     totalTimeMinutes: z.number().int().positive().nullable().optional(),
     ingredients: z.array(ComposeItemSchema),
-    tags: z.array(ComposeItemSchema),
+    tags: z.array(ComposeTagSchema),
     /**
      * The one-line card copy. `description` is the detail-screen paragraph and
      * truncates mid-sentence on a card, which is why every other card surface in
@@ -191,7 +213,7 @@ export const ComposeRecipeSuggestionResultSchema = z.object({
     /** Total minutes, for the time pill beside the difficulty one. */
     totalTimeMinutes: z.number().int().positive().nullable().optional(),
     ingredients: z.array(ComposeItemSchema),
-    tags: z.array(ComposeItemSchema),
+    tags: z.array(ComposeTagSchema),
 });
 
 /**

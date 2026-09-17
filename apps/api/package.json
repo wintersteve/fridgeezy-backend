@@ -207,6 +207,14 @@
                     "cwd": "apps/api",
                     "envFile": "apps/api/.env.dev"
                 }
+            },
+            "eval-dish-pairings": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/dish-pairings.eval.ts",
+                    "cwd": "apps/api",
+                    "envFile": "apps/api/.env.dev"
+                }
             }
         }
     },

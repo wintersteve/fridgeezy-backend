@@ -11,6 +11,8 @@ export * from './cooking-action-aliases';
 export * from './cooking-action-categories';
 export * from './cooking-actions';
 export * from './dietary-rules';
+export * from './dish-pairing-sets';
+export * from './dish-pairings';
 export * from './ingredient-aliases';
 export * from './ingredient-merge-reviews';
 export * from './ingredients';

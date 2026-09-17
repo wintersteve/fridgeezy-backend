@@ -179,7 +179,15 @@ export function assertMeteredMountsAreGated(): void {
     const ungated = MOUNTS.filter(({ tier }) => tier === "metered").flatMap(
         ({ prefix, router }) =>
             collectRoutes(router, prefix).filter(
-                (route) => !route.quotaBucket && !route.requiresEntitlement
+                (route) =>
+                    !route.quotaBucket &&
+                    !route.requiresEntitlement &&
+                    // The third answer to "what does this cost": nothing, on
+                    // purpose. `allowFree` attaches the claim to the route, so
+                    // this stays a check on omissions rather than becoming a
+                    // list of paths that drifts away from the routing — see
+                    // `allow-free.ts`.
+                    !route.freeReason
             )
     );
 

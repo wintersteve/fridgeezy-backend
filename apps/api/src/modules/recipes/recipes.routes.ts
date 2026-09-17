@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import { allowFree } from "../../middleware/allow-free";
 import { requireEntitlement } from "../../middleware/require-entitlement";
 import { requireQuota } from "../../middleware/require-quota";
 
@@ -67,6 +68,55 @@ router.post("/import", requireQuota("photos"), RecipesController.import);
  * most worth having somebody experience once.
  */
 router.post("/:recipeId/compose", requireQuota("recipes"), RecipesController.compose);
+
+/**
+ * What goes with this dish — the shortlist the compose picker offers.
+ *
+ * **Two routes for one shape, and the split is not tidiness.** `requireQuota`
+ * checks the allowance at the DOOR, before the handler runs, so a single
+ * metered endpoint would answer 402 to a reader with a spent allowance — for a
+ * read that costs nothing. The compose sheet would stop opening for exactly the
+ * people who have used it most.
+ *
+ * So the read is free and says so (`allowFree`, which is what keeps
+ * `assertMeteredMountsAreGated` a check on omissions rather than a list of
+ * exempt paths), and the generation that fills its cache is an ordinary metered
+ * route reached from a deliberate press. A pairing set is written once per dish
+ * and read by everybody afterwards, so the second route is rare by
+ * construction — and it waives the charge when another reader got there first.
+ *
+ * Three segments against two, so Express never has to choose between them
+ * whatever order they are registered in.
+ */
+router.post(
+    "/:recipeId/pairings",
+    allowFree("cache read; the generation that fills it is metered separately"),
+    RecipesController.pairings
+);
+router.post(
+    "/:recipeId/pairings/generate",
+    requireQuota("recipes"),
+    RecipesController.generatePairings
+);
+
+/**
+ * Name the dinner that was put together around this dish.
+ *
+ * Free of QUOTA and not of the entitlement the mount carries — the full
+ * argument is on the use case, but the short version is that every course on
+ * the menu is metered as it generates, a `recipes` unit is what a whole
+ * composition costs, and a 402 at the door would refuse somebody a four-word
+ * heading in the middle of a commit they had already paid for.
+ *
+ * Three segments, and its middle one is a literal, so Express never has to
+ * choose between this and `/:recipeId/pairings/generate` whatever order they
+ * are registered in.
+ */
+router.post(
+    "/:recipeId/menu/title",
+    allowFree("names a menu whose courses are each metered as they generate"),
+    RecipesController.menuTitle
+);
 
 // A conversation about a dish, not a rewrite of it — `questions`, like `/chat`.
 router.post("/:recipeId/chat", requireQuota("questions"), RecipesController.chat);

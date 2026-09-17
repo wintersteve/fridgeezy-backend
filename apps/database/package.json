@@ -337,6 +337,22 @@
                     "cwd": "apps/database",
                     "forwardAllArgs": true
                 }
+            },
+            "check-menu-privacy": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/check-menu-privacy.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
+            "warm-dish-pairings": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/warm-dish-pairings.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
             }
         }
     },

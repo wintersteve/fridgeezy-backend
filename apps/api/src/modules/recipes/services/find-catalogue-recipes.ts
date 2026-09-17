@@ -413,18 +413,34 @@ export async function findCatalogueRecipes(options: {
 /**
  * `find_recipes` hands ingredients/tags back as jsonb arrays of {id, name}.
  *
- * Exported for `fetch-menu-pairings`, which decodes the identical shape out of
- * `menu_pairings_for_recipe` — the two RPCs build those aggregates with the same
- * `jsonb_build_object('id', …, 'name', …)`, so they get the same decoder rather
- * than a second one that could drift.
+ * Exported for `fetch-menu-pairings` and `fetch-dish-pairings`, which decode the
+ * identical shape out of `menu_pairings_for_recipe` and
+ * `pairing_candidates_for_recipe` — every one of those RPCs builds the
+ * aggregate with the same `jsonb_build_object('id', …, 'name', …)`, so they get
+ * the same decoder rather than a second one that could drift.
+ *
+ * **`type` is carried when the aggregate has one, and that is a TAG's field.**
+ * It was dropped outright, which is invisible on an ingredient (they have no
+ * type) and load-bearing on a tag: `groupRecipeTags` derives `RecipeCard`'s
+ * eyebrow entirely from it, so a stripped type is a card with no "ITALIAN ·
+ * PASTA" line above its name and no error anywhere. Optional rather than
+ * required because the ingredient aggregates legitimately have none, and
+ * because an older RPC that has not been replaced yet still answers without it
+ * — a missing eyebrow is the same degradation those callers already had.
  */
-export function toNamedRows(value: unknown): Array<{ id: string; name: string }> {
+export function toNamedRows(
+    value: unknown
+): Array<{ id: string; name: string; type?: string }> {
     if (!Array.isArray(value)) return [];
 
     return value.flatMap((entry) => {
         if (!entry || typeof entry !== "object") return [];
-        const { id, name } = entry as { id?: unknown; name?: unknown };
+        const { id, name, type } = entry as {
+            id?: unknown;
+            name?: unknown;
+            type?: unknown;
+        };
         if (typeof id !== "string" || typeof name !== "string") return [];
-        return [{ id, name }];
+        return [typeof type === "string" ? { id, name, type } : { id, name }];
     });
 }

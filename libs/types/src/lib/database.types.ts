@@ -296,6 +296,71 @@ export type Database = {
         }
         Relationships: []
       }
+      dish_pairing_sets: {
+        Row: {
+          asked_courses: string[]
+          courses: string[]
+          created_at: string
+          generated_at: string
+          main_dish_key: string
+          model: string | null
+          topped_up_courses: string[]
+        }
+        Insert: {
+          asked_courses?: string[]
+          courses?: string[]
+          created_at?: string
+          generated_at?: string
+          main_dish_key: string
+          model?: string | null
+          topped_up_courses?: string[]
+        }
+        Update: {
+          asked_courses?: string[]
+          courses?: string[]
+          created_at?: string
+          generated_at?: string
+          main_dish_key?: string
+          model?: string | null
+          topped_up_courses?: string[]
+        }
+        Relationships: []
+      }
+      dish_pairings: {
+        Row: {
+          course_type: string
+          created_at: string
+          dish_key: string
+          id: string
+          main_dish_key: string
+          rank: number
+        }
+        Insert: {
+          course_type: string
+          created_at?: string
+          dish_key: string
+          id?: string
+          main_dish_key: string
+          rank?: number
+        }
+        Update: {
+          course_type?: string
+          created_at?: string
+          dish_key?: string
+          id?: string
+          main_dish_key?: string
+          rank?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dish_pairings_main_dish_key_fkey"
+            columns: ["main_dish_key"]
+            isOneToOne: false
+            referencedRelation: "dish_pairing_sets"
+            referencedColumns: ["main_dish_key"]
+          },
+        ]
+      }
       ingredient_aliases: {
         Row: {
           alias: string
@@ -1927,6 +1992,7 @@ export type Database = {
           origin: string | null
           profile_id: string
           recipe_id: string
+          source_recipe_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1938,6 +2004,7 @@ export type Database = {
           origin?: string | null
           profile_id: string
           recipe_id: string
+          source_recipe_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1949,6 +2016,7 @@ export type Database = {
           origin?: string | null
           profile_id?: string
           recipe_id?: string
+          source_recipe_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1987,6 +2055,20 @@ export type Database = {
             referencedRelation: "recipes"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "recipe_variants_source_recipe_id_fkey"
+            columns: ["source_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_dietary"
+            referencedColumns: ["recipe_id"]
+          },
+          {
+            foreignKeyName: "recipe_variants_source_recipe_id_fkey"
+            columns: ["source_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
         ]
       }
       recipes: {
@@ -2007,6 +2089,7 @@ export type Database = {
           identity_cuisine: string | null
           image: string | null
           is_generated: boolean
+          is_personal: boolean
           kcal: number | null
           name: string
           name_ascii: string | null
@@ -2040,6 +2123,7 @@ export type Database = {
           identity_cuisine?: string | null
           image?: string | null
           is_generated?: boolean
+          is_personal?: boolean
           kcal?: number | null
           name: string
           name_ascii?: string | null
@@ -2073,6 +2157,7 @@ export type Database = {
           identity_cuisine?: string | null
           image?: string | null
           is_generated?: boolean
+          is_personal?: boolean
           kcal?: number | null
           name?: string
           name_ascii?: string | null
@@ -2545,6 +2630,15 @@ export type Database = {
         Args: { difficulty: string; pref: string }
         Returns: number
       }
+      dish_meets_constraints: {
+        Args: {
+          p_blacklist: string[]
+          p_dietary: string[]
+          p_dish_id: string
+          p_is_recipe: boolean
+        }
+        Returns: boolean
+      }
       display_name_from_identity: { Args: { meta: Json }; Returns: string }
       entitlement_is_active: { Args: { p_user_id: string }; Returns: boolean }
       find_dishes_using_components: {
@@ -2713,6 +2807,34 @@ export type Database = {
         Args: { input_text: string }
         Returns: string
       }
+      pairing_candidates_for_recipe: {
+        Args: {
+          p_blacklist?: string[]
+          p_course_types: string[]
+          p_dietary?: string[]
+          p_difficulty?: string
+          p_include?: Json
+          p_per_course?: number
+          p_recipe_id: string
+        }
+        Returns: {
+          course_type: string
+          description: string
+          difficulty: string
+          dish_id: string
+          dish_key: string
+          image: string
+          ingredients: Json
+          is_recipe: boolean
+          name: string
+          name_en: string
+          pair_rank: number
+          short_description: string
+          source: string
+          tags: Json
+          total_time_minutes: number
+        }[]
+      }
       pantry_confidence: {
         Args: {
           p_age_days: number
@@ -2798,6 +2920,32 @@ export type Database = {
         }[]
       }
       recipe_is_visible: { Args: { p_created_by: string }; Returns: boolean }
+      record_dish_pairings: {
+        Args: {
+          p_asked?: string[]
+          p_courses: string[]
+          p_main_dish_key: string
+          p_merge?: boolean
+          p_model?: string
+          p_pairings: Json
+          p_topped_up?: string[]
+        }
+        Returns: {
+          asked_courses: string[]
+          courses: string[]
+          created_at: string
+          generated_at: string
+          main_dish_key: string
+          model: string | null
+          topped_up_courses: string[]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "dish_pairing_sets"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       record_ingredient_substitution: {
         Args: {
           p_ratio?: string
@@ -2828,7 +2976,12 @@ export type Database = {
         }
       }
       record_menu: {
-        Args: { p_courses: Json; p_main_recipe_id: string; p_name: string }
+        Args: {
+          p_courses: Json
+          p_main_recipe_id: string
+          p_name: string
+          p_private?: boolean
+        }
         Returns: {
           course_count: number
           created_at: string
@@ -2909,6 +3062,7 @@ export type Database = {
           origin: string | null
           profile_id: string
           recipe_id: string
+          source_recipe_id: string | null
           updated_at: string
         }
         SetofOptions: {
@@ -2919,7 +3073,12 @@ export type Database = {
         }
       }
       save_menu: {
-        Args: { p_courses: Json; p_main_recipe_id: string; p_name: string }
+        Args: {
+          p_courses: Json
+          p_main_recipe_id: string
+          p_name: string
+          p_private?: boolean
+        }
         Returns: {
           course_count: number
           created_at: string

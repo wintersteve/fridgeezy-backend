@@ -19,3 +19,8 @@ export * from "./read-recipe-from-image";
 export * from "./search-recipes";
 export * from "./search-recipe-suggestions";
 export * from "./generate-compose-suggestions";
+export * from "./fetch-dish-pairings";
+export * from "./generate-dish-pairings";
+export * from "./load-seed-dish";
+export * from "./load-seed-recipe";
+export * from "./menu-title";

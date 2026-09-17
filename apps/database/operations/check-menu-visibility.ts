@@ -172,6 +172,12 @@ async function main() {
         // The private fixture, composed through the real write path
         // ---------------------------------------------------------------
 
+        // No `p_private` on purpose: this menu contains an OWNED recipe, so
+        // `record_menu` derives the owner from `recipes.created_by` and the
+        // parameter cannot make it any more private than it already is. That is
+        // the distinction the migration keeps — ownership from a course is a
+        // hard constraint, `p_private` only ever adds to it — and testing it
+        // without the flag is what proves the two paths are independent.
         const privateMenu = await owner.client.rpc("save_menu", {
             p_name: `${FIXTURE_PREFIX} private`,
             p_main_recipe_id: ownedId,
@@ -411,6 +417,17 @@ async function main() {
         // Everything above passes if menus are hidden from everybody. This is
         // what tells that apart from the rule working.
 
+        // `p_private: false` is REQUIRED here and has to be said out loud, which
+        // it did not before `20260916000002`. That migration made the parameter
+        // default to TRUE — a caller that cannot say where its dishes came from
+        // cannot vouch for them, so an unqualified `save_menu` now files the
+        // combination under the caller instead of into the shared corpus.
+        //
+        // This fixture's whole subject is the shared path, so it declares it.
+        // Omitting it does not fail loudly: the menu is written, the save
+        // succeeds, and only the two reads below go quiet — which is exactly
+        // the shape of failure this half of the suite exists to catch, arrived
+        // at from the other direction.
         const sharedMenu = await owner.client.rpc("save_menu", {
             p_name: `${FIXTURE_PREFIX} shared`,
             p_main_recipe_id: publicMainId,
@@ -418,6 +435,7 @@ async function main() {
                 { recipeId: publicMainId, courseType: "main" },
                 { recipeId: sideId, courseType: "side" },
             ],
+            p_private: false,
         });
 
         if (sharedMenu.error || !sharedMenu.data) {

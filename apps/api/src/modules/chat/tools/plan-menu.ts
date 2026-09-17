@@ -136,6 +136,19 @@ export interface MenuMain {
      * suggestion tap passes along.
      */
     difficulty: string | null;
+    /**
+     * Total minutes, for the time on the card.
+     *
+     * Carried for the same reason `difficulty` is, and it was missed when this
+     * shape was written: the card drew a 56pt plate and a title, so there was
+     * nowhere for a time to go. The client draws the main with the app's own
+     * recipe and idea cards now, and those print a time — so without this the
+     * one card in the thread that IS the answer was the only one missing it.
+     *
+     * `found` is a `RecipeSuggestionItem` and has always carried it; this is a
+     * field being forwarded rather than looked up.
+     */
+    totalTimeMinutes: number | null;
     tags: string[];
 }
 
@@ -177,6 +190,7 @@ export async function planMenuHandler(
               suggestionId: isRecipe ? null : (found.id ?? null),
               image: found.image ?? null,
               difficulty: found.difficulty ?? null,
+              totalTimeMinutes: found.totalTimeMinutes ?? null,
               tags: found.tags.map((tag) => tag.name),
           }
         : null;
@@ -225,6 +239,7 @@ export const planMenuTool = {
                         suggestionId: z.string().nullable(),
                         image: z.string().nullable(),
                         difficulty: z.string().nullable(),
+                        totalTimeMinutes: z.number().nullable(),
                         tags: z.array(z.string()),
                     })
                     .nullable(),

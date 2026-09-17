@@ -32,6 +32,16 @@ export interface RouteInfo {
      * mount carries one of.
      */
     quotaBucket?: string;
+    /**
+     * Why this route is deliberately free, when it sits under a `metered` mount
+     * and carries neither gate.
+     *
+     * Derived here like the two above, from the marker `allowFree` sets on
+     * itself. Present means somebody declared the route free on purpose;
+     * ABSENT on a metered mount is what `assertMeteredMountsAreGated` refuses to
+     * boot on, which is the whole difference between a decision and an omission.
+     */
+    freeReason?: string;
 }
 
 /**
@@ -54,6 +64,8 @@ interface RouterLayer {
                 isEntitlementGate?: boolean;
                 isQuotaGate?: boolean;
                 quotaBucket?: string;
+                isFreeDeclaration?: boolean;
+                freeReason?: string;
             };
         }[];
     };
@@ -104,12 +116,17 @@ export function collectRoutes(router: Router, prefix = ""): RouteInfo[] {
             (handler) => handler.handle?.isQuotaGate === true
         )?.handle?.quotaBucket;
 
+        const freeReason = (layer.route.stack ?? []).find(
+            (handler) => handler.handle?.isFreeDeclaration === true
+        )?.handle?.freeReason;
+
         for (const path of [layer.route.path].flat()) {
             routes.push({
                 methods,
                 path: joinPath(prefix, path),
                 ...(requiresEntitlement ? { requiresEntitlement } : {}),
                 ...(quotaBucket ? { quotaBucket } : {}),
+                ...(freeReason ? { freeReason } : {}),
             });
         }
     }

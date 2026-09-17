@@ -4,6 +4,9 @@ import {
     generateRecipe,
     escalateDifficulty,
     composeRecipe,
+    readDishPairings,
+    generateDishPairingsForRecipe,
+    menuTitle,
     adaptRecipe,
     modifyRecipe,
     personaliseRecipe,
@@ -44,6 +47,42 @@ export class RecipesController {
     ) => {
         try {
             return composeRecipe(req, res);
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    static pairings = async (
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) => {
+        try {
+            return readDishPairings(req, res);
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    static generatePairings = async (
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) => {
+        try {
+            return generateDishPairingsForRecipe(req, res);
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    static menuTitle = async (
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) => {
+        try {
+            return menuTitle(req, res);
         } catch (err) {
             next(err);
         }

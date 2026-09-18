@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import { requireSupabaseUser } from "../middleware/require-auth";
 import { requireEntitlement } from "../middleware/require-entitlement";
+import { AccountRoutes } from "../modules/account";
 import { BillingPublicRoutes, BillingRoutes } from "../modules/billing";
 import { ChatRoutes } from "../modules/chat";
 import { assertSearchFieldsAreGated } from "../modules/chat/tools";
@@ -11,6 +12,7 @@ import { RecipesPublicRoutes, RecipesRoutes } from "../modules/recipes";
 import { SpeechRoutes } from "../modules/speech";
 import { SubstitutesRoutes } from "../modules/substitutes";
 import { SuggestionsRoutes } from "../modules/suggestions";
+import { TechniquesRoutes } from "../modules/techniques";
 import { collectRoutes, RouteInfo } from "../utils/collect-routes";
 
 /**
@@ -87,6 +89,15 @@ interface Mount {
  * - **`/prompts`** — a caller reading or deleting the record of what they
  *   themselves typed. No spend, and gating it would put a paywall in front of
  *   somebody trying to delete their own data.
+ * - **`/account`** — deleting your own account. Free for the reason `/prompts`
+ *   is, one step larger: the caller is leaving, and a gate in front of the exit
+ *   is the one that can never be defensible. It is also what App Store
+ *   5.1.1(v) requires of an app that offers account creation.
+ * - **`/techniques`** — the same content-addressing argument as synthesis, on a
+ *   vocabulary that is CLOSED. It is keyed on a `cooking_actions` row and
+ *   refuses anything else, so the whole route can only ever cost that table
+ *   once (~148 images) no matter who asks or how often. A cost that cannot grow
+ *   with use is not a marginal cost, which is the test `FEATURE_TIER` applies.
  */
 const MOUNTS: Mount[] = [
     // The five AI mounts are `metered` since 2026-09-03: a signed-in account may
@@ -103,7 +114,14 @@ const MOUNTS: Mount[] = [
     // Splits internally: /synthesize is free, /command carries its own gate.
     { prefix: "/speech", router: SpeechRoutes, tier: "account" },
     { prefix: "/prompts", router: PromptsRoutes, tier: "account" },
+    // Free: keyed on a closed table, so it converges on drawn and stops
+    // costing. See the note above and `techniques.routes.ts`.
+    { prefix: "/techniques", router: TechniquesRoutes, tier: "account" },
     { prefix: "/billing", router: BillingRoutes, publicRouter: BillingPublicRoutes, tier: "account" },
+    // The way out. Authenticated so the id comes from the token rather than the
+    // body — see `delete-account.ts`, where that is the whole of the
+    // authorisation.
+    { prefix: "/account", router: AccountRoutes, tier: "account" },
 ];
 
 /** Routes registered directly on the REST router rather than in a feature module. */

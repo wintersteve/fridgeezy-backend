@@ -826,6 +826,24 @@ Things that bite:
   client promising two more recipes while the server answers 402 is this
   feature's worst failure, and it is exactly what `entitlement_is_active` /
   `isEntitlementActive` live with because they have to.
+- **The events are kept for 90 DAYS and then swept** (`20260918000002`).
+  `ai_usage_events` is one row per charged call with no uniqueness and, until
+  then, nothing that ever deleted one — the fastest-growing per-user table here
+  and the only one that grows purely as a side effect of the product working: at
+  the subscriber ceilings that is up to 450 rows a week, ~23,000 a year for one
+  heavy subscriber. Only the current PERIOD is ever read (`created_at >=
+  period_start`, one week), and the welcome allowance is decided by comparing
+  that period start against the profile's `created_at` anchor rather than by
+  counting events — so no prune can change what anybody is allowed. Ninety
+  rather than seven because the rows are also the audit the table's own header
+  asks for, and a disputed count arrives weeks after the charge.
+  **It is a daily `pg_cron` job, never a trigger**: an event log was chosen over
+  a counter partly to keep read-modify-write off the request path, and a
+  delete-on-insert would put one back on the hottest gated path to collect rows
+  whose age has nothing to do with that request. First job ever scheduled on
+  `pg_cron` — `delete_orphan_generated_recipes` stays unscheduled because it
+  deletes RECIPES and still cannot tell a draft from a catalogue entry, a hazard
+  this one does not carry.
 - **Charging happens on the way OUT, on a 2xx**, never on arrival: a quota that
   bills for failures feels like a swindle. The honest limit is that an SSE route
   writes its 200 before the first model call, so a generation that dies
@@ -896,6 +914,30 @@ split genuinely ran *through* the recipes module (`generate` free, `compose`
 paid), which a mount cannot express. Once every AI feature became paid, no
 module was split but `/speech`, and a mount could express it again — recovering
 the property auth has always had, that an omission cannot give anything away.
+
+**`/account/delete` is free for the same reason `/prompts` is, one step
+larger** (2026-09-18). `POST /rest/account/delete` erases the caller's account:
+one `auth.admin.deleteUser` and nothing else, because every profile-scoped table
+is `on delete cascade` from `profiles`, which is cascade from `auth.users` —
+seventeen tables, checked against the database rather than assumed. A gate in
+front of the exit is the one that can never be defensible, and App Store
+5.1.1(v) requires the door to exist at all. Three things about it:
+
+- **The id comes from the token, never from the body.** `supabaseAdmin` bypasses
+  RLS, so `req.supabaseUserId` is the whole of the authorisation; a route taking
+  a `userId` would be an account-deletion oracle for anyone holding any valid
+  token.
+- **Two cascades look alarming and are correct.** `recipes.created_by` and
+  `menus.owner_profile_id` both cascade, and both are NULL for shared content by
+  design — a non-null `created_by` is an IMPORTED recipe (private to the
+  importer) and an owned menu is a private composition. The catalogue a
+  departing account generated stays, and so do the menus other people saved.
+  Verified end to end against the local stack: profile, interactions, prompts,
+  shopping lists and usage events all gone, the shared recipe still there.
+- **POST rather than DELETE**, and that is a client-shaped decision: the app's
+  one helper for this API (`postBackendJson`) is POST-only and carries the token
+  refresh, the 401/402 mapping and the connectivity report. `/billing/reconcile`
+  is the same shape.
 
 **`/speech` is the one exception, and the only per-route gate left in the app.**
 Synthesis is free because `getOrSynthesizeSpeech` is content-addressed — the
@@ -1558,6 +1600,30 @@ measured against, and nothing will fail to tell you.
 statement about what a weeknight allows, not a fitted value — there is no
 distribution to fit it to — so it is safe to move by hand and no `calibrate*`
 target has any say. Do not add one.
+
+### View history: fifty dishes, and a trigger that keeps it there
+
+`profile_recipe_interactions` holds one row per (profile, recipe, type), and the
+client UPSERTS `viewed` on every recipe open — so that half grew with every
+distinct dish an account had ever looked at, forever, and nothing removed a row.
+`prune_viewed_recipe_interactions` (`20260918000001`) keeps the newest **50**
+per profile: an `after insert … when (new.interaction_type = 'viewed')` trigger,
+plus a one-off backfill for the accounts that already had thousands. Same shape
+as `record_prompt`'s 200 and `prune_profile_chat_conversations`' 60, and the
+same two reasons — a product statement about how far back a history is worth
+scrolling, and data minimisation on the most personal thing here after the
+prompts.
+
+Three things to know, all of them in the migration header:
+
+- **`viewed` only.** `favourite` is the reader's own kept data and un-hearting
+  needs every row of the dish; `cooked` is a record. Neither is ever pruned.
+- **A re-view cannot prune.** It is an UPSERT that UPDATES `created_at`, and the
+  trigger is `after insert` — an update cannot raise the count.
+- **`delete_orphan_generated_recipes` is the coupling.** It keeps a generated
+  recipe alive while ANY interaction row points at it, so a pruned view stops
+  protecting a dish nothing else references. Latent while that sweep stays
+  unscheduled (`20260801000015`); the two become live on the same day.
 
 ### Prompt history: what the cook actually typed
 

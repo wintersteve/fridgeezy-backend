@@ -129,10 +129,6 @@ export function replayToolCalls(toolCalls: ToolCall[], nonce: string): ToolCall[
     }));
 }
 
-/** Exposed for tests and for the dev tooling; clears the process-local memo. */
-export function clearRoutingCache(): void {
-    entries.clear();
-}
 
 /**
  * Drop a cached route that turned out to be wrong.

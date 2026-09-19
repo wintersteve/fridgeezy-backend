@@ -58,6 +58,17 @@ import sharp from "sharp";
 const TARGETS = [
     { bucket: "cuisine_cards", width: 560, quality: 82 },
     { bucket: "cuisine_banners", width: null, quality: 82 },
+    /*
+      The compose-menu card's three course tiles, and the worst ratio of the
+      three: six PNGs at ~1.5 MB each, drawn as small overlapping circles beside
+      the card's title. `BLEED_TILE_SIZE` works out at 134pt against a 343pt
+      reference card, so 420px covers a 3x screen — the same width the recipe
+      pipeline's own card variant settled on, and about a third of the source.
+
+      They were simply never added here when this operation was written, which
+      is why the home feed was still pulling ~4.5 MB to fill three avatars.
+    */
+    { bucket: "dish_tiles", width: 420, quality: 82 },
 ] as const;
 
 const force = process.argv.includes("--force");

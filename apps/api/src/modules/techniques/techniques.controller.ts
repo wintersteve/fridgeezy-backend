@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 
-import { illustrateTechnique } from "./usecases/illustrate-technique";
+import { illustrateTechnique } from "./usecases";
 
 export class TechniquesController {
     static illustrate = async (

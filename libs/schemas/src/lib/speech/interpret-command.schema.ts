@@ -49,12 +49,3 @@ export const InterpretCommandResponseSchema = z.object({
     transcript: z.string(),
 });
 
-export type CookCommandAction = z.infer<typeof CookCommandActionSchema>;
-
-export type InterpretCommandRequestDto = z.infer<
-    typeof InterpretCommandRequestSchema
->;
-
-export type InterpretCommandResponseDto = z.infer<
-    typeof InterpretCommandResponseSchema
->;

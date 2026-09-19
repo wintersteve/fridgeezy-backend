@@ -340,6 +340,35 @@ export const promoteSuggestion = createStreamHandler({
 
         const suggestion = suggestionResult.value;
 
+        // Kick off image generation the moment the dish has a NAME, which is
+        // here — ahead of the reuse checks below, the metadata await and the
+        // recipe model, so it overlaps every one of them.
+        //
+        // It is the long pole and it is not close. Measured 2026-09-19 against
+        // the shipping prompt: the picture takes ~12.5s (`gemini-3.1-flash-image`,
+        // median of 7, range 8.5-16.1) while the recipe text streams in ~8-12s
+        // (gpt-4.1 at ~148 tok/s), so the hero lands several seconds AFTER the
+        // reader already has a finished recipe in front of them. Everything
+        // between the name and the model call is time the reader spends looking
+        // at an empty slot, which is what moving it above the two reuse round
+        // trips buys back.
+        //
+        // Safe on every branch below. A dish that turns out to exist already
+        // has art at the deterministic path, so this short-circuits on the
+        // storage listing without touching the image model — the same no-op it
+        // has always been for a re-promotion.
+        //
+        // Fire-and-forget: persistence reads the deterministic URL either way.
+        // Tracked so Lambda can let it finish before freezing the environment.
+        trackBackgroundTask(
+            generateAndUploadRecipeImage(
+                suggestion.name,
+                suggestion.ingredients.map((ingredient) => ingredient.name)
+            )
+        ).catch((error) => {
+            console.error("Image generation failed:", error);
+        });
+
         // 1b. Reuse-before-generate: if a recipe for this dish already exists
         // (same canonical name, not a variant), hand it back instead of
         // generating a duplicate. Covers a fresh suggestion for an
@@ -413,16 +442,6 @@ export const promoteSuggestion = createStreamHandler({
             servings: body.servings,
             tags: tagNames,
         };
-
-        // Kick off image generation now (name is known), so it runs in parallel
-        // with the entire recipe generation instead of waiting for the header.
-        // Fire-and-forget: persistence reads the deterministic URL either way.
-        // Tracked so Lambda can let it finish before freezing the environment.
-        trackBackgroundTask(
-            generateAndUploadRecipeImage(suggestion.name)
-        ).catch((error) => {
-            console.error("Image generation failed:", error);
-        });
 
         // 6. Call the model
         const stream = generateStream({

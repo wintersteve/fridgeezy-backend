@@ -31,6 +31,7 @@ import {
     INGREDIENT_CATEGORY_GUIDE,
 } from "../../services";
 import { generateAndUploadRecipeImage } from "../../services/create-recipe-image";
+import { generateRecipeStepArt } from "../../services/create-step-art";
 import { persistRecipeWithIngredientIds } from "../../services/persist-recipe";
 
 /**
@@ -215,7 +216,9 @@ export const generateRecipe = createStreamHandler({
         // with the entire recipe generation instead of waiting for the header.
         // Fire-and-forget: persistence reads the deterministic URL either way.
         // Tracked so Lambda can let it finish before freezing the environment.
-        trackBackgroundTask(generateAndUploadRecipeImage(suggestion.name)).catch((error) => {
+        trackBackgroundTask(
+            generateAndUploadRecipeImage(suggestion.name, ingredientNames)
+        ).catch((error) => {
             console.error("Image generation failed:", error);
         });
 
@@ -268,9 +271,33 @@ export const generateRecipe = createStreamHandler({
                         `Recipe persisted successfully with ID: ${persistResult.value}`
                     );
 
+                    /*
+                      Cook mode's per-step band, as one batch.
+
+                      Here rather than beside the hero above, because it needs
+                      what the hero does not: the STEPS, which only exist once
+                      the model has finished and the rows are written. The hero
+                      can start the moment a name is known and runs alongside
+                      the whole generation; this can only start at the end.
+
+                      Off unless `RECIPE_STEP_ART_ENABLED` is set —
+                      `generateRecipeStepArt` returns immediately otherwise, so
+                      the call is unconditional and the switch lives in one
+                      place. Tracked like the hero so Lambda finishes it before
+                      freezing, and caught like the hero because a recipe that
+                      saved must not fail over its decoration.
+                    */
+                    trackBackgroundTask(
+                        generateRecipeStepArt(persistResult.value)
+                    ).catch((error) => {
+                        console.error("Step art generation failed:", error);
+                    });
+
                     // Delete the suggestion after successful recipe creation
                     const suggestionsRepo = new SuggestionsRepository();
-                    const deleteResult = await suggestionsRepo.delete(body.suggestionId);
+                    const deleteResult = await suggestionsRepo.delete(
+                        body.suggestionId
+                    );
 
                     if (deleteResult.success) {
                         console.log(

@@ -24,7 +24,13 @@ export interface CatalogueRecipe {
      */
     totalTimeMinutes: number | null;
     ingredients: Array<{ id: string; name: string }>;
-    tags: Array<{ id: string; name: string }>;
+    /**
+     * `type` is declared because `toNamedRows` already carries it and
+     * `find_recipes` already sends it — this type was the one place it was
+     * being dropped, silently and at compile time only, which is the worst
+     * of the three ways to lose it. See `toNamedRows` for what it costs.
+     */
+    tags: Array<{ id: string; name: string; type?: string }>;
 }
 
 /**

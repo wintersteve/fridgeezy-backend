@@ -3,6 +3,24 @@ import { genai } from "../../../client";
 // Extended config to include parameters not yet in SDK types
 export interface GenerateImageOptions {
     prompt: string;
+    /**
+     * Images the model is shown alongside the prompt, as a STYLE anchor.
+     *
+     * These models take image parts as input, so a picture can carry what prose
+     * struggles to pin down — camera height, how loose the wash is, how much of
+     * a vessel's inner wall shows. The 2026-08-04 camera ladder exists because
+     * those are exactly the qualities that needed rendering to be judged at all.
+     *
+     * A reference is a SUBJECT MAGNET and that is the whole risk: shown a bowl
+     * of pesto, the model will happily make the next dish green and put it in
+     * that bowl. Whatever sends these must also tell the model what not to take
+     * — see `buildRecipeImagePrompt`'s `styleReference`, which is the clause
+     * written for it.
+     *
+     * Sent BEFORE the text, which is the order these models expect a reference
+     * in: the instruction then reads as being about the picture just shown.
+     */
+    referenceImages?: { data: string; mimeType: string }[];
     numberOfImages?: number;
     aspectRatio?: "1:1" | "3:4" | "4:3" | "9:16" | "16:9";
     imageSize?: "1K" | "2K" | "4K";
@@ -73,13 +91,28 @@ const DEFAULT_IMAGE_MODEL: NonNullable<GenerateImageOptions["model"]> =
 export async function generateImage(
     options: GenerateImageOptions
 ): Promise<GeneratedImage> {
-    const { prompt, model = DEFAULT_IMAGE_MODEL, aspectRatio } = options;
+    const {
+        prompt,
+        model = DEFAULT_IMAGE_MODEL,
+        aspectRatio,
+        referenceImages,
+    } = options;
 
     try {
         // Use generateContent instead of generateImages for Nano Banana models
         const response = await genai.models.generateContent({
             model,
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            contents: [
+                {
+                    role: "user",
+                    parts: [
+                        ...(referenceImages ?? []).map((image) => ({
+                            inlineData: image,
+                        })),
+                        { text: prompt },
+                    ],
+                },
+            ],
             config: {
                 responseModalities: ["IMAGE"],
                 imageConfig: {

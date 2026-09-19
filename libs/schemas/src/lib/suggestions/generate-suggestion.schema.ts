@@ -65,9 +65,14 @@ export const GenerateSuggestionResponseSchema = z.object({
      *
      * A suggestion is a card that exists BEFORE its recipe, so there is nothing
      * to derive this from — unlike a recipe, whose total is computed from the
-     * prep and cook times it already stores. The client bands it rather than
-     * printing it (`timeBandFor`), which is the whole reason an estimate is
-     * acceptable here: it only has to land in the right third.
+     * prep and cook times it already stores.
+     *
+     * **The client used to BAND this rather than print it**, which was the whole
+     * reason an estimate was acceptable: it only had to land in the right third.
+     * That is no longer true — the bands were deleted in favour of the figure,
+     * because 29 of 40 catalogue rows are exactly 45 minutes and four cards in
+     * five therefore read "Takes a while". So an estimate written here is now
+     * shown to the minute, and it should be produced with that in mind.
      *
      * Optional, with the same shape and for the same reason as
      * `InstructionSchema.durationSeconds` — the model occasionally writes it as

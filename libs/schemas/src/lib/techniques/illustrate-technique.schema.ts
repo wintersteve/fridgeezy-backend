@@ -37,10 +37,6 @@ export const IllustrateTechniqueResponseSchema = z.object({
     generated: z.boolean(),
 });
 
-export type IllustrateTechniqueRequestDto = z.infer<
-    typeof IllustrateTechniqueRequestSchema
->;
-
 export type IllustrateTechniqueResponseDto = z.infer<
     typeof IllustrateTechniqueResponseSchema
 >;

@@ -151,6 +151,12 @@ export async function classifyIngredientComponent(
         const batch = names.slice(i, i + BATCH);
         const { text } = await generateCompletion({
             model: { openai: model },
+            // Unlabelled until 2026-09-18, and this and its dietary twin were
+            // between them a THIRD of every model call in production — so a
+            // third of the usage table read `(none)` and could not be
+            // attributed, costed or ruled out. `label` is optional in the type
+            // and that is the only reason it was possible to forget.
+            label: "ingredients.classify-component",
             system: SYSTEM_PROMPT,
             user: batch.join("\n"),
             // A name, a kind and sometimes a dish name. A cap that truncates

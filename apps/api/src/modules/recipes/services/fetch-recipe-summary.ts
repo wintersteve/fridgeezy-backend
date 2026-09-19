@@ -56,7 +56,13 @@ export interface RecipeSummary {
      */
     createdBy?: string | null;
     ingredients: Array<{ id: string; name: string }>;
-    tags: Array<{ id: string; name: string }>;
+    /**
+     * `type` is carried because `groupRecipeTags` derives a card's eyebrow
+     * entirely from it — a stripped type is a card with no "ITALIAN · PASTA"
+     * line above its name and no error anywhere. `toNamedRows` records the
+     * same rule for the RPC path.
+     */
+    tags: Array<{ id: string; name: string; type?: string }>;
 }
 
 /**
@@ -93,7 +99,8 @@ export async function fetchRecipeSummary(
             recipe_tags (
                 tag:tags (
                     id,
-                    name
+                    name,
+                    type
                 )
             )
         `
@@ -124,6 +131,10 @@ export async function fetchRecipeSummary(
         tags: recipe.recipe_tags.map((rt) => ({
             id: rt.tag.id,
             name: rt.tag.name,
+            // `?? undefined` rather than passing the null through: the column
+            // is nullable and the DTO is optional, and a literal null would
+            // reach `groupRecipeTags` as a value it has to test around.
+            type: rt.tag.type ?? undefined,
         })),
     };
 }

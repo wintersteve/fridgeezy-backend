@@ -25,10 +25,6 @@ export const SynthesizeSpeechResponseSchema = z.object({
     audioUrl: z.string(),
 });
 
-export type SynthesizeSpeechRequestDto = z.infer<
-    typeof SynthesizeSpeechRequestSchema
->;
-
 export type SynthesizeSpeechResponseDto = z.infer<
     typeof SynthesizeSpeechResponseSchema
 >;

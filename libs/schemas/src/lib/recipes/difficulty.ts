@@ -3,10 +3,12 @@ import { z } from "zod/v4";
 /**
  * The difficulty scale: its order, its ranking, and what it is CALLED.
  *
- * The one copy both repos read, for the same reason `timeBandFor` next door is
- * — a value the API writes and the client draws needs one definition or the two
- * drift, and difficulty had drifted further than anything else in this codebase
- * before it was pulled together.
+ * The one copy both repos read: a value the API writes and the client draws
+ * needs one definition or the two drift, and difficulty had drifted further
+ * than anything else in this codebase before it was pulled together. (The time
+ * band next door was the other instance of that rule; it is deleted, having
+ * lost its last client-side caller when the cards moved to printing the
+ * figure.)
  *
  * ## The scale starts at the real dish
  *

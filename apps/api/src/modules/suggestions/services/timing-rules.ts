@@ -9,11 +9,18 @@
  *
  * ## What the number is FOR
  *
- * It is banded, not printed. The client renders quick / moderate / long
- * (`timeBandFor`, thresholds at 30 and 90 minutes), so the estimate only has to
- * land in the right band — which is roughly the accuracy an estimate of an
- * unwritten recipe actually has. Asking for a number and showing it to the
- * minute is what the previous version did, and the minute was invented.
+ * **It is PRINTED, and it did not used to be.** The client rendered quick /
+ * moderate / long against thresholds at 30 and 90 minutes, so the estimate only
+ * had to land in the right band — roughly the accuracy an estimate of an
+ * unwritten recipe actually has. The bands are gone: they sorted nothing,
+ * because 29 of 40 catalogue rows are exactly 45 minutes, so the client shows
+ * the figure instead.
+ *
+ * That reopens the risk the banding was covering. Asking for a number and
+ * showing it to the minute is what the version before the bands did, and the
+ * minute was invented. The difference now is that this number is a real model
+ * estimate rather than a hash of the card's id — but it is still an estimate
+ * being read as a fact, so keep the prompt honest about it.
  *
  * ## The overnight exclusion is the load-bearing half
  *

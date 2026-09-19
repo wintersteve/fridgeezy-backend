@@ -73,8 +73,8 @@ export type AdaptationVerdict =
  * downstream to catch it. When the model is unsure whether a Margherita
  * survives losing its mozzarella, the honest answer is not to offer one.
  *
- * Set by hand and NOT fitted — the same exception `TIME_BAND_MAX_MINUTES` and
- * `TASTE_SIGNAL_MIN_OCCURRENCES` occupy. There is no distribution behind it;
+ * Set by hand and NOT fitted — the same exception
+ * `TASTE_SIGNAL_MIN_OCCURRENCES` occupies. There is no distribution behind it;
  * it is a statement about which way to be wrong. Do not add a `calibrate*`
  * target for it.
  */

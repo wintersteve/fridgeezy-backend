@@ -46,8 +46,6 @@ export const AdaptRecipeRequestSchema = z.object({
         .describe("Dietary tag names the adaptation must satisfy"),
 });
 
-export type AdaptRecipeRequestDto = z.infer<typeof AdaptRecipeRequestSchema>;
-
 /**
  * The frame sent INSTEAD of a recipe when the gate declines.
  *

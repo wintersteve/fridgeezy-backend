@@ -41,7 +41,12 @@ export default defineConfig(() => ({
             // the API (local Express and Lambda), so builtins are externalised
             // rather than shimmed — same reason and same fix as libs/bedrock's
             // Smithy/`stream` problem.
-            external: [/^node:/],
+            // `sharp` is a NATIVE module — bundling it produces a build that
+            // cannot load its platform binary. It is external for the same
+            // reason the builtins above are, and it is a real dependency of
+            // this library rather than a peer, because `normaliseGround` is
+            // useless without it.
+            external: [/^node:/, "sharp", "thumbhash"],
         },
     },
 }));

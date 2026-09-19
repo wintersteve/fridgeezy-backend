@@ -1,9 +1,8 @@
-import { generateImage } from "@fridgeezy/genai";
+import { generateImage, normaliseGround } from "@fridgeezy/genai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
 
 import { toDeviceReachable } from "../../../utils/device-reachable-url";
 
-import { normaliseGround } from "./normalise-ground";
 import { buildTechniqueArtPrompt } from "./technique-art-prompt";
 
 const BUCKET = "technique_art";
@@ -13,8 +12,16 @@ const BUCKET = "technique_art";
  * what deglazing means at the same moment resolve to the same path and the
  * second upload simply wins — the `upsert` below, `getOrSynthesizeSpeech`'s
  * resolution of the same race.
+ *
+ * **`.webp`, and the extension is load-bearing the way it is for recipe
+ * images.** These are flat watercolour on a plain ground, the case that file
+ * format measured at 1522 KB as PNG against 58 KB as WebP. Unlike a recipe
+ * there is no `_sm` variant beside it: a recipe writes one because its picture
+ * is drawn at two very different sizes (a ~520pt hero and a ~260pt card slot),
+ * and a technique plate has exactly one home — the width of a chat bubble. A
+ * second object nobody asks for is storage and an upload for nothing.
  */
-const storagePath = (action: string): string => `${action}.jpg`;
+const storagePath = (action: string): string => `${action}.webp`;
 
 // Local dev otherwise hands the client a `127.0.0.1` URL, which on a physical
 // device is the device itself — the image fails to load with no error at all.
@@ -129,11 +136,10 @@ export async function getOrGenerateTechniqueArt(
     const { error: uploadError } = await supabaseAdmin.storage
         .from(BUCKET)
         .upload(path, image, {
-            // Always JPEG, whatever the model returned: the correction decodes
+            // Always WebP, whatever the model returned: the correction decodes
             // and re-encodes, so the response's own mime type describes the
-            // input rather than the bytes going up. The storage path has said
-            // `.jpg` since this bucket was created.
-            contentType: "image/jpeg",
+            // input rather than the bytes going up.
+            contentType: "image/webp",
             // Two readers asking at once hash to one path; last upload wins
             // rather than the second erroring.
             upsert: true,

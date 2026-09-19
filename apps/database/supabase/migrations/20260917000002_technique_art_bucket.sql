@@ -1,7 +1,7 @@
 -- The bucket behind the cooking-technique paintings, written by
 -- `apps/api/src/modules/techniques/services/get-or-generate-technique-art.ts`.
 --
--- One object per canonical `cooking_actions.name` — `grate.jpg`, `deglaze.jpg`
+-- One object per canonical `cooking_actions.name` — `grate.webp`, `deglaze.webp`
 -- — and NOT per recipe, per step or per profile. A picture of grating is true
 -- of every recipe that grates anything and of every reader who asks, so the
 -- first person to ask a question about a verb pays for the image and everybody

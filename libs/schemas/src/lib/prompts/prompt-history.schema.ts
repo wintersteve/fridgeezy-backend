@@ -160,10 +160,6 @@ export const DeletePromptsResponseSchema = z.object({
 });
 
 export type PromptSurface = z.infer<typeof PromptSurfaceSchema>;
-export type PromptHistoryEntryDto = z.infer<typeof PromptHistoryEntrySchema>;
-export type RecordPromptRequestDto = z.infer<typeof RecordPromptRequestSchema>;
 export type RecordPromptResponseDto = z.infer<typeof RecordPromptResponseSchema>;
-export type ListPromptsRequestDto = z.infer<typeof ListPromptsRequestSchema>;
 export type ListPromptsResponseDto = z.infer<typeof ListPromptsResponseSchema>;
-export type DeletePromptsRequestDto = z.infer<typeof DeletePromptsRequestSchema>;
 export type DeletePromptsResponseDto = z.infer<typeof DeletePromptsResponseSchema>;

@@ -16,8 +16,8 @@ import { resolveProfileId } from "./resolve-profile-id";
  * How many times a cook has to ask for something before the app treats it as a
  * preference rather than as a one-off.
  *
- * **Set by hand, and no `calibrate*` target has any say** — the same exception
- * `TIME_BAND_MAX_MINUTES` occupies. The thresholds that must not be nudged
+ * **Set by hand, and no `calibrate*` target has any say.** The thresholds that
+ * must not be nudged
  * (`SIGNATURE_HIGH/LOW_THRESHOLD`, the authenticity floor) are fitted to a
  * measured distribution, and moving one unfits it. This is a product statement:
  * "make this one vegetarian" is a fact about a dinner party, and asking twice is

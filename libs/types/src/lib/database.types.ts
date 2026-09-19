@@ -2102,6 +2102,7 @@ export type Database = {
           short_description: string | null
           short_description_ascii: string | null
           source_suggestion_id: string | null
+          thumbhash: string | null
           tips: string[] | null
           total_time_minutes: number | null
           updated_at: string
@@ -2136,6 +2137,7 @@ export type Database = {
           short_description?: string | null
           short_description_ascii?: string | null
           source_suggestion_id?: string | null
+          thumbhash?: string | null
           tips?: string[] | null
           total_time_minutes?: number | null
           updated_at?: string
@@ -2170,6 +2172,7 @@ export type Database = {
           short_description?: string | null
           short_description_ascii?: string | null
           source_suggestion_id?: string | null
+          thumbhash?: string | null
           tips?: string[] | null
           total_time_minutes?: number | null
           updated_at?: string
@@ -2625,6 +2628,10 @@ export type Database = {
       }
       confirm_pantry_item: { Args: { p_id: string }; Returns: undefined }
       current_profile_id: { Args: never; Returns: string }
+      delete_expired_ai_usage_events: {
+        Args: { p_keep_days?: number }
+        Returns: number
+      }
       delete_orphan_generated_recipes: { Args: never; Returns: number }
       difficulty_preference_rank: {
         Args: { difficulty: string; pref: string }

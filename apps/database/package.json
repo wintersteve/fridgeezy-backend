@@ -216,6 +216,38 @@
                     "forwardAllArgs": true
                 }
             },
+            "generate-lineup-art": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/generate-lineup-art.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
+            "install-style-anchor": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/install-style-anchor.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
+            "install-recipe-art": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/install-recipe-art.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
+            "render-recipe-art": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/render-recipe-art.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
+            },
             "generate-splash": {
                 "executor": "nx:run-commands",
                 "options": {

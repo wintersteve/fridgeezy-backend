@@ -10,16 +10,20 @@ import { buildFoodIllustrationStyle, generateImage } from "@fridgeezy/genai";
  * The client's illustrations that are not about a specific dish.
  *
  * Three locked pages — the Saved tab, the Shopping tab and the recipe generator
- * — plus the home feed's compose card, the first-run welcome pair, and the
- * crash screen. That is what they have in common and what decides their
- * subjects: every other image operation here is handed a recipe, a cuisine or
- * an ingredient and paints *that*. These have to say what a whole capability is
- * for, in a language the style already speaks.
+ * — plus the home feed's compose card and the first-run welcome pair. That is
+ * what they have in common and what decides their subjects: every other image
+ * operation here is handed a recipe, a cuisine or an ingredient and paints
+ * *that*. These have to say what a whole capability is for, in a language the
+ * style already speaks.
  *
- * `crash` is the one that is not selling anything — it has to say that
- * something went wrong without reading as an alarm. Its own note explains why
- * a collapse is the only failure this medium can draw without the FIXED STYLE
- * trailer having to give.
+ * **The crash screen is NOT here, and that is deliberate.** It needs an
+ * ingredient with a drawn face, which the FIXED STYLE trailer forbids outright
+ * — so it lives in `generate-crash-art.ts`, which takes that one clause out of
+ * the built style and is a one-off for exactly that reason. A `crash` scene did
+ * sit here for a day, painting a fallen soufflé strictly inside the style; it
+ * was replaced on the owner's call. Don't add it back: two operations both
+ * claiming to paint the crash screen is how the asset and its prompt drift
+ * apart.
  *
  * ## Two framings, and they are opposites
  *
@@ -157,56 +161,6 @@ ${buildFoodIllustrationStyle({
     renderingEmphasis:
         "The plate's rim stays crisp while the colour inside it stays soft-edged — the contrast between the two is the whole picture.",
     mood: "expectant — a dish about to exist.",
-})}`,
-    },
-
-    /**
-     * The crash screen — a soufflé that has fallen.
-     *
-     * The one scene here that is not selling a capability. `ErrorState`'s
-     * `crash` kind draws it when a route throws, so the picture has to carry a
-     * failure without reading as an alarm: the red disc it replaced said
-     * *something is wrong with the app*, where a sunken soufflé says *that
-     * didn't work, do it again* — which is the only thing the one button on
-     * that screen can act on.
-     *
-     * **A collapse is the one failure this medium is actually good at.** The
-     * subject is a change of SHAPE, not of colour: a crater below a rim, a
-     * crack across a crust, a collar that is still there to prove it had
-     * risen. Everything the house style is strict about — the pale chalky
-     * register, the soft edges, the one warm grey line — survives that
-     * unchanged, so this is the only wrong-thing picture the app can draw
-     * without renegotiating the trailer. Burnt food needs a near-black the
-     * palette forbids; a spill needs ground outside a vessel that `Background`
-     * bans; a sad face needs `not cartoonish` removed.
-     *
-     * **Three-quarter, unlike the other three medallions.** They are overhead
-     * or nearly so because a circle is what survives a round mask. This one
-     * cannot be: from directly above a sunken soufflé and a full one are the
-     * same circle, and the whole subject is that the middle is LOWER than the
-     * rim. The default 45 degrees is what shows the crater at all — and it is
-     * the angle the rest of the app's food is drawn at, so nothing is being
-     * bent to accommodate it.
-     */
-    crash: {
-        aspectRatio: "1:1",
-        prompt: `Editorial illustration of a soufflé that has collapsed in its dish.
-
-SUBJECT
-- ONE small round deep straight-sided ceramic dish, and nothing else in the picture. It is the whole subject.
-- What it holds has risen and then fallen. Its surface has sunk into a wide shallow crater that sits clearly BELOW the rim, dipping deepest in the middle, wrinkled and settled where it came down.
-- The crust across the top is cracked open in one or two places, showing the softer pale interior through the break.
-- A thin risen collar still clings to the inside of the rim all the way round, standing a little above the sunken middle, so it is obvious the whole thing was once taller than it is now.
-- One small green herb leaf has come down with it and rests in the crater.
-- No table, no cloth, no spoon, no oven, no hands, no second object, no cast pattern, and nothing at all outside the dish.
-${SINGLE_IMAGE_RULE}
-
-${buildFoodIllustrationStyle({
-    framing:
-        "the dish is centred in a square frame and fills about two thirds of its width, leaving a generous, completely even margin of empty ground on all four sides. It is never cropped by an edge, and nothing at all sits in the corners of the frame.",
-    renderingEmphasis:
-        "The dip from the rim down into the sunken middle is the strongest shape in the picture and reads immediately; the crack across the crust stays crisp while the settled surface stays soft-edged.",
-    mood: "deflated and a little comic — it was going so well.",
 })}`,
     },
 

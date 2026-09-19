@@ -28,10 +28,33 @@ export async function* generateStream(
     const provider = resolveProvider(params.provider);
     const startedAt = Date.now();
 
+    /**
+     * When the reader could first have seen something — see
+     * {@link LlmUsage.firstTokenMs}.
+     *
+     * Stamped on the first chunk carrying CONTENT rather than the first chunk
+     * at all: both providers open with a role-only delta that says nothing, and
+     * timing to that would report a number nobody experiences.
+     *
+     * Read by the reporters below AFTER the loop, so the `let` is doing real
+     * work — the Bedrock branch reads it from inside a callback the SDK fires
+     * at the end of its own stream.
+     */
+    let firstTokenMs: number | undefined;
+
+    const markFirstToken = (chunk: CompletionChunk): void => {
+        if (firstTokenMs === undefined && chunk.choices[0]?.delta?.content) {
+            firstTokenMs = Date.now() - startedAt;
+        }
+    };
+
     if (provider === "bedrock") {
         const { streamCompletion } = await import("@fridgeezy/bedrock");
 
-        yield* streamCompletion({
+        // A `for await` rather than `yield*`, which is the whole cost of the
+        // measurement: delegation hands every chunk straight through without
+        // this generator ever seeing one.
+        for await (const chunk of streamCompletion({
             model: params.model.bedrock,
             system: params.system,
             user: params.user,
@@ -44,10 +67,14 @@ export async function* generateStream(
                     model: params.model.bedrock ?? "(BEDROCK_MODEL_ID)",
                     label: params.label,
                     latencyMs: Date.now() - startedAt,
+                    firstTokenMs,
                     streamed: true,
                     ...usage,
                 }),
-        });
+        })) {
+            markFirstToken(chunk);
+            yield chunk;
+        }
 
         return;
     }
@@ -75,6 +102,7 @@ export async function* generateStream(
 
     for await (const chunk of stream) {
         if (chunk.usage) usage = fromOpenAiUsage(chunk.usage);
+        markFirstToken(chunk);
         yield chunk;
     }
 
@@ -83,6 +111,7 @@ export async function* generateStream(
         model: params.model.openai,
         label: params.label,
         latencyMs: Date.now() - startedAt,
+        firstTokenMs,
         streamed: true,
         inputTokens: usage?.inputTokens ?? 0,
         cachedInputTokens: usage?.cachedInputTokens ?? 0,

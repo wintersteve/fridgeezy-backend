@@ -898,6 +898,158 @@ Things that bite:
   functions to `anon` and `authenticated` directly, so `revoke ... from public`
   does not touch it — the first cut of this migration left the shipped anon key
   able to read any user's quota by id.
+- **And revoke FROM PUBLIC as well, because it happens both ways round**
+  (`20260918000003`). The two signup triggers carried
+  `{=X/postgres,…}` — the empty grantee is PUBLIC, and `anon` held EXECUTE
+  through it rather than by a grant of its own, so `revoke ... from anon,
+  authenticated` changed the ACL not at all and `has_function_privilege` still
+  answered true. One incident each way is the argument for naming all three
+  every time.
+
+### Where the model time goes (measured in production, 2026-09-18)
+
+Fourteen days of `[LLM]` lines out of `/aws/lambda/fridgeezy-dev-api`. Read this
+before optimising a prompt for speed.
+
+| label | calls | avg ms | out tok | in tok | ms/tok |
+| --- | --- | --- | --- | --- | --- |
+| `suggestions.promote` | 12 | 9,960 (p95 18,980) | 1,294 | 2,553 | 7.7 |
+| `recipe.modify` | 1 | 8,623 | **1,738** | 3,394 | 5.0 |
+| `suggestions.batch` | 3 | 5,824 | 379 | 5,656 | 15.4 |
+| `suggestions.single` | 11 | 2,576 | 167 | 1,520 | 15.4 |
+| `authenticity.verify` | 23 | 975 | 25 | 1,162 | 39 |
+| `adjudicate.ingredient` | 30 | 952 | 11 | 604 | 87 |
+
+**LATENCY IS NOT EXPLAINED BY OUTPUT SIZE, and that is the finding.** Per-call,
+`suggestions.promote`'s two slowest runs (18,980 ms and 16,743 ms) emitted 1,343
+and 1,318 tokens, while its two LARGEST outputs (1,992 and 1,865 tokens — half
+as much again) finished in 8,781 ms and 8,814 ms. Per-token throughput ranges
+4.4–14.1 ms, a 3.2x spread on one model and one prompt. That is supply-side
+variance at OpenAI, so **trimming the prompt buys ~20% off the calls that are
+already fast and nothing predictable off the slow ones.** Combined with the
+settled model choice (gpt-4.1, evaluated 2026-09-12 — do not re-litigate) and
+the serial round trips already removed from in front of the first token, there
+is no prompt-side latency win left to take.
+
+**What the zeros in `cachedInputTokens` are NOT.** Five labels show zero cached
+input, which the field's own note calls the signature of a broken cache prefix.
+Here it is traffic: those labels have one to three calls spread over two weeks
+and OpenAI's cache expires in minutes, while `adjudicate.ingredient`'s 604-token
+prompt is below the 1,024-token minimum and can never cache at all. The labels
+with enough traffic (`promote`, `authenticity.verify`) show caching working.
+
+**`firstTokenMs` exists because `latencyMs` cannot answer the question.** It is
+wall clock to the last chunk — right for Lambda billing, which is what it was
+built for — and every slow call here is STREAMED, so what a reader waits is time
+to the first content chunk plus the stream rate. A 19-second call might be 2 s
+of silence and 17 s of steady streaming (the client draws fields as they land)
+or 15 s of silence and a burst; those have different fixes and the logs could not
+tell them apart. First real call after the change: `latencyMs 3,223` against
+`firstTokenMs 2,435` — **76% of it before anything appeared** — on a small
+prompt, so not yet a claim about promote, which is what the next production week
+will say.
+
+**Every call site is labelled now.** `ingredients.classify-component` and
+`ingredients.classify-diet` were unlabelled and were, between them, 41 of 124
+calls — a third of the table reading `(none)`. They are background work behind
+`trackBackgroundTask` (parallel, off the user's path), so they cost Lambda
+duration rather than user time, but an unattributable third of the traffic is
+not something to reason around. `label` is optional in `LlmUsage`, which is the
+only reason it was possible to forget.
+
+**One user action is many calls.** A feed batch request makes up to NINETEEN
+model calls (one `suggestions.batch`, then per-dish `authenticity.verify` and
+per-ingredient `adjudicate.ingredient`), 27 s of summed model time in one
+request; a promote makes two. The per-dish calls are ~1 s each of mostly fixed
+overhead — 39 and 87 ms per output token — so their cost is round trips, not
+generation.
+
+### What the performance advisor is actually saying
+
+Audited the same day as the security one, and it splits the same way — one real
+item, one popular fix that buys nothing here, and one category local data cannot
+answer.
+
+**`auth.uid()` in a policy is a FALSE POSITIVE in this schema, and nobody should
+"fix" it.** Fourteen policies call it unwrapped, which is the advisor's
+most-cited performance item (`auth_rls_initplan`), and the standard remedy is to
+wrap it as `(select auth.uid())` so it is evaluated once instead of per row.
+Measured with `EXPLAIN ANALYZE` under `set role authenticated`: the plan reads
+**`hashed SubPlan 1`** with `loops=1`. Every one of these policies is shaped
+`profile_id in (select id from profiles where user_id = auth.uid())`, and an
+uncorrelated `IN (subquery)` is already hashed once per query. Rewriting all
+fourteen would change nothing.
+
+**What WAS real: `profile_recipe_interactions` had no index for the way it is
+read** — see `20260918000004`. Three single-column indexes, and every read asks
+for one profile, one type, newest first. Measured on 202,000 rows with the real
+distribution (4,000 profiles × 50, plus one at 2,000):
+
+| query | before | after |
+| --- | --- | --- |
+| favourites list (uncapped) | 666 rows via BitmapAnd, **16,666 index entries scanned** off the type index, 44 buffers, 0.297 ms | one bitmap scan, 31 buffers, 0.145 ms |
+| viewed keyset page | 1,314 rows + top-N sort, 28 buffers, 0.178 ms | 18 rows, 5 buffers, **0.019 ms** |
+| the prune trigger | **1,340 buffers**, 0.721 ms | 72 buffers, 0.200 ms |
+
+The third row is the one that matters most and was not what the change was aimed
+at: that trigger fires on EVERY recipe open, so it was the most frequently
+executed statement in the schema and it was doing 1,340 buffer hits a time.
+
+**Two indexes came off in the same migration.** `interaction_type` alone indexes
+two distinct values and the planner never chose it — the favourites plan above
+shows what it did when forced into a BitmapAnd, scanning 16,666 entries to
+contribute nothing. `profile_id` alone is strictly dominated by a composite
+leading with the same column. `recipe_id` STAYS: it covers the other direction,
+which `merge_recipe` and the orphan sweep need.
+
+**Unindexed foreign keys: twelve, and most are not what they look like.** Every
+profile-scoped table has `profile_id` leading an index, which is the direction
+that matters for the cascade behind account deletion. What is genuinely
+uncovered are FKs pointing at `recipes`/`ingredients` — `profile_cooked_log`,
+`profile_ingredient_substitutions`, `pantry_items.ingredient_id`,
+`recipe_variants.base/source_recipe_id`, `recipe_family_defaults`,
+`profile_prompts.recipe_id` — several of which sit SECOND in a composite, which
+does not help: this is PostgreSQL 17 and B-tree skip scan is 18. They are
+scanned when a recipe or ingredient is DELETED, i.e. the merge functions and
+`delete_orphan_generated_recipes`. Low frequency today; the day that sweep is
+scheduled it becomes a bulk cost, and that is the day to add them.
+
+**Unused indexes and slow queries cannot be answered locally.**
+`pg_stat_user_indexes` here reflects whatever was probed in the last hour, and
+the catalogue is 71 recipes, so `find_recipes` seq-scans regardless of how it
+behaves at scale. Both belong to the dashboard on the linked project.
+
+### What the security advisor is actually saying
+
+Audited 2026-09-18 against the database rather than the lint list, because the
+categories it reports do not say whether anything is exposed. **Nothing was
+open:** RLS is enabled with at least one policy on every table in `public`, no
+policy grants `anon` anything profile-scoped, and no extension lives in
+`public`. The six views it calls "SECURITY DEFINER" read catalogue tables that
+are world-readable by design; the two that touch user data (`profile_pantry`,
+`dish_components`) were already `security_invoker`.
+
+What was real was four SECURITY DEFINER functions with a mutable `search_path` —
+`find_recipes`, `has_user`, `handle_new_user`, `handle_new_profile` — pinned to
+`public, pg_temp` by `20260918000003`, along with revoking the two trigger
+functions' EXECUTE from public/anon/authenticated. Three things worth keeping:
+
+- **It was defence in depth, not a hole.** The hijack needs a caller who can
+  CREATE a shadowing object, and `anon`, `authenticated` and `service_role` all
+  have CREATE on `public` revoked and cannot create a schema, role or database.
+  The trigger functions cannot be called directly at all — Postgres answers
+  `trigger functions can only be called as triggers`. The reason to do it anyway
+  is that a standing wall of amber is how a real finding gets scrolled past.
+- **`pg_temp` goes LAST.** Left off the path entirely, Postgres puts it first —
+  which is the hijack the pin exists to prevent.
+- **Pinning a path can break a function at RUNTIME, not at apply time.** Every
+  cross-schema reference in those four is already qualified (`auth.users`,
+  `public.profiles`), and none of them touches an extension function — the
+  `vector` work lives in `search_recipes`, which is not a definer function and
+  was left alone. Anything added to this list needs the same read, and then a
+  real call: the migration was verified by signing a user up (both triggers
+  wrote their rows), browsing `find_recipes` with the ANON key (12 rows), and
+  probing `has_user` both ways.
 
 So a mount declares what it costs and the loop applies both gates:
 

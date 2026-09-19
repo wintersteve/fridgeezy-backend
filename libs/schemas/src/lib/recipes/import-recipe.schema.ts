@@ -47,8 +47,6 @@ export const ImportRecipeRequestSchema = z.object({
         .describe("MIME type of the image (base64 only)"),
 });
 
-export type ImportRecipeRequest = z.infer<typeof ImportRecipeRequestSchema>;
-
 /**
  * Why an import was refused, as a machine-readable code.
  *

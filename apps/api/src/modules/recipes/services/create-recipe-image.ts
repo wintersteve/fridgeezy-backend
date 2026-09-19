@@ -1,7 +1,14 @@
-import { buildFoodIllustrationStyle, generateImage } from "@fridgeezy/genai";
+import {
+    buildRecipeImagePrompt,
+    encodeRecipeImageVariants,
+    generateImage,
+    reframeSubject,
+} from "@fridgeezy/genai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
 
 import { toDeviceReachable } from "../../../utils/device-reachable-url";
+
+import { fetchStyleAnchors } from "./style-anchors";
 
 /**
  * Normalizes a recipe name to create a safe filename for storage.
@@ -17,28 +24,12 @@ const normalizeFileName = (name: string): string => {
 };
 
 /**
- * Encoding for the two objects every dish now gets.
- *
- * The model returns PNG, and these illustrations are flat watercolour on a plain
- * ground — the one thing PNG is worst at. Measured on a real 864x1184 render:
- * **1522 KB as PNG, 58 KB as WebP q82 at the same pixel dimensions**, and 11 KB
- * at 420px wide. That is what made the feed slow; almost none of it was the
- * dimensions of the picture.
- *
- * So the HERO is not resized at all — the recipe page draws it ~520pt wide, so
- * 864px is already only ~1.7x on a 3x screen and there is nothing worth giving
- * away for 26 more KB. The CARD variant is the resize: card slots are 248-272pt
- * and lists draw a small square thumb, so 420px is the width worth storing a
- * second copy at.
- *
- * `withoutEnlargement` because a future model or a hand-placed asset could be
- * narrower than `CARD_WIDTH`, and upscaling to hit a number is worse than
- * serving what there is. Both encodes together cost ~70ms, against a model call
- * measured in seconds.
+ * The encoding these two objects get lives in `@fridgeezy/genai`
+ * (`encodeRecipeImageVariants`), along with the measurements behind it and the
+ * reason `sharp` is loaded lazily. It moved there when the legacy backfill
+ * needed the same numbers: a card encoded at one width here and another there
+ * would be an inconsistency nobody would think to look for.
  */
-const HERO_QUALITY = 82;
-const CARD_WIDTH = 420;
-const CARD_QUALITY = 75;
 
 /**
  * The hero path, and the reason it is a real `.webp` rather than WebP bytes
@@ -85,70 +76,41 @@ const publicUrl = (path: string): string =>
 export const getRecipeImagePublicUrl = (name: string): string =>
     publicUrl(heroStoragePath(name));
 
+/** What a render produced: the hero URL, and the hash if pixels were written. */
+interface UploadedImage {
+    url: string;
+    /**
+     * Present only when this call actually encoded something — a fresh render
+     * or a legacy conversion. A short-circuit on an existing object returns
+     * none, because it did not look at the pixels.
+     */
+    thumbhash?: string;
+}
+
 /**
- * The plating half of the prompt. The style half is shared with the cuisine
- * tiles via `buildFoodIllustrationStyle` — the two render side by side in the
- * app, and keeping the contract in one place is what stops them drifting apart.
+ * The renders currently in flight, keyed by hero path.
  *
- * "Complete, appetising portion … never deconstruct" is a guard, not filler:
- * Michelin plating language on its own shrinks a Caesar salad to two leaves and
- * a smear, which is art-directed but reads as no food at all on a recipe card.
+ * **This exists to close a race the thumbhash write could not win on its own.**
+ * `uploadVariants` files the hash with `update(...).eq("image", url)`, which
+ * only reaches rows that already exist — and the image is deliberately started
+ * BEFORE the recipe text is generated, so on a fast render (or a legacy
+ * conversion, which touches no model at all) the upload lands while the model
+ * is still writing the steps. The update then matches nothing, no error is
+ * raised, and that dish keeps a null `thumbhash` for good: nothing re-runs it
+ * outside the manual `backfill-recipe-webp` op. The reader gets a blank hero
+ * where they would have had a blur.
  *
- * That guard needs its own counterweight, though, and the two must be edited as
- * a pair. Read as a quantity instruction it made every dish built from repeated
- * units come back as a full batch — ten macarons scattered across the plate,
- * which is a bakery display, not a plated course. The serving-form bullet is
- * what splits the two cases: a mass dish takes the generous portion, a
- * unit dish takes one to three pieces with a hero. Loosen one side and the other
- * side's failure comes straight back.
+ * So persistence takes the other side of it. The render is registered here
+ * while it runs and {@link attachRecipeThumbhash} waits on it from the moment a
+ * row exists, which covers the ordering the `eq` cannot: same invocation, same
+ * process, no polling and nothing added to the client's clock.
  *
- * Garnish is constrained by course for the same reason — asked only for
- * "a considered finishing garnish", the model put savoury herbs on a tiramisu.
- *
- * The two restraint bullets look like a third contradiction of the portion
- * guard and are not: they constrain how much of the *plate* is used, never how
- * much food is served. Both survived a blind A/B (2026-08-04) across five
- * dishes and two models, where this version tied the plain prompt on Gemini 3
- * Pro and beat it on Flash — which is the reason it is the default rather than
- * the plain one. If image quality ever has to fall back to a cheaper model,
- * this is the variant that degrades better.
+ * The promise is stored rather than the value, so several rows written for one
+ * dish (a variant beside its base) share the single render rather than each
+ * starting a wait of its own. Entries are deleted as they settle, so the map is
+ * bounded by concurrent generations rather than by the catalogue.
  */
-const buildPrompt = (
-    name: string
-) => `Editorial food illustration of ${name}, plated with the precision of a Michelin-starred kitchen.
-
-PLATING
-- A complete, appetising restaurant portion — generous enough that a diner reads it as a real serving of ${name}. Refine and elevate the presentation; never deconstruct the dish into a sparse, abstract arrangement of a few isolated pieces.
-- Compose rather than pile: a clear centrepiece, components placed with intent, and the vessel's rim left clean so the food sits in a ring of calm negative space.
-- How much of ${name} appears depends on how it is served. A dish plated as one mass — a salad, curry, pasta, soup, stew, risotto, roast — keeps the generous portion above. A dish made of repeated discrete units — macarons, cookies, dumplings, sushi, canapés, cupcakes, ravioli, tartlets, skewers — is plated as a chef would serve one guest: one hero piece, or at most three, never a batch, a tray, a stack or a row.
-- When there are two or three units, arrange them deliberately — one best-formed piece front and centre as the hero, the others tucked slightly behind or resting against it at different angles. Never a grid, never a line, never evenly spaced or repeated at identical angles. One unit may be halved or bitten to reveal its interior layers and texture.
-- Add one controlled sauce element (a still pool, a single swoosh, or a few precise dots — never a flood) and one considered finishing garnish. Both must belong to this dish: savoury dishes take micro-herbs, toasted seeds, citrus zest, shaved cheese or a thin drizzle of oil; sweet dishes take fruit, berries, chocolate, caramel, cream, nuts or a dusting of sugar or cocoa — never savoury herbs or vegetables. The fewer units on the plate, the more this carries the composition: a single piece is never left alone on a bare plate, it is finished with a drizzle, a scatter of fruit or a quenelle beside it.
-- Build height, layering and textural contrast — crisp against soft, glossy against matte.
-- Unmistakably ${name}: every ingredient the dish is known for stays present and identifiable, in its own natural colour.
-- Restraint is the point. The food occupies a compact area near the centre of the vessel and no more than half its surface; the surrounding plate stays genuinely empty. Fewer elements, placed more deliberately, with more space between them than feels necessary.
-- Garnish is counted, not scattered: a precise number of pieces you could tally at a glance, each placed individually. No sprinkling, no dusting across the whole plate, no crumbs trailing to the rim.
-
-${buildFoodIllustrationStyle({
-    // The client crops this three ways — a 520px 3:4 hero, a 272x200 landscape
-    // card crop, and a square list thumb — so the vessel has to survive a centre
-    // crop to any of them.
-    //
-    // The "two thirds" is aspirational and the model does not honour it. Measured
-    // over six dishes on 2026-08-04, asking for three quarters and asking for two
-    // thirds both render the plate at ~77% of frame width, a smaller difference
-    // than the per-dish spread (72–83%). A third phrasing pinning the plate to
-    // the middle half of the height did better — it halved the clipping — but
-    // still swung between 51% and 87% of frame height across dishes on one
-    // prompt. **Rewording this will not reliably change the plate's size.**
-    // Adding the margin after generation was tried instead (a deterministic pad
-    // to square) and removed for the artefacts it introduced, so this prompt is
-    // the only lever there is.
-    framing:
-        "the vessel is complete and precisely centred both horizontally and vertically, filling about two thirds of the frame's width, with a generous and even margin of empty background on all four sides — so the image still reads when cropped to a square or to a wide banner.",
-    renderingEmphasis:
-        "Detail is concentrated on the centrepiece and falls away toward the rim, so the eye lands in one place.",
-    mood: "spare, exact and expensive — one confident gesture, generously surrounded by empty plate.",
-})}`;
+const renders = new Map<string, Promise<UploadedImage>>();
 
 /**
  * Writes both variants for `source` and returns the hero's public URL.
@@ -158,28 +120,11 @@ ${buildFoodIllustrationStyle({
  * client ever asks about, since the card path is only derived from a hero URL
  * that came back — rather than into a card variant with no hero behind it.
  */
-async function uploadVariants(name: string, source: Buffer): Promise<string> {
-    // Imported here rather than at the top of the file, for three reasons that
-    // each stand alone:
-    //
-    //  * `sharp` is a ~30 MB native module and loading libvips is not free. Only
-    //    this path needs it, and it runs as a background task — so a chat turn
-    //    or a recipe stream on a cold Lambda should not pay for it.
-    //  * The deployment artifact carries LINUX binaries (see
-    //    `infra/build-artifact.sh`), while `build-artifact.sh` verifies the
-    //    handler's module graph loads on the build machine. A static import
-    //    would make that check require a macOS binary the artifact must not
-    //    contain.
-    //  * It matches how `@fridgeezy/llm` defers its provider SDKs.
-    const { default: sharp } = await import("sharp");
-
-    const [hero, card] = await Promise.all([
-        sharp(source).webp({ quality: HERO_QUALITY }).toBuffer(),
-        sharp(source)
-            .resize({ width: CARD_WIDTH, withoutEnlargement: true })
-            .webp({ quality: CARD_QUALITY })
-            .toBuffer(),
-    ]);
+async function uploadVariants(
+    name: string,
+    source: Buffer
+): Promise<UploadedImage> {
+    const { hero, card, thumbhash } = await encodeRecipeImageVariants(source);
 
     for (const [path, body] of [
         [heroStoragePath(name), hero],
@@ -203,6 +148,14 @@ async function uploadVariants(name: string, source: Buffer): Promise<string> {
                 // gateway honours it. Do not read the presence of this line as
                 // evidence that responses are cacheable.
                 //
+                // **The LOCAL stack is the exception, and it bites.** The
+                // storage server there honours this exactly — a replaced
+                // object is served `max-age=31536000` — so on the one stack
+                // where art actually gets replaced, expo-image keeps drawing
+                // the old picture from disk under an unchanged URL, and the new
+                // one is invisible until the cache is dropped. The client's dev
+                // menu has "clear image cache" for precisely this.
+                //
                 // What that costs in practice is small: expo-image keeps its own
                 // disk cache regardless of HTTP semantics, and Cloudflare still
                 // holds the bytes and revalidates (`cf-cache-status:
@@ -214,16 +167,54 @@ async function uploadVariants(name: string, source: Buffer): Promise<string> {
 
         if (error) {
             console.error(`Failed to upload ${path}:`, error);
-            return "";
+            return { url: "" };
         }
     }
 
-    return publicUrl(heroStoragePath(name));
+    /*
+      The placeholder that makes the recipe page's FIRST frame useful.
+
+      Written here rather than in `persist_recipe` because this is where the
+      pixels are: the hash is a property of the picture, and the picture is
+      produced by this function. Keyed on the image URL rather than on a recipe
+      id because a dish and its variants share one illustration — the storage
+      path is derived from the name — so every row pointing at this picture
+      should carry its hash.
+
+      Fire-and-forget. A failed update costs the reader a shimmer where they
+      would have had a blur, which is what every row had before this column
+      existed; it must not take down an image that uploaded successfully.
+    */
+    const { error: hashError } = await supabaseAdmin
+        .from("recipes")
+        .update({ thumbhash })
+        .eq("image", publicUrl(heroStoragePath(name)));
+
+    if (hashError) {
+        console.error(`Could not store thumbhash for ${name}:`, hashError);
+    }
+
+    return { url: publicUrl(heroStoragePath(name)), thumbhash };
 }
 
-export async function generateAndUploadRecipeImage(
-    name: string
-): Promise<string> {
+async function renderRecipeImage(
+    name: string,
+    /**
+     * The dish's ingredients, forwarded to the prompt — see
+     * `buildRecipeImagePrompt`, which carries the two failures that earned it.
+     *
+     * Optional because the short-circuits above mean most calls never reach the
+     * model at all, and because a caller that genuinely has no list should send
+     * none rather than an empty one dressed up as a fact.
+     *
+     * It does NOT reach the storage path, which stays derived from the name
+     * alone. So two recipes sharing a name still share one picture, and the
+     * ingredients that shaped it are whichever copy rendered first — the same
+     * first-writer-wins the name has always had, now with something visible
+     * riding on it.
+     */
+    ingredients?: string[]
+): Promise<UploadedImage> {
     try {
         const heroPath = heroStoragePath(name);
         const legacyPath = legacyStoragePath(name);
@@ -238,8 +229,11 @@ export async function generateAndUploadRecipeImage(
         const has = (path: string) =>
             existing?.some((file) => file.name === path) ?? false;
 
-        // Already converted: nothing to do, and no model call.
-        if (has(heroPath)) return publicUrl(heroPath);
+        // Already converted: nothing to do, and no model call. No hash comes
+        // back either — the picture's own is already on whichever row was
+        // written when it rendered, which is what `attachRecipeThumbhash`
+        // falls back to copying.
+        if (has(heroPath)) return { url: publicUrl(heroPath) };
 
         // A dish generated before this pipeline, being asked for again — a
         // re-promotion, or a blacklist-adapted variant taking the base's name.
@@ -257,7 +251,9 @@ export async function generateAndUploadRecipeImage(
         // the size of the catalogue, and the legacy object is left in place.
         if (has(legacyPath)) {
             const { data: legacy, error: downloadError } =
-                await supabaseAdmin.storage.from("recipes").download(legacyPath);
+                await supabaseAdmin.storage
+                    .from("recipes")
+                    .download(legacyPath);
 
             if (legacy && !downloadError) {
                 console.log(`Converting legacy image for ${name} to WebP`);
@@ -274,26 +270,147 @@ export async function generateAndUploadRecipeImage(
             // Fall through and generate — better a new picture than none.
         }
 
+        // The house-style pictures, and the prompt has to be told how many
+        // arrived: the clause it adds is written differently for one than for
+        // several, and an empty set must add nothing at all. `fetchStyleAnchors`
+        // answers with [] rather than throwing, so a storage failure costs this
+        // dish its register and never its picture.
+        const anchors = await fetchStyleAnchors();
+
         const { base64Data } = await generateImage({
-            prompt: buildPrompt(name),
+            prompt: buildRecipeImagePrompt(name, ingredients, {
+                styleReferences: anchors.length,
+            }),
+            referenceImages: anchors.length ? anchors : undefined,
             numberOfImages: 1,
             aspectRatio: "3:4",
         });
 
         if (!base64Data) {
             console.error("No image data received from generateImage");
-            return ""; // Return empty string if no image data
+            return { url: "" }; // Return empty string if no image data
         }
 
-        // The model's framing is kept as-is. A post-processing step that widened
+        // The one thing about the framing that is NOT left to the model, because
+        // it does not listen: the subject comes back at about four fifths of the
+        // frame's width whatever the prompt asks for. `reframeSubject` carries
+        // the three measurements behind that and returns the picture untouched
+        // if it is already small enough, so this costs a decode on a path that
+        // has just spent a model call.
+        const framed = await reframeSubject(Buffer.from(base64Data, "base64"));
+
+        // The model's framing is otherwise kept as-is. A post-processing step that widened
         // the 3:4 render to a square — replicating the edge columns outward, with
         // a corner-shadow correction on top — used to sit here and was removed on
         // 2026-09-11: it introduced visible artefacts of its own, which is worse
         // than the centre crop it was compensating for. Framing is the prompt's
         // job; cropping is the client's. Re-encoding is not cropping.
-        return await uploadVariants(name, Buffer.from(base64Data, "base64"));
+        return await uploadVariants(name, framed);
     } catch (error) {
         console.error("Failed to generate and upload recipe image:", error);
-        return ""; // Return empty string on error
+        return { url: "" }; // Return empty string on error
+    }
+}
+
+/**
+ * Kick off (or join) this dish's render, and answer with the hero URL.
+ *
+ * The signature every caller already had — fire-and-forget, the URL is
+ * deterministic anyway — with the render registered in {@link renders} for the
+ * length of its run so persistence can pick the hash up off it.
+ *
+ * Joining rather than starting a second render is a small bonus of the same
+ * mechanism: two promotions of one dish inside a container now share the model
+ * call instead of racing each other to the same storage path.
+ */
+export function generateAndUploadRecipeImage(
+    name: string,
+    ingredients?: string[]
+): Promise<string> {
+    const heroPath = heroStoragePath(name);
+    const running = renders.get(heroPath);
+
+    if (running) return running.then((image) => image.url);
+
+    const render = renderRecipeImage(name, ingredients);
+
+    renders.set(heroPath, render);
+    void render
+        .catch(() => undefined)
+        .finally(() => {
+            // Guarded, so a later render for the same dish is not evicted by
+            // this one settling.
+            if (renders.get(heroPath) === render) renders.delete(heroPath);
+        });
+
+    return render.then((image) => image.url);
+}
+
+/**
+ * Give a freshly written recipe row the blur its picture already has.
+ *
+ * Called once a row EXISTS, which is the thing `uploadVariants`' own write
+ * cannot wait for — see {@link renders}. Two sources, in order:
+ *
+ * 1. **The render this request started**, if it is still running. Awaited, not
+ *    polled: the promise resolves with the hash the moment the upload lands.
+ * 2. **A sibling row**, otherwise. A short-circuited render wrote no pixels and
+ *    so returns no hash, which is the ordinary case for a variant or a
+ *    re-promotion of a dish the catalogue already has art for — and those rows
+ *    were missing the hash just as reliably, since the original's `eq` write
+ *    ran long before they existed. One indexed-free read on a column we are
+ *    already filtering rows by; it is off the client's clock either way.
+ *
+ * Never throws: a missing blur costs a reader a blank hero for as long as the
+ * picture takes to load, which is exactly what every row had before the column
+ * existed. It must not be able to fail a save.
+ */
+export async function attachRecipeThumbhash(
+    recipeId: string,
+    name: string
+): Promise<void> {
+    try {
+        const url = publicUrl(heroStoragePath(name));
+
+        const rendered = await renders
+            .get(heroStoragePath(name))
+            ?.catch(() => undefined);
+
+        let thumbhash = rendered?.thumbhash;
+
+        if (!thumbhash) {
+            const { data: sibling } = await supabaseAdmin
+                .from("recipes")
+                .select("thumbhash")
+                .eq("image", url)
+                .not("thumbhash", "is", null)
+                .limit(1)
+                .maybeSingle();
+
+            thumbhash = sibling?.thumbhash ?? undefined;
+        }
+
+        // Nothing to copy: the picture failed, or has not been drawn yet by
+        // anything that reported a hash. `uploadVariants`' own write covers the
+        // other ordering, where this row is already there when it lands.
+        if (!thumbhash) return;
+
+        const { error } = await supabaseAdmin
+            .from("recipes")
+            .update({ thumbhash })
+            .eq("id", recipeId)
+            .is("thumbhash", null);
+
+        if (error) {
+            console.error(
+                `Could not attach thumbhash to recipe ${recipeId}:`,
+                error
+            );
+        }
+    } catch (error) {
+        console.error(
+            `Could not attach thumbhash to recipe ${recipeId}:`,
+            error
+        );
     }
 }

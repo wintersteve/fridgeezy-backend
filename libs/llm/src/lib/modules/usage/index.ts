@@ -38,8 +38,35 @@ export interface LlmUsage {
      * streaming paths this number is a direct second cost line beside the tokens.
      * On a thinking model it also absorbs the thinking pause, which token counts
      * alone do not show.
+     *
+     * **It is the COST number, not the experience one** — see
+     * {@link firstTokenMs}.
      */
     latencyMs: number;
+    /**
+     * Wall clock from request to the first chunk carrying CONTENT.
+     *
+     * The number a reader actually waits: every long call in this app is
+     * streamed, and the client draws fields as they land, so "how long until
+     * something appears" and "how long until it finished" are different
+     * questions with different fixes. {@link latencyMs} alone cannot tell a
+     * model that sat silent for fifteen seconds from one that streamed steadily
+     * for fifteen — and the first is a routing or prefill problem while the
+     * second is a throughput one.
+     *
+     * Worth having because production says the total is NOT explained by output
+     * size: measured over 14 days, `suggestions.promote`'s two slowest calls
+     * (19.0 s and 16.7 s) emitted FEWER tokens than its two fastest (8.8 s at
+     * ~1,900 tokens), a 3.2x spread in ms-per-token. That is supply-side
+     * variance, and this field is what says where in the call it lands.
+     *
+     * Undefined on a non-streamed call, where it would be `latencyMs` by
+     * definition, and on a stream that yielded no content at all.
+     *
+     * The first chunk with CONTENT, not the first chunk: both providers open
+     * with a role-only delta that carries nothing a reader could see.
+     */
+    firstTokenMs?: number;
     streamed: boolean;
 }
 
@@ -55,9 +82,9 @@ export interface LlmUsage {
  * JSON rather than prose because the consumer is a query, not a person:
  *
  * ```
- * fields @timestamp, label, provider, model, inputTokens, cachedInputTokens, outputTokens, latencyMs
+ * fields @timestamp, label, provider, model, inputTokens, cachedInputTokens, outputTokens, latencyMs, firstTokenMs
  * | filter @message like /\[LLM\]/
- * | stats sum(inputTokens), sum(cachedInputTokens), sum(outputTokens), avg(latencyMs) by label, provider
+ * | stats count(*), avg(firstTokenMs), pct(firstTokenMs, 95), avg(latencyMs), pct(latencyMs, 95), avg(outputTokens) by label
  * ```
  *
  * **This never throws.** It sits on the hot path of every model call, including

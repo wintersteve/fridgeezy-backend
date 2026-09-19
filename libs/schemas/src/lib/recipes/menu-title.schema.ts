@@ -48,7 +48,6 @@ export const MenuTitleRequestSchema = z.object({
     /** Steers the origin half of the name. Omitted when nothing knows it. */
     cuisine: z.string().max(80).nullish(),
 });
-export type MenuTitleRequestDto = z.infer<typeof MenuTitleRequestSchema>;
 
 /**
  * **`title` is nullable, and null is an ORDINARY answer.**

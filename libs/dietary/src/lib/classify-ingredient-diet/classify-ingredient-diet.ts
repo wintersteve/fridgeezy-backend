@@ -195,6 +195,9 @@ export async function classifyIngredientDiet(
         const batch = names.slice(i, i + BATCH);
         const { text } = await generateCompletion({
             model: { openai: model },
+            // See the component classifier's twin: these two were the whole of
+            // the `(none)` row in the usage table.
+            label: "ingredients.classify-diet",
             system: SYSTEM_PROMPT,
             user: batch.join("\n"),
             // Room for a name plus a few short properties per ingredient. A cap

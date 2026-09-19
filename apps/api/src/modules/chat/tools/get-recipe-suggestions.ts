@@ -167,10 +167,22 @@ export const RecipeSuggestionOutputSchema = z.object({
                     name: z.string(),
                 })
             ),
+            /**
+             * `type` is what the client's `groupRecipeTags` derives a card's
+             * eyebrow from — without it a chat card draws `IDEA` and nothing
+             * else where the same `IdeaTicket` in search draws
+             * `IDEA · THAI · NOODLES`. **This schema is where it was actually
+             * lost at runtime**, Zod stripping the key the services below had
+             * already been carrying.
+             *
+             * Optional, because a partial frame's tags are the model's own
+             * strings, emitted before anything has been matched to a row.
+             */
             tags: z.array(
                 z.object({
                     id: z.string(),
                     name: z.string(),
+                    type: z.string().optional(),
                 })
             ),
         })

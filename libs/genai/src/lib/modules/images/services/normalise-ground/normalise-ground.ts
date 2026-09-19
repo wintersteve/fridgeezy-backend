@@ -1,7 +1,6 @@
-import sharp from "sharp";
-
 /**
- * Force a technique illustration's ground to the exact colour it was asked for.
+ * Force a technique illustration's ground to the exact colour it was asked for,
+ * and encode it for storage.
  *
  * ## Why this exists
  *
@@ -83,16 +82,20 @@ export interface NormaliseGroundOptions {
      */
     maxGain?: number;
     /**
-     * JPEG quality for the re-encode.
+     * WebP quality for the re-encode.
      *
-     * **95, and the number was measured rather than picked.** Correcting the
-     * ground means decoding the model's JPEG, changing pixels and encoding
-     * again, and that round trip costs more than the correction does: at
-     * quality 82 roughly 540,000 pixels per plate shifted, the worst by 30
-     * levels — against ZERO pixels moved by the curve itself below the knee. At
-     * 95 that falls to ~190,000 and a worst shift of 13, which is invisible in
-     * a watercolour wash. The file is larger; these are cached forever and
-     * served once, so that is the cheap side of the trade.
+     * **WebP at 82, the encoding `create-recipe-image` already measured for
+     * exactly this kind of picture**: flat watercolour on a plain ground, which
+     * is the one thing PNG is worst at and JPEG is only middling at — 1522 KB
+     * as PNG against 58 KB as WebP q82 at the same pixel dimensions.
+     *
+     * It also happens to solve a problem the JPEG version had. Correcting the
+     * ground means decoding, changing pixels and encoding again, and that round
+     * trip cost more than the correction did: re-encoding to JPEG q82 moved
+     * roughly 540,000 pixels per plate, the worst by 30 levels, against ZERO
+     * moved by the curve itself below the knee. JPEG q95 brought that down at
+     * the cost of a much larger file. WebP q82 gets both — smaller than the
+     * JPEG q82 and closer to the source than the JPEG q95.
      */
     quality?: number;
 }
@@ -174,7 +177,17 @@ export async function normaliseGround(
     input: Buffer,
     options: NormaliseGroundOptions = {},
 ): Promise<NormaliseGroundResult> {
-    const { target = 255, maxGain = 1.12, quality = 95 } = options;
+    const { target = 255, maxGain = 1.12, quality = 82 } = options;
+
+    // Imported here rather than at the top of the file, and it is not a style
+    // choice — `create-recipe-image` records the same three reasons for the
+    // same import. `sharp` is a ~30 MB native module and loading libvips is not
+    // free; only this path needs it, and this library is imported at the TOP
+    // LEVEL by the API, so a static import here would make every cold Lambda
+    // start pay for it before serving a chat turn that never touches an image.
+    // It also keeps the deployment artifact's module-graph check from needing a
+    // macOS binary the artifact must not contain.
+    const { default: sharp } = await import("sharp");
 
     const { data, info } = await sharp(input)
         .raw()
@@ -221,7 +234,7 @@ export async function normaliseGround(
     const image = await sharp(corrected, {
         raw: { width: info.width, height: info.height, channels: info.channels },
     })
-        .jpeg({ quality, mozjpeg: true })
+        .webp({ quality })
         .toBuffer();
 
     return { image, before: hex(ground), gains };

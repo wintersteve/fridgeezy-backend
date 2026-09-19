@@ -281,15 +281,25 @@ export const importRecipe = createStreamHandler({
         //    at a path derived from the dish NAME, which persistence then reads
         //    without waiting. `generateAndUploadRecipeImage` short-circuits on an
         //    existing object, so importing a dish the catalogue already has art
-        //    for costs nothing — and because the prompt sees only the name, no
-        //    part of the user's page reaches the image model.
+        //    for costs nothing.
+        //
+        //    What reaches the image model is the name and the INGREDIENT NAMES,
+        //    and that is a widening of what this comment used to promise ("the
+        //    prompt sees only the name"). It is deliberate — a name alone drew
+        //    the wrong dish often enough to be worth fixing everywhere — but the
+        //    line is worth knowing: these names are read off the user's page, so
+        //    what travels is their ingredient list, never the page, the prose,
+        //    the source URL or anything they wrote.
         //
         //    Tracked so Lambda drains it instead of freezing it mid-flight.
-        trackBackgroundTask(generateAndUploadRecipeImage(recipe.name)).catch(
-            (error) => {
-                console.error("[Import] Image generation failed:", error);
-            }
-        );
+        trackBackgroundTask(
+            generateAndUploadRecipeImage(
+                recipe.name,
+                recipe.ingredients.map((ingredient) => ingredient.name)
+            )
+        ).catch((error) => {
+            console.error("[Import] Image generation failed:", error);
+        });
 
         const imageUrl = getRecipeImagePublicUrl(recipe.name);
 

@@ -21,6 +21,7 @@ import { resolveIdentityCuisine } from "../../suggestions/services/cuisine-ident
 import { pickIdentityMatch } from "../../suggestions/services/pick-identity-match";
 
 import {
+    attachRecipeThumbhash,
     generateAndUploadRecipeImage,
     getRecipeImagePublicUrl,
 } from "./create-recipe-image";
@@ -256,7 +257,10 @@ export async function persistRecipe(
         } else {
             // Wait for image generation to complete
             try {
-                imageUrl = await generateAndUploadRecipeImage(recipe.name);
+                imageUrl = await generateAndUploadRecipeImage(
+                    recipe.name,
+                    recipe.ingredients.map((ingredient) => ingredient.name)
+                );
 
                 // If image generation returns empty string, use default
                 if (!imageUrl) {
@@ -303,6 +307,13 @@ export async function persistRecipe(
             // `matchIngredients`: the recipe is already written and streaming,
             // and nothing in this request reads the properties.
             trackBackgroundTask(classifyRecipeIngredients(recipe));
+
+            // The row exists now, which is the one thing the image's own
+            // thumbhash write cannot wait for — see `attachRecipeThumbhash`.
+            // Unawaited for the same reason as the line above it.
+            trackBackgroundTask(
+                attachRecipeThumbhash(result.value, recipe.name)
+            );
         }
 
         return result;
@@ -365,6 +376,13 @@ export async function persistRecipeWithIngredientIds(
                     repository,
                     variantResult.value,
                     recipe
+                );
+
+                // A variant shares its base's picture, so the hash it wants is
+                // usually one a sibling row already carries — the case
+                // `attachRecipeThumbhash` falls back to.
+                trackBackgroundTask(
+                    attachRecipeThumbhash(variantResult.value, recipe.name)
                 );
             }
 
@@ -444,6 +462,13 @@ export async function persistRecipeWithIngredientIds(
             // `matchIngredients`: the recipe is already written and streaming,
             // and nothing in this request reads the properties.
             trackBackgroundTask(classifyRecipeIngredients(recipe));
+
+            // The row exists now, which is the one thing the image's own
+            // thumbhash write cannot wait for — see `attachRecipeThumbhash`.
+            // Unawaited for the same reason as the line above it.
+            trackBackgroundTask(
+                attachRecipeThumbhash(result.value, recipe.name)
+            );
         }
 
         return result;
@@ -514,13 +539,21 @@ export async function persistImportedRecipe(
         // user later wants folded into the catalogue is not a special case.
         const identityCuisine = await resolveIdentityCuisine(recipe.tags ?? []);
 
-        return await repository.persistWithIngredientIds(
+        const result = await repository.persistWithIngredientIds(
             recipe,
             imageUrl,
             identityCuisine,
             null,
             { origin: "imported", createdBy }
         );
+
+        if (result.success) {
+            // Same race as the catalogue paths: the use case started the render
+            // before this row existed. See `attachRecipeThumbhash`.
+            trackBackgroundTask(attachRecipeThumbhash(result.value, recipe.name));
+        }
+
+        return result;
     } catch (error) {
         return failure(
             new PersistenceError(

@@ -63,7 +63,7 @@
  * the two are separately reported — `total_time_minutes` on a suggestion,
  * `prepTime`/`cookTime` on a recipe. Note the eval shows time climbing anyway,
  * which is a consequence of real added method rather than a trade, but it does
- * push a dish across `timeBandFor`'s 90-minute boundary: hard Tomato Soup
+ * push a dish across the old 90-minute band boundary: hard Tomato Soup
  * measured 110 minutes against easy's 45, so the same dish answers a different
  * time filter at a different rung.
  *

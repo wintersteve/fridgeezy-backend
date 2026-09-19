@@ -8,5 +8,4 @@ export * from './adapt-recipe.schema';
 export * from './modify-recipe.schema';
 export * from './personalise-recipe.schema';
 export * from './import-recipe.schema';
-export * from './time-band';
 export * from './difficulty';

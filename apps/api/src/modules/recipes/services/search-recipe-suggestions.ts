@@ -180,10 +180,10 @@ export interface RecipeSuggestionInput {
     /**
      * The most time the cook has, TOTAL, in whole minutes. A CEILING.
      *
-     * Deliberately a number rather than one of `timeBandFor`'s bands. The bands
-     * are a product statement about what a weeknight allows (`quick` is
-     * anything up to 30 minutes), and mapping "I've got 20 minutes" onto
-     * `quick` would WIDEN it — a 28-minute dish would qualify for a 20-minute
+     * Deliberately a number rather than a coarse band. Bands are a product
+     * statement about what a weeknight allows (`quick` was anything up to 30
+     * minutes), and mapping "I've got 20 minutes" onto `quick` would WIDEN it
+     * — a 28-minute dish would qualify for a 20-minute
      * request. A ceiling cannot widen.
      */
     maxMinutes?: number;
@@ -249,7 +249,21 @@ export interface RecipeSuggestionItem {
     totalTimeMinutes?: number | null;
     matchScore?: number;
     ingredients: Array<{ id: string; name: string }>;
-    tags: Array<{ id: string; name: string }>;
+    /**
+     * `type` is what the client's `groupRecipeTags` derives a card's eyebrow
+     * from, so without it a chat card draws `IDEA` and nothing else where the
+     * same `IdeaTicket` in search draws `IDEA · THAI · NOODLES`. Every source
+     * feeding this already had it — `find_recipes`' aggregate,
+     * `toNamedRows`, `fetchEnrichedSuggestion` — and it was dropped here and
+     * in the four `.map()`s below, each of which rebuilt `{ id, name }` off a
+     * source that had it. The two on the `new_suggestion` paths are the ones
+     * the chat tab actually hit.
+     *
+     * Optional, because the one source that genuinely cannot supply it is the
+     * partial frame: those tags are the model's own strings, emitted before
+     * anything has been matched to a `tags` row.
+     */
+    tags: Array<{ id: string; name: string; type?: string }>;
     /**
      * Present only for LLM-generated suggestions: correlates this (enriched)
      * item with the partial that was emitted via `onPartialSuggestion` before
@@ -1188,6 +1202,7 @@ export async function searchRecipeSuggestions(
                     tags: recipeSummary.tags.map((tag) => ({
                         id: tag.id,
                         name: tag.name,
+                        type: tag.type,
                     })),
                 });
                 metadata.vectorSearchHits++;
@@ -1398,6 +1413,7 @@ export async function searchRecipeSuggestions(
                 tags: existingSuggestion.tags.map((tag) => ({
                     id: tag.id,
                     name: tag.name,
+                    type: tag.type,
                 })),
             });
             metadata.canonicalSearchHits++;
@@ -1560,6 +1576,7 @@ export async function searchRecipeSuggestions(
                         tags: enriched.tags.map((tag) => ({
                             id: tag.id,
                             name: tag.name,
+                            type: tag.type,
                         })),
                     });
                     metadata.newSuggestionsCreated++;
@@ -1704,6 +1721,7 @@ export async function searchRecipeSuggestions(
                         tags: suggestion.tags.map((tag) => ({
                             id: tag.id,
                             name: tag.name,
+                            type: tag.type,
                         })),
                     });
                     metadata.newSuggestionsCreated++;

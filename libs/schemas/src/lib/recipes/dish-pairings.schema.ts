@@ -158,8 +158,6 @@ export const DishPairingsRequestSchema = z.object({
         .describe("Courses a generation should fill; defaults to courseTypes"),
 });
 
-export type DishPairingsRequestDto = z.infer<typeof DishPairingsRequestSchema>;
-
 export const DishPairingsResponseSchema = z.object({
     /**
      * Has anybody ever asked what goes with this dish?

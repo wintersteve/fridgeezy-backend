@@ -21,6 +21,3 @@ export const PersonaliseRecipeRequestSchema = z.object({
     dietaryRestrictions: z.array(z.string()).optional(),
 });
 
-export type PersonaliseRecipeRequestDto = z.infer<
-    typeof PersonaliseRecipeRequestSchema
->;

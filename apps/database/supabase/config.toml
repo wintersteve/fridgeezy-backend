@@ -353,9 +353,18 @@ max_frequency = "5s"
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `slack`, `spotify`, `workos`, `zoom`.
 [auth.external.apple]
-enabled = false
-client_id = ""
+enabled = true
+# The app's BUNDLE IDENTIFIER, not a Services ID. `SignInMethods` signs in with
+# `signInWithIdToken`, so the token GoTrue verifies is the one the native Apple
+# sheet issued, and its `aud` is the bundle the sheet ran in. A Services ID here
+# — the value the hosted project also carries for the web redirect flow — makes
+# every native sign-in fail the audience check while the row looks configured.
+client_id = "com.anonymous.fridgeezy"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
+# Deliberately unset, and the CLI exempts apple/google from requiring it: the
+# secret signs the client assertion for the WEB redirect flow, which this app
+# never takes. The native grant only verifies Apple's signature and the audience
+# above, so a local stack needs no Apple developer key at all.
 secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
 # Overrides the default auth redirectUrl.
 redirect_uri = ""
@@ -373,9 +382,25 @@ enabled = true
 # than behind another env var is what makes the local stack match the hosted
 # project without a second thing to set up. The SECRET stays in
 # `apps/database/.env` (gitignored) and is read through `env()` below.
-client_id = "747935050253-m8kmfus9e2bji50t7oucfs7oua4rm19q.apps.googleusercontent.com"
+# TWO ids, comma-separated — the same list the hosted project keeps under
+# Authentication → Providers → Google → "Authorized Client IDs", and GoTrue
+# accepts a token whose audience is any of them.
+#
+# The first is the WEB client. The second is the iOS one, and it is the audience
+# that actually arrives now: `SignInMethods` signs in natively, so the identity
+# token is minted for the client the Google sheet ran as, not for the server.
+# With only the web id here every native sign-in comes back "Bad ID token",
+# which reads as a malformed token rather than as a missing entry.
+client_id = "747935050253-m8kmfus9e2bji50t7oucfs7oua4rm19q.apps.googleusercontent.com,747935050253-7lsl6h03koa2v7evorecorargi89t6cf.apps.googleusercontent.com"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
+# Still needed by the WEB redirect flow, which nothing in the app takes any
+# more — kept because the hosted project's provider is configured with it and
+# this file is the local mirror of that, not a second source of truth.
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+# The native grant carries no nonce, so there is nothing here to skip: GoTrue
+# only compares one when the token actually has one. Flip this to true if a
+# local native sign-in is ever refused on the nonce — it is the first thing the
+# CLI's own comment above points at — but it should not be needed.
 skip_nonce_check = false
 
 [auth.external.facebook]

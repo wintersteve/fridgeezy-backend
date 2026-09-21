@@ -105,7 +105,7 @@ export async function interpretCommand(
         model = DEFAULT_MODEL,
     } = options;
 
-    const response = await genai.models.generateContent({
+    const response = await genai().models.generateContent({
         model,
         contents: [
             {

@@ -2,7 +2,7 @@ import {
     buildRecipeImagePrompt,
     encodeRecipeImageVariants,
     generateImage,
-    reframeSubject,
+    pickBestFraming,
 } from "@fridgeezy/genai";
 import { supabaseAdmin } from "@fridgeezy/supabase";
 
@@ -277,35 +277,66 @@ async function renderRecipeImage(
         // dish its register and never its picture.
         const anchors = await fetchStyleAnchors();
 
-        const { base64Data } = await generateImage({
+        const request = {
             prompt: buildRecipeImagePrompt(name, ingredients, {
                 styleReferences: anchors.length,
             }),
             referenceImages: anchors.length ? anchors : undefined,
             numberOfImages: 1,
-            aspectRatio: "3:4",
-        });
+            aspectRatio: "3:4" as const,
+        };
 
-        if (!base64Data) {
+        /*
+          Two renders, and the better-FRAMED one is kept.
+
+          Framing is the one property nothing else could pin — `pickBestFraming`
+          carries the measurements behind the target. The prompt cannot move it,
+          the style anchors move it about ten points and no further, and neither
+          makes one render match the next: the same dish arrives at one camera
+          and then another, and that variance is what the pictures rejected in
+          review have actually been.
+
+          In PARALLEL, so this costs a second image and almost no extra time —
+          the calls overlap and the loser is discarded. That is the whole trade:
+          image spend doubles per dish, and the dish stops being a coin toss. It
+          stays bounded per DISH rather than per view, like everything else on
+          this path, because an existing object short-circuits above.
+        */
+        const rolls = await Promise.all([
+            generateImage(request).catch(() => ({ base64Data: undefined })),
+            generateImage(request).catch(() => ({ base64Data: undefined })),
+        ]);
+
+        const candidates = rolls
+            .map((roll) => roll.base64Data)
+            .filter((data): data is string => Boolean(data))
+            .map((data) => Buffer.from(data, "base64"));
+
+        if (!candidates.length) {
             console.error("No image data received from generateImage");
             return { url: "" }; // Return empty string if no image data
         }
 
-        // The one thing about the framing that is NOT left to the model, because
-        // it does not listen: the subject comes back at about four fifths of the
-        // frame's width whatever the prompt asks for. `reframeSubject` carries
-        // the three measurements behind that and returns the picture untouched
-        // if it is already small enough, so this costs a decode on a path that
-        // has just spent a model call.
-        const framed = await reframeSubject(Buffer.from(base64Data, "base64"));
+        const { chosen, framings } = await pickBestFraming(candidates);
 
-        // The model's framing is otherwise kept as-is. A post-processing step that widened
+        console.log(
+            `[create-recipe-image] ${name}: ${candidates.length} roll(s) — ` +
+                framings
+                    .map((framing) =>
+                        framing
+                            ? `size ${(framing.size * 100).toFixed(0)}% centre ${framing.centre.toFixed(2)} right ${framing.right.toFixed(2)} (score ${framing.score.toFixed(3)})`
+                            : "unmeasurable"
+                    )
+                    .join("   vs   ")
+        );
+
+        // The model's framing is kept as-is. A post-processing step that widened
         // the 3:4 render to a square — replicating the edge columns outward, with
         // a corner-shadow correction on top — used to sit here and was removed on
         // 2026-09-11: it introduced visible artefacts of its own, which is worse
         // than the centre crop it was compensating for. Framing is the prompt's
         // job; cropping is the client's. Re-encoding is not cropping.
-        return await uploadVariants(name, framed);
+        return await uploadVariants(name, chosen);
     } catch (error) {
         console.error("Failed to generate and upload recipe image:", error);
         return { url: "" }; // Return empty string on error

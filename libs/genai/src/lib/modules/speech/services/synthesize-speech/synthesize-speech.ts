@@ -79,7 +79,7 @@ async function synthesizeOnce(
 ): Promise<SynthesizedSpeech> {
     const { text, voiceName, model } = options;
 
-    const response = await genai.models.generateContent({
+    const response = await genai().models.generateContent({
         model,
         contents: [{ role: "user", parts: [{ text }] }],
         config: {

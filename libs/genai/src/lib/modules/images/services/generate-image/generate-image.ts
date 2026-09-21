@@ -1,4 +1,4 @@
-import { genai } from "../../../client";
+import { imageGenai } from "../../../client";
 
 // Extended config to include parameters not yet in SDK types
 export interface GenerateImageOptions {
@@ -100,7 +100,7 @@ export async function generateImage(
 
     try {
         // Use generateContent instead of generateImages for Nano Banana models
-        const response = await genai.models.generateContent({
+        const response = await imageGenai().models.generateContent({
             model,
             contents: [
                 {

@@ -397,11 +397,28 @@ client_id = "747935050253-m8kmfus9e2bji50t7oucfs7oua4rm19q.apps.googleuserconten
 # more — kept because the hosted project's provider is configured with it and
 # this file is the local mirror of that, not a second source of truth.
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
-# The native grant carries no nonce, so there is nothing here to skip: GoTrue
-# only compares one when the token actually has one. Flip this to true if a
-# local native sign-in is ever refused on the nonce — it is the first thing the
-# CLI's own comment above points at — but it should not be needed.
-skip_nonce_check = false
+# REQUIRED for the native grant, and the CLI's own comment above says so. The
+# GoogleSignIn iOS SDK mints a nonce into the identity token by itself and
+# exposes it nowhere — `SignInParams` offers only `loginHint`, and the native
+# module never mentions one — while `signInWithIdToken` can only send a nonce
+# the caller holds. GoTrue insists the two either both exist or neither does, so
+# a token with a nonce and a request without one is refused:
+#
+#   invalid request: Passed nonce and nonce in id_token should either both exist or not.
+#
+# which surfaces in the app as the unrecognised-error fallback ("Couldn't sign
+# you in"), naming nothing. The hosted project needs the same thing switched on
+# under Authentication → Providers → Google → "Skip nonce checks".
+#
+# What it costs, stated rather than hidden: the nonce binds an identity token to
+# the request that asked for it, so without the check a token minted for this
+# client could in principle be replayed to GoTrue inside its hour of validity.
+# Signature, issuer, audience and expiry are all still verified, and obtaining
+# such a token means having completed a Google sign-in as that person on this
+# app. Reading the nonce back OUT of the token and passing it along would
+# satisfy the rule and prove nothing — it is the same token answering its own
+# question — so the check is disabled honestly rather than faked.
+skip_nonce_check = true
 
 [auth.external.facebook]
 enabled = false

@@ -46,7 +46,25 @@ export default defineConfig(() => ({
             // reason the builtins above are, and it is a real dependency of
             // this library rather than a peer, because `normaliseGround` is
             // useless without it.
-            external: [/^node:/, "sharp", "thumbhash"],
+            // `@google/genai` is external for a different reason again, and it
+            // is the one with a silent failure. Vite builds this library for
+            // the browser, and that package lists its `browser` condition
+            // FIRST in `exports` — so bundling it inlined the WEB build, where
+            // `vertexai`, `project` and `location` are documented as "ignored
+            // on browser runtimes". The options were accepted in silence and
+            // the client then failed with "An API Key must be set when running
+            // in a browser", which names the one thing a Vertex run
+            // deliberately does not have. External, each consumer resolves it
+            // under its own conditions — node, in every case this library has
+            // — and it is a declared dependency here, so there is nothing for
+            // a consumer to install that npm has not already given them.
+            external: [
+                /^node:/,
+                "sharp",
+                "thumbhash",
+                "@google/genai",
+                /^@google\/genai\//,
+            ],
         },
     },
 }));

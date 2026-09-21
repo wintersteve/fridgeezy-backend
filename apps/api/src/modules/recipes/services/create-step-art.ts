@@ -1,5 +1,5 @@
 import {
-    buildFoodIllustrationStyle,
+    buildStepArtPrompt,
     encodeRecipeImageVariants,
     generateImage,
 } from "@fridgeezy/genai";
@@ -83,34 +83,6 @@ interface Step {
     instruction_text: string;
 }
 
-/**
- * The subject half of the prompt.
- *
- * It describes the STEP's result rather than the finished dish — "the pan after
- * this instruction", not "the recipe". A step picture that shows the plated
- * dish is the hero again, twelve times over.
- *
- * The house art direction is used unmodified here, unlike the technique plates:
- * those had to name their ingredients and show a tool because they answer "what
- * does this word mean", where these sit above a sentence that already says what
- * is happening and to what. The band is atmosphere for a cook who is reading,
- * not a definition.
- */
-const buildStepPrompt = (dish: string, step: Step): string =>
-    `Editorial illustration of one moment in cooking ${dish}.
-
-SUBJECT
-- The state of the food at the END of this instruction, in whatever vessel the instruction implies: ${step.instruction_text}
-- It shows only what this step produced — not the finished dish, not a later step, and not a plated portion unless this step is the plating.
-- ONE vessel, centred, and nothing else in the picture.
-- This is ONE single continuous illustration of ONE moment, never a grid, sequence, panel or set of steps.
-
-${buildFoodIllustrationStyle({
-    framing:
-        "the vessel is centred and fills about two thirds of the frame's width, leaving a generous even margin of empty ground on all four sides. Nothing is cropped by an edge.",
-    mood: "mid-method — one moment of a dish being made.",
-})}`;
-
 const renderStep = async (
     recipeId: string,
     dish: string,
@@ -118,7 +90,7 @@ const renderStep = async (
 ): Promise<boolean> => {
     try {
         const { base64Data } = await generateImage({
-            prompt: buildStepPrompt(dish, step),
+            prompt: buildStepArtPrompt(dish, step.instruction_text),
             // 4:3, matching the band cook mode draws these in — see
             // `COOK_ART_BLEED_HEIGHT`, which is picked against that ratio.
             aspectRatio: "4:3",

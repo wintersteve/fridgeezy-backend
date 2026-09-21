@@ -1,12 +1,19 @@
-// The NODE entry, explicitly, and that is load-bearing rather than tidy.
-// `@google/genai` lists its `browser` condition FIRST in `exports`, so any
-// resolver carrying that condition — jiti, which is what `operations/` runs
-// under — takes the web build. There, `vertexai`, `project` and `location` are
-// documented as "ignored on browser runtimes": the options are accepted in
-// silence and the client then fails with "An API Key must be set when running
-// in a browser", which names the one thing a Vertex run deliberately does not
-// have. Nothing in this repo runs this library in a browser.
-import { GoogleGenAI } from "@google/genai/node";
+// The BARE specifier, and the `/node` subpath is a trap worth naming.
+//
+// `@google/genai` lists its `browser` condition first in `exports`, and this
+// library was being built with the web entry INLINED — where `vertexai`,
+// `project` and `location` are documented as "ignored on browser runtimes", so
+// a Vertex client silently became a key client and failed with "An API Key must
+// be set when running in a browser". The fix for that is in `vite.config.mts`:
+// the package is EXTERNAL, so each consumer resolves it under its own
+// conditions. Verified afterwards that both do so correctly — Node's `require`
+// gives `dist/node/index.cjs`, and jiti gives the node build too.
+//
+// Pinning `@google/genai/node` also appears to fix it and breaks the deploy:
+// that subpath has no `require` condition, only `import`, so it is ESM-only and
+// the CJS Lambda bundle dies with ERR_REQUIRE_ESM. `infra/build-artifact.sh`
+// catches it, which is the only reason it did not ship.
+import { GoogleGenAI } from "@google/genai";
 
 /**
  * TWO clients, chosen per PURPOSE rather than by a global switch.

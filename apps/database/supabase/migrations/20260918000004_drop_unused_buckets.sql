@@ -32,8 +32,29 @@ drop policy if exists public_read_cooking_actions_images on storage.objects;
 -- Safe on a stack where somebody has since put an object in one: this deletes
 -- only what is genuinely empty, so a bucket in use survives with its policy
 -- already dropped — noisy, but it fails visibly rather than deleting data.
-delete from storage.buckets
-where id in ('category_images', 'cooking_actions_images')
-  and not exists (
-      select 1 from storage.objects where objects.bucket_id = buckets.id
-  );
+--
+-- **Wrapped, because a HOSTED project refuses it outright.** Supabase allows
+-- `insert into storage.buckets` from a migration but answers a `delete` with
+-- 42501, "Direct deletion from storage tables is not allowed. Use the Storage
+-- API instead." That is not a permission to grant — it is a guard on the
+-- platform's own table, and it took a `db reset --linked` to the floor here on
+-- 2026-09-21, after the whole schema had already been rebuilt.
+--
+-- So the delete is best-effort: it still does the tidying on a local stack,
+-- where it works, and it is a no-op on hosted. **On hosted, the buckets have to
+-- be removed through the Storage API** — the policies above are dropped either
+-- way, so what survives is an empty, unreferenced bucket rather than a reachable
+-- one.
+do $$
+begin
+    delete from storage.buckets
+    where id in ('category_images', 'cooking_actions_images')
+      and not exists (
+          select 1 from storage.objects where objects.bucket_id = buckets.id
+      );
+exception
+    when insufficient_privilege then
+        raise notice
+            'storage.buckets delete refused (hosted) — remove category_images and cooking_actions_images via the Storage API';
+end
+$$;

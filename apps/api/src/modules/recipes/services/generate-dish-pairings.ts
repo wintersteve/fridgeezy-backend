@@ -1,7 +1,5 @@
 import { generateStream, type LlmProvider } from "@fridgeezy/llm";
 import { GenerateSuggestionResponseSchema } from "@fridgeezy/schemas";
-
-import type { PairingSeed } from "./load-seed-dish";
 import { processJsonlStream } from "@fridgeezy/streaming-server";
 import { z } from "zod/v4";
 
@@ -17,6 +15,7 @@ import {
 } from "../../suggestions/services/naming-rules";
 import { persistOrReuseSuggestion } from "../../suggestions/services/persist-or-reuse-suggestion";
 import { createSuggestionBatch } from "../../suggestions/services/suggestion-batch";
+import type { SuggestionOutcome } from "../../suggestions/services/suggestion-outcome";
 import {
     COMPONENT_RULE,
     COURSE_IS_A_DISH_RULE,
@@ -27,6 +26,7 @@ import {
 import { DISH_TOTAL_TIME_RULE } from "../../suggestions/services/timing-rules";
 
 import { fetchRecipeMetadata } from "./fetch-recipe-metadata";
+import type { PairingSeed } from "./load-seed-dish";
 
 /**
  * The courses a pairing set may endorse.
@@ -42,32 +42,42 @@ export const PAIRING_COURSES = ["appetizer", "side", "dessert"] as const;
 /**
  * How many dishes the model is asked for, per course it endorses.
  *
- * SIX, up from four (owner's call, 2026-09-16), and the change is about what
- * arrives rather than what is asked for. Between here and the picker there are
- * three lossy steps, and they compound: the model often names fewer than it was
- * asked for, `persistOrReuseSuggestion` resolves two of its names onto one
- * existing row, and the notability gate refuses some outright. Asking for four
- * was measured against the floor the picker needs and left no room for any of
- * that — a course could be asked for four dishes and end up offering ONE, which
- * is a choice of nothing.
+ * TWO (owner's call, 2026-09-21), down from six, and the reason is WAIT: this
+ * runs behind a press in the course picker with nothing on screen but a
+ * spinner, and every dish costs a review, an embedding and three dedup layers.
+ * The dishes are judged concurrently now — see the dispatch in
+ * {@link generateDishPairings} — so the count no longer multiplies the wall
+ * clock the way it did, but it still decides how much of the model's own output
+ * has to be written before the answer can come back.
  *
- * Six is also what the picker can draw: `MAX_COURSE_CANDIDATES` is six, so this
- * is the number that fills it rather than a number that overshoots it. The cost
- * argument has not changed and is still the reason it is not higher — each dish
- * costs a review, an embedding and three dedup layers, which is most of a
- * batch's tokens — but it is paid ONCE per dish and read by everybody
- * afterwards, so the number wants to be the useful one.
+ * **It is NOT the number the picker draws.** That is `MAX_COURSE_CANDIDATES`
+ * (six), the cap on the READ, and it stays where it is — a course accumulates
+ * across calls: an evidence layer of dishes people actually served, this run,
+ * and a top-up. Two is what ONE generation asks for, not what a course holds.
  *
- * `PAIRING_FLOOR` on the client is the other half: below three a course says so
- * rather than offering what it has. Raising this is what makes that floor
- * survivable after a reader's own blacklist has taken one or two out.
+ * The three lossy steps between here and the picker have not gone away — the
+ * model names fewer than it was asked for, `persistOrReuseSuggestion` resolves
+ * two of its names onto one existing row, and the notability gate refuses some
+ * outright — so asking for two will routinely store one. That is the whole cost
+ * of this number, and it is paid for by {@link PAIRING_TOP_UP_BELOW} moving
+ * with it: at TWO, a course that lands at one is still asked again rather than
+ * left as a choice of one.
+ *
+ * It went 4 → 6 on 2026-09-16 for exactly the reason it now reads the other
+ * way, and the argument was not wrong — it was answering the lossiness by
+ * paying for more dishes up front, on every dish in the catalogue, to protect a
+ * floor of three. The top-up path arrived in the same change and is the cheaper
+ * answer to the same problem: pay for one more call on the courses that
+ * actually came back thin.
  */
-export const PAIRINGS_PER_COURSE = 6;
+export const PAIRINGS_PER_COURSE = 2;
 
 /**
  * What a set may hold in total, whatever the model returns.
  *
- * Three courses at four dishes is the intended shape. The ceiling exists
+ * Three courses at {@link PAIRINGS_PER_COURSE} dishes is the intended shape,
+ * and it is counted on DISPATCH rather than on what survives — spend is what it
+ * bounds, and spend happens at the call. The ceiling exists
  * because the model decides how many courses to endorse and a JSONL stream has
  * no natural end — a model that endorsed four courses and produced eight dishes
  * each would persist thirty-two dishes on one unattended request.
@@ -384,14 +394,32 @@ const PAIRING_MODEL = "gpt-4.1";
  * Four calls in that run produced seven `authenticity.verify` and seven
  * `adjudicate.ingredient` calls inside `persistOrReuseSuggestion` — so the
  * prompt above is the cheap half and the dishes are the expensive one. That is
- * the whole argument for {@link PAIRINGS_PER_COURSE} being four rather than
- * six, and for dropping a dish BEFORE that function wherever the drop is
- * knowable (a course that was not endorsed, a slot already full, a component
- * offered as a course).
+ * the whole argument for {@link PAIRINGS_PER_COURSE} being small, and for
+ * dropping a dish BEFORE that function wherever the drop is knowable (a course
+ * that was not endorsed, a slot already full, a component offered as a course).
+ *
+ * ## The dishes are judged CONCURRENTLY, and they were not always
+ *
+ * Every admitted line dispatches its own `persistOrReuseSuggestion` and the
+ * loop moves on; the results are settled together afterwards, in arrival
+ * order. Until 2026-09-21 the call was awaited inside the loop, which cost the
+ * reader twice over: the judgements ran end to end — six dishes at two to five
+ * seconds each, behind a press with a spinner on it — and the await also
+ * stopped the model's own stream being read while each one went.
+ *
+ * This is what the batch feed has always done (`runGenerationPass`), and
+ * `createSuggestionBatch` is the thing that makes it safe: siblings of one
+ * request compare in memory rather than against a database that does not hold
+ * them yet. Its deadlock argument needs slots OPENED in arrival order, which
+ * holds here because `persistOrReuseSuggestion` opens its slot before its first
+ * await — so an unawaited call still opens synchronously, at the dispatch.
  *
  * NEVER THROWS for a dish that simply has no pairings: an empty `courses` and an
- * empty `pairings` is a real answer, and the caller records it as one. It does
- * throw if the model call itself fails, because that is not an answer.
+ * empty `pairings` is a real answer, and the caller records it as one. Nor for
+ * one dish that fails to persist — that is caught at its dispatch and logged,
+ * because with the judgements concurrent an uncaught rejection would take down
+ * a run whose other dishes are already written. It does throw if the model call
+ * itself fails, because that is not an answer.
  */
 export async function generateDishPairings(
     dish: PairingSeed,
@@ -510,7 +538,52 @@ export async function generateDishPairings(
     let modelCourses: string[] = [];
 
     const pairings: GeneratedPairing[] = [];
+
+    /**
+     * How many dishes each course has DISPATCHED — reserved at the call, never
+     * won at the answer.
+     *
+     * The price of judging concurrently. Sequentially this counted ADMITTED
+     * dishes, so a line the notability gate refused handed its slot back and a
+     * later line for the same course could take it; reserving means a refused
+     * dish costs the course a slot.
+     *
+     * Taken knowingly, because the alternative is worse in the direction that
+     * matters. Backfilling under concurrency means dispatching MORE than
+     * `perCourse` and keeping the first survivors, and a dispatch is exactly
+     * where the money goes — a review, an embedding and three dedup layers
+     * each. The rule this file already follows is to drop a dish BEFORE
+     * `persistOrReuseSuggestion` wherever the drop is knowable, and "this
+     * course is already full" is knowable.
+     *
+     * What recovers a course thinned this way is the top-up, which is what
+     * `PAIRING_TOP_UP_BELOW` is for.
+     */
     const perCourseCount = new Map<string, number>();
+
+    /**
+     * Every dish this run has dispatched, in ARRIVAL order, already being
+     * judged.
+     *
+     * The judging runs concurrently, so this is what keeps the answer
+     * deterministic: `rank` within a course is the order the model produced its
+     * dishes in, and walking this array is that order whatever order the
+     * promises actually settle in.
+     *
+     * Arrival order is also what makes the shared {@link createSuggestionBatch}
+     * safe here. Its deadlock argument rests on `open()` being called
+     * synchronously in a monotonic order, and `persistOrReuseSuggestion` opens
+     * its slot before its first await — so calling it WITHOUT awaiting still
+     * opens the slots in the order the lines arrived. Anything that defers the
+     * call (a queue, a `setTimeout`, a `Promise.all` over a mapped array built
+     * later) gives that up silently.
+     */
+    const judged: {
+        courseType: string;
+        proposal: PairingDish;
+        /** Null means it threw — logged at the dispatch, not rethrown. */
+        outcome: Promise<SuggestionOutcome | null>;
+    }[] = [];
 
     /**
      * Every dish this set has committed to, by `dish_key`.
@@ -607,7 +680,9 @@ export async function generateDishPairings(
         }
 
         if (endorsed.length === 0) continue;
-        if (pairings.length >= MAX_PAIRINGS_PER_SET) continue;
+        // Dispatched, not admitted: this ceiling bounds unattended SPEND, and
+        // the spend is committed at the call below rather than at its answer.
+        if (judged.length >= MAX_PAIRINGS_PER_SET) continue;
 
         const proposal = parsed as PairingDish;
         const courseType = resolveCourse(proposal.course);
@@ -642,23 +717,80 @@ export async function generateDishPairings(
             continue;
         }
 
-        const outcome = await persistOrReuseSuggestion(
-            proposal,
-            {
-                cuisine: proposal.tags.find((tag) =>
-                    cuisineTagNames.some(
-                        (cuisine) => tag.toLowerCase() === cuisine.toLowerCase()
-                    )
-                ),
-            },
-            { batch }
+        // RESERVED HERE, before the call rather than after its answer — see
+        // `perCourseCount`. The cap has to be spent at the moment the money is.
+        perCourseCount.set(
+            courseType,
+            (perCourseCount.get(courseType) ?? 0) + 1
         );
+
+        // DISPATCHED, NOT AWAITED, and that is the whole of why a press is
+        // quick. Each of these is a review, an embedding and three dedup
+        // layers, and the gate call alone was measured at 0.7s to 5.5s for the
+        // batch feed — so awaiting inside this loop ran them end to end AND
+        // stopped reading the model's own stream while each one went. That feed
+        // has judged its lines concurrently since it was written
+        // (`runGenerationPass`), and `createSuggestionBatch` exists precisely
+        // so siblings can still see each other's dishes without being
+        // serialised.
+        judged.push({
+            courseType,
+            proposal,
+            outcome: persistOrReuseSuggestion(
+                proposal,
+                {
+                    cuisine: proposal.tags.find((tag) =>
+                        cuisineTagNames.some(
+                            (cuisine) =>
+                                tag.toLowerCase() === cuisine.toLowerCase()
+                        )
+                    ),
+                },
+                { batch }
+            ).catch((error: unknown) => {
+                // One dish's failure is not the set's. Sequentially a throw
+                // here aborted the whole run and the reader got a 500 for a
+                // call that had already persisted its earlier dishes; caught,
+                // the set records what worked. It must also be caught HERE
+                // rather than at the `Promise.all` below: an unhandled
+                // rejection between the dispatch and that await takes the
+                // process down, which is the trap `persistOrReuseSuggestion`
+                // records against its own speculative embedding.
+                console.error(
+                    `[Pairings] "${proposal.name}" failed to persist`,
+                    error
+                );
+
+                return null;
+            }),
+        });
+    }
+
+    /**
+     * Settled in ARRIVAL order, whatever order they finished in.
+     *
+     * Everything below this line used to sit inside the loop above, and it is
+     * here rather than there because it needs an ANSWER: the dish key is what
+     * dedup resolved to, which is not knowable until the judging is done. The
+     * two filters it applies are the same two, in the same order, against the
+     * same `usedKeys` — the only thing that changed is when they can run.
+     */
+    const settled = await Promise.all(judged.map((entry) => entry.outcome));
+
+    /** Contiguous per course, counting only what was actually admitted. */
+    const rankByCourse = new Map<string, number>();
+
+    settled.forEach((outcome, index) => {
+        const { courseType, proposal } = judged[index];
+
+        // Threw, and already reported at the dispatch.
+        if (!outcome) return;
 
         if (outcome.kind === "dropped") {
             console.warn(
                 `[Pairings] dropped "${proposal.name}" (${outcome.reason})`
             );
-            continue;
+            return;
         }
 
         const resolved =
@@ -682,18 +814,17 @@ export async function generateDishPairings(
                       name: outcome.suggestion.name,
                   };
 
-        if (usedKeys.has(resolved.dishKey)) continue;
+        if (usedKeys.has(resolved.dishKey)) return;
 
         // The model named something that dedup resolved back onto the dish this
         // set is ABOUT. `dish_pairings_not_self` would refuse the row anyway;
         // catching it here keeps the rank sequence contiguous.
-        if (resolved.dishKey === mainDishKey) continue;
+        if (resolved.dishKey === mainDishKey) return;
 
         usedKeys.add(resolved.dishKey);
-        perCourseCount.set(
-            courseType,
-            (perCourseCount.get(courseType) ?? 0) + 1
-        );
+
+        const rank = rankByCourse.get(courseType) ?? 0;
+        rankByCourse.set(courseType, rank + 1);
 
         pairings.push({
             courseType,
@@ -705,9 +836,9 @@ export async function generateDishPairings(
             // ranking is the only one available — nothing here has been saved
             // by anybody yet, which is precisely what distinguishes a proposal
             // from the evidence layer above it.
-            rank: (perCourseCount.get(courseType) ?? 1) - 1,
+            rank,
         });
-    }
+    });
 
     // A course endorsed whose dishes were all dropped — or that the model never
     // named one for — KEEPS its endorsement (owner's call, 2026-09-16). The

@@ -10,6 +10,9 @@
     "exclude": ["eslint.config.js", "eslint.config.cjs", "eslint.config.mjs"],
     "references": [
         {
+            "path": "../../libs/admin-contract/tsconfig.lib.json"
+        },
+        {
             "path": "../../libs/toolkit/tsconfig.lib.json"
         },
         {
@@ -34,10 +37,10 @@
             "path": "../../libs/domain/tsconfig.lib.json"
         },
         {
-            "path": "../../libs/components/tsconfig.lib.json"
+            "path": "../../libs/dietary/tsconfig.lib.json"
         },
         {
-            "path": "../../libs/dietary/tsconfig.lib.json"
+            "path": "../../libs/components/tsconfig.lib.json"
         },
         {
             "path": "../../libs/bedrock/tsconfig.lib.json"

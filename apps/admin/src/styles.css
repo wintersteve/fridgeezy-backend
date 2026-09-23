@@ -1,0 +1,408 @@
+/*
+ * The console's stylesheet — what is LEFT of it.
+ *
+ * ## MUI owns the controls; this owns the frame
+ *
+ * Buttons, fields, selects, tables, the dialog, the snackbar, the chips and
+ * the progress bar are `@mui/material`, themed in `theme.ts` from the same
+ * tokens declared below. What stays here is everything that is not a control:
+ * the shell's grid, the sidebar, the wordmark, the page head, the art
+ * thumbnails and the few composite blocks (a step row, the technique grid,
+ * the save bar) that are layout rather than widgets.
+ *
+ * The split is worth stating because the tempting move is to put the frame
+ * into `sx` as well. It would work and it would put the console's layout into
+ * eight files instead of one, where a page's own spacing is invented per page
+ * — which is the thing that made this tool look untidy in the first place.
+ *
+ * ## The tokens are the SITE's, copied rather than invented
+ *
+ * `apps/site/src/chrome.ts` carries the same names and the same values. This is
+ * a different kind of surface — a dense table tool rather than a marketing page
+ * — but it is the same product, and a console with a palette of its own is how
+ * an organisation ends up with two brands. Keep them in step by hand; there is
+ * no build step shared between a static string in a TypeScript file and a
+ * stylesheet, and inventing one for two consumers would be the heavier mistake.
+ *
+ * ## Light only, on purpose (owner's call, 2026-09-23)
+ *
+ * The dark set is GONE rather than left following the system. The app carries a
+ * stored preference because a cook holds a phone in a dark kitchen and the
+ * system may disagree with what they want; a desktop tool for curating a warm,
+ * cream-grounded catalogue has no such argument, and half the reason to look at
+ * this screen is to judge whether a dish's illustration is any good — which is
+ * a judgement about a painting with a cream ground baked into it. Reinstating
+ * dark means bringing the block back from `chrome.ts`, not inventing one.
+ *
+ * ## The serif is for a DISH'S NAME and nothing else
+ *
+ * Lora is the app's editorial face and its use is narrow by decision, not by
+ * accident: the client's own note says "the serif is reserved for a dish's
+ * NAME". Recipe titles, suggestion titles and the detail page's masthead are
+ * dishes and take it. Page titles, section headings, table headers, ingredient
+ * names and tag names are CHROME and stay in Poppins — the same split the app
+ * settled on when its empty pages and welcome screen moved from serif to sans.
+ *
+ * Spreading it further is the tempting mistake: it reads as "more branded" for
+ * about a day and then the one signal that says "this row is a dish" is gone.
+ */
+
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 400; font-display: swap; src: url(/fonts/poppins-400.woff2) format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 500; font-display: swap; src: url(/fonts/poppins-500.woff2) format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 600; font-display: swap; src: url(/fonts/poppins-600.woff2) format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 700; font-display: swap; src: url(/fonts/poppins-700.woff2) format('woff2'); }
+@font-face { font-family: 'Lora'; font-style: normal; font-weight: 400; font-display: swap; src: url(/fonts/lora-400.woff2) format('woff2'); }
+@font-face { font-family: 'Lora'; font-style: normal; font-weight: 600; font-display: swap; src: url(/fonts/lora-600.woff2) format('woff2'); }
+@font-face { font-family: 'Lora'; font-style: italic; font-weight: 600; font-display: swap; src: url(/fonts/lora-600-italic.woff2) format('woff2'); }
+
+:root {
+    /* The app's page ground, not the site's. `#FCFAF6` is the 10% warm blend
+       the owner settled on after two fuller-warmth attempts were reverted —
+       don't push it warmer. */
+    --bg: #FCFAF6; --bg-variant: #F8F5F0; --surface: #FFFFFF;
+    --serif: 'Lora', Georgia, 'Times New Roman', serif;
+    --ink: #5C5450; --ink-strong: #3A332F; --ink-muted: #9A938F; --ink-soft: #8A8380; --ink-mid: #7A736F;
+    --outline: rgba(232, 228, 224, .6); --outline-solid: #E8E4E0;
+    --primary: #F4A67A; --on-primary: #FFFFFF; --primary-container: #FFF5EE; --primary-ink: #A35529;
+    --secondary: #93C5A8; --secondary-container: #F0F7F2; --secondary-ink: #3F7A58;
+    --rose-container: #FFF3F0; --rose-ink: #6E3733;
+    --tertiary-ink: #3C6B81; --tertiary-container: #EEF4F8;
+    --error-ink: #A3322B; --error-container: #FDF0EE;
+    /* The app's own three, unchanged — `rest` really is that faint. A card here
+       is separated from the page by its outline and the warm ground behind it,
+       not by a drop shadow. */
+    --shadow-rest: 0 4px 4px rgba(6, 6, 6, .0125);
+    --shadow-raised: 0 2px 8px rgba(6, 6, 6, .06);
+    --shadow-floating: 0 6px 16px rgba(6, 6, 6, .06);
+    --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px; --r-pill: 999px;
+    --sidebar: 224px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: 'Poppins', -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { color: var(--ink-strong); margin: 0; font-weight: 600; }
+h1 { font-size: 26px; letter-spacing: -.5px; font-weight: 700; }
+/* A dish IS the masthead on the detail page, so that one heading takes the
+   serif. `.page-head h1.dish` rather than a blanket rule: "Recipes" and "Users"
+   are chrome and must stay in Poppins. */
+h1.dish { font-size: 30px; font-weight: 600; letter-spacing: -.4px; }
+/*
+ * The app's quiet-heading idiom: small, tracked, uppercase, in the muted ink.
+ * It is what every section label in the client looks like, and it is what stops
+ * a card full of fields reading as a form. Deliberately NOT a big bold 17px —
+ * that competes with the page title two ranks above it.
+ */
+h2 {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+}
+h3 { font-size: 14px; }
+
+a { color: var(--primary-ink); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+:focus-visible { outline: 2px solid var(--primary-ink); outline-offset: 2px; border-radius: 2px; }
+
+/* --- shell ------------------------------------------------------------- */
+
+.shell { display: grid; grid-template-columns: var(--sidebar) 1fr; min-height: 100vh; }
+
+.sidebar {
+    background: var(--bg-variant);
+    border-right: 1px solid var(--outline);
+    padding: 20px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+}
+
+/* Tracked small caps — the app's quiet-heading idiom, and the one place it
+   names itself to a reader. Not a serif display line: the client's own welcome
+   screen settled that argument, and a wordmark in the editorial face here would
+   compete with the dish names it sits beside. */
+.wordmark {
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+    padding: 4px 12px 2px;
+}
+.wordmark span { color: var(--primary-ink); }
+.wordmark-sub {
+    font-size: 10px; letter-spacing: 1.6px; text-transform: uppercase;
+    color: var(--ink-muted); padding: 0 12px 18px; font-weight: 500;
+}
+
+/*
+ * A group label. The app's quiet-heading idiom again, one size down from a
+ * section heading on a page — this is a label on a rail, not a heading over
+ * content, and it must sit UNDER the rows it names in visual weight or it
+ * competes with the destinations themselves.
+ */
+.nav-group {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    padding: 16px 12px 4px;
+}
+/* The first group sits directly under the wordmark, which already provides the
+   space — without this it reads as a gap somebody forgot to close. */
+.nav-group:first-of-type { padding-top: 0; }
+
+.nav-link {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 12px; border-radius: var(--r-md);
+    color: var(--ink-mid); font-weight: 500; font-size: 13px;
+}
+.nav-link:hover { background: var(--surface); color: var(--ink-strong); text-decoration: none; }
+.nav-link.active { background: var(--primary-container); color: var(--primary-ink); font-weight: 600; }
+/* A count beside a nav row means "this many need attention", never "this many
+   exist" — a total in a sidebar is decoration that never changes. */
+.nav-link .badge { font-size: 11px; font-weight: 600; color: var(--ink-muted); }
+.nav-link.active .badge { color: var(--primary-ink); }
+
+.sidebar-foot { margin-top: auto; padding: 12px; border-top: 1px solid var(--outline); }
+.sidebar-foot .who { font-size: 11px; color: var(--ink-muted); word-break: break-all; margin-bottom: 8px; }
+
+.main { padding: 24px 28px 64px; max-width: 1400px; }
+
+/*
+ * A heading with something on the far side of it. Its children are a COLUMN
+ * and a trailing node, so a page that puts its heading and its lede in here as
+ * two siblings gets them side by side — which is what a bare `<Typography>`
+ * pair did until the lede was moved out of it.
+ */
+.page-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; margin-bottom: 4px;
+}
+.page-lede { color: var(--ink-soft); margin: 4px 0 20px; max-width: 70ch; }
+
+/* --- surfaces ---------------------------------------------------------- */
+
+/*
+ * A padded card. It is a class rather than a `sx` on each `Paper` because the
+ * two kinds of card in this console want opposite things: one holds a TABLE
+ * and must not pad (the cells carry their own), one holds a form and must. A
+ * prop would be set per call site and drift; this way there are two shapes and
+ * the markup says which.
+ */
+.pad { padding: 20px; }
+/* A section heading inside a padded card sets its own distance to the first
+   field, since the quiet-heading idiom carries no margin of its own. */
+.pad > h2 { margin-bottom: 14px; }
+.pad > p { margin: 0 0 12px; }
+.pad > p:last-child { margin-bottom: 0; }
+.pad > dl { margin: 0; }
+
+.card {
+    background: var(--surface); border: 1px solid var(--outline);
+    border-radius: var(--r-xl); box-shadow: var(--shadow-rest);
+}
+.card.pad { padding: 20px; }
+
+.grid { display: grid; gap: 12px; }
+.grid.cols-4 { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+
+/* A stat that is a DEFECT count is a link into the list already filtered to
+   it; a stat that is a total is not. That is the whole difference between the
+   two states below, and it is why the tile is an <a> only when it leads
+   somewhere. */
+.stat { padding: 16px 18px; display: block; }
+.stat .label { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-muted); font-weight: 600; }
+.stat .value { font-size: 28px; font-weight: 700; color: var(--ink-strong); line-height: 1.2; margin-top: 4px; }
+.stat .note { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+a.stat:hover { text-decoration: none; border-color: var(--primary); }
+a.stat .value { color: var(--primary-ink); }
+a.stat.clear .value { color: var(--ink-strong); }
+
+.cell-title { font-weight: 600; color: var(--ink-strong); }
+
+/*
+ * A DISH's name. The one place the editorial face appears in this tool.
+ *
+ * 15px rather than the 13px the table runs at, because that is what the serif
+ * needs to stop reading as a mistake beside sans of the same size — the app
+ * makes the same adjustment, setting a card's dish name a rung above the body
+ * it sits in. Weight 600 to match `serifTitleMedium`.
+ */
+.dish {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 1.3;
+    color: var(--ink-strong);
+    letter-spacing: -0.1px;
+}
+a.dish:hover { text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 2px; }
+.cell-sub { font-size: 12px; color: var(--ink-muted); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--ink-muted); }
+
+/* 3:4, which is what every illustration is rendered at — a square crop takes
+   the sides off the plate, which is the whole reason the recipe row in the app
+   holds its picture in a 3:4 frame rather than a thumbnail box. */
+/* The art column is fixed so the dish names line up down the table whatever
+   the pictures do. MUI has no opinion about column widths. */
+.col-thumb { width: 60px; }
+
+.thumb {
+    width: 42px; height: 56px; border-radius: var(--r-md); object-fit: cover;
+    background: var(--bg-variant); display: block;
+    border: 1px solid var(--outline);
+}
+.thumb.empty { display: grid; place-items: center; font-size: 10px; color: var(--ink-muted); }
+
+.empty { padding: 56px 24px; text-align: center; color: var(--ink-soft); }
+.empty h3 { margin-bottom: 4px; }
+
+/* --- detail ------------------------------------------------------------ */
+
+.detail { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 1080px) { .detail { grid-template-columns: 1fr; } }
+
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
+
+.hero-art { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: var(--r-lg); background: var(--bg-variant); display: block; }
+
+.step-row { display: grid; grid-template-columns: 28px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--outline); }
+.step-row:last-child { border-bottom: none; }
+.step-row .n { font-size: 12px; font-weight: 700; color: var(--ink-muted); padding-top: 8px; }
+
+/*
+ * A method step beside its picture. 4:3, which is the ratio the renders are
+ * asked for and the band cook mode draws them in — a different ratio here would
+ * make the console a poor place to judge whether a picture is any good, which
+ * is the only reason to look at this screen.
+ */
+.step-art-row {
+    display: grid;
+    grid-template-columns: 28px 160px 1fr auto;
+    gap: 14px;
+    align-items: start;
+    padding: 14px var(--r-xl);
+    border-bottom: 1px solid var(--outline);
+}
+.step-art-row:last-child { border-bottom: none; }
+/* The gathering page is not a step, and the row says so before it is read: a
+   peach wash and a heavier rule under it separate it from the method the way
+   the bench is separate from the cooking. */
+.step-art-row.mise { background: var(--primary-container); border-bottom-width: 2px; }
+.step-art-row.mise .n { color: var(--primary-ink); font-size: 16px; }
+.step-art-row .n { font-size: 12px; font-weight: 700; color: var(--ink-muted); padding-top: 4px; }
+.step-art-row .art { aspect-ratio: 4 / 3; border-radius: var(--r-lg); overflow: hidden; background: var(--bg-variant); border: 1px solid var(--outline); }
+.step-art-row .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.step-art-row .art .none {
+    width: 100%; height: 100%; display: grid; place-items: center;
+    font-size: 11px; color: var(--ink-muted);
+}
+.step-art-row .cell-sub { line-height: 1.55; }
+@media (max-width: 900px) {
+    .step-art-row { grid-template-columns: 24px 1fr; }
+    .step-art-row .actions { grid-column: 2; }
+}
+
+/*
+ * The technique vocabulary, as a grid of plates.
+ *
+ * A grid rather than the rows step art uses, because these are 148 single
+ * words with a picture each — there is no sentence to read beside them, and a
+ * table of 148 one-word rows is a list you scroll past rather than look at.
+ * The picture IS the content here.
+ *
+ * 4:3 and a white ground, matching what the generator produces and what the
+ * client draws them on: `normaliseGround` corrects every render to #FFFFFF
+ * precisely so one backdrop can sit behind all of them, and a tinted tile here
+ * would hide the one defect worth spotting — a plate whose own ground drifted.
+ */
+.technique-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 16px;
+    padding: 16px;
+}
+.technique { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.technique .art {
+    width: 100%; aspect-ratio: 4 / 3; border-radius: var(--r-lg);
+    overflow: hidden; background: #fff; border: 1px solid var(--outline-solid);
+}
+.technique .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.technique .art .none {
+    width: 100%; height: 100%; display: grid; place-items: center;
+    font-size: 11px; color: var(--ink-muted); background: var(--bg-variant);
+}
+/* The verb, and it is the one place a technique name is shown to a reader of
+   this console — `text-transform` because the column stores `deep_fry`. */
+.technique .cell-title { text-transform: capitalize; font-size: 13px; }
+
+/* The budget a press spends, beside the price it spends. */
+.billing-badge { display: inline-flex; align-items: center; gap: 8px; }
+.billing-badge .cell-sub { font-size: 12px; }
+
+.kv { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--outline); font-size: 13px; }
+.kv:last-child { border-bottom: none; }
+.kv dt { color: var(--ink-muted); }
+.kv dd { margin: 0; color: var(--ink-strong); text-align: right; font-weight: 500; }
+
+.tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.save-bar {
+    position: sticky; bottom: 0; margin-top: 16px;
+    display: flex; align-items: center; gap: 12px; justify-content: flex-end;
+    padding: 12px 16px; background: var(--surface);
+    border: 1px solid var(--outline); border-radius: var(--r-xl);
+    box-shadow: var(--shadow-floating);
+}
+.save-bar .state { margin-right: auto; font-size: 12px; color: var(--ink-muted); }
+
+/* --- sign in ----------------------------------------------------------- */
+
+.signin { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.signin .wordmark { padding: 0; font-size: 18px; }
+.signin .wordmark-sub { padding: 2px 0 20px; }
+
+/* --- layout roles ------------------------------------------------------ */
+/*
+ * These replace 46 inline `style={{ … }}` objects that had accumulated across
+ * seven pages — which is what actually read as untidy, not the stylesheet's
+ * size. The app repo states the rule for itself: "No static inline styles.
+ * Every fully-static `style={{ … }}` belongs in a sheet key. Only runtime-driven
+ * values stay inline."
+ *
+ * They are named for the ROLE, never the measurement. `.section-block` rather
+ * than `.mb-16`, because a utility class is an inline style with extra steps:
+ * it moves the decision into the markup just the same, and the next page picks
+ * a different number for the same job. What made the spacing look ad hoc was
+ * seven files each choosing between 8, 12, 14, 16, 20, 24 and 32 — so the point
+ * of this block is that there is now ONE answer per job.
+ */
+
+/* Blocks stacked down a page: a stats grid, a table card, an action row. */
+.section-block { margin-bottom: 16px; }
+
+/* A heading BETWEEN blocks, as opposed to one inside a card. */
+.block-heading { margin: 24px 0 12px; }
+
+/* A line of explanation under a heading inside a card. */
+.card-note { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; }
+
+/* A lede that introduces a block rather than the page. */
+.page-lede.tight { margin-bottom: 12px; }

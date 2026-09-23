@@ -55,6 +55,11 @@ for (const { file, html } of PAGES) {
     writeFileSync(target, html);
 }
 
+/**
+ * Assets are copied verbatim: the self-hosted fonts, the app screenshots under
+ * `screens/` (real captures, light theme only — see `chrome.ts`), and `og.png`,
+ * whose source template and re-render command live in `tools/og-template.html`.
+ */
 cpSync(path.join(ROOT, "src", "assets"), path.join(DIST, "assets"), {
     recursive: true,
 });

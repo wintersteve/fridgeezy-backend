@@ -55,6 +55,17 @@ export interface RecipeSummary {
      * and must refuse an owned recipe outright.
      */
     createdBy?: string | null;
+    /**
+     * When the admin console pulled this dish, or null.
+     *
+     * Selected for the same reason `createdBy` is, one step further: this
+     * summary is read through the SERVICE ROLE, which sees past RLS — so the
+     * `hidden_at` predicate every policy and every DEFINER reader applies does
+     * nothing here. `/share` is the live case again, and the sharper one: it is
+     * an open route, so a hidden dish would keep serving its own public page to
+     * the whole internet after being withdrawn everywhere else.
+     */
+    hiddenAt?: string | null;
     ingredients: Array<{ id: string; name: string }>;
     /**
      * `type` is carried because `groupRecipeTags` derives a card's eyebrow
@@ -89,6 +100,7 @@ export async function fetchRecipeSummary(
             total_time_minutes,
             origin,
             created_by,
+            hidden_at,
             source_suggestion_id,
             recipe_ingredients (
                 ingredient:ingredients (
@@ -123,6 +135,7 @@ export async function fetchRecipeSummary(
         totalTimeMinutes: recipe.total_time_minutes ?? null,
         origin: recipe.origin ?? null,
         createdBy: recipe.created_by ?? null,
+        hiddenAt: recipe.hidden_at ?? null,
         sourceSuggestionId: recipe.source_suggestion_id ?? null,
         ingredients: recipe.recipe_ingredients.map((ri) => ({
             id: ri.ingredient.id,

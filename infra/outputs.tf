@@ -30,3 +30,31 @@ output "alerts_topic_arn" {
   EOT
   value       = aws_sns_topic.alerts.arn
 }
+
+# ---------------------------------------------------------------------------
+# Mail. The SMTP password is deliberately not here and not in state at all —
+# `infra/create-ses-smtp-credentials.sh` mints it and prints it once. See the
+# header in dns.tf.
+# ---------------------------------------------------------------------------
+
+output "ses_smtp_user_name" {
+  description = "IAM user the SES SMTP credentials are minted against."
+  value       = local.mail_enabled ? aws_iam_user.ses_smtp[0].name : null
+}
+
+output "site_mail_region" {
+  description = "Region the SES identity and its SMTP endpoint live in."
+
+  # Read off the identity rather than from var.aws_region, which is the same
+  # string and is NOT equivalent: an output whose value depends on no resource
+  # sits outside every targeted plan, so `-target` writes the other mail
+  # outputs and silently drops this one. The credential script then builds
+  # `email-smtp..amazonaws.com` out of an empty region and prints a host that
+  # does not resolve.
+  value = local.mail_enabled ? aws_sesv2_email_identity.mail[0].region : null
+}
+
+output "site_mail_events_topic_arn" {
+  description = "SNS topic carrying SES bounce, complaint and delivery events."
+  value       = local.mail_enabled ? aws_sns_topic.mail_events[0].arn : null
+}

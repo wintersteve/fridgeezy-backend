@@ -3,6 +3,7 @@ import { Router } from "express";
 import { requireSupabaseUser } from "../middleware/require-auth";
 import { requireEntitlement } from "../middleware/require-entitlement";
 import { AccountRoutes } from "../modules/account";
+import { AdminRoutes } from "../modules/admin";
 import { BillingPublicRoutes, BillingRoutes } from "../modules/billing";
 import { ChatRoutes } from "../modules/chat";
 import { assertSearchFieldsAreGated } from "../modules/chat/tools";
@@ -122,6 +123,16 @@ const MOUNTS: Mount[] = [
     // body — see `delete-account.ts`, where that is the whole of the
     // authorisation.
     { prefix: "/account", router: AccountRoutes, tier: "account" },
+    // The admin console. `account` tier because the tiers here describe what a
+    // capability COSTS, and this one costs nothing a reader would be billed
+    // for — it is not free in the sense the others are. `requireAdmin` is
+    // applied by the router itself, to every route, so the mount's own
+    // authentication is the first of two gates rather than the only one.
+    //
+    // Deliberately NOT `subscriber`: an admin is not a customer, and gating
+    // the console on an entitlement would mean the person who fixes the
+    // catalogue needs a subscription to do it.
+    { prefix: "/admin", router: AdminRoutes, tier: "account" },
 ];
 
 /** Routes registered directly on the REST router rather than in a feature module. */

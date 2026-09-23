@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+
 import { GetParametersByPathCommand, SSMClient } from "@aws-sdk/client-ssm";
 
 /**
@@ -15,6 +17,73 @@ const REQUIRED_KEYS = [
     "SUPABASE_ANON_KEY",
     "SUPABASE_SERVICE_ROLE_KEY",
 ] as const;
+
+/**
+ * Where the Google service-account key is written on Lambda.
+ *
+ * `/tmp` is the only writable path there, and it survives for the life of the
+ * execution environment — so this happens once per cold start, alongside
+ * everything else in this file.
+ */
+const GOOGLE_CREDENTIALS_PATH = "/tmp/google-service-account.json";
+
+/**
+ * Turns a service-account JSON held in SSM into the FILE that Google's auth
+ * library actually looks for.
+ *
+ * ## Why this one secret needs code when the other five do not
+ *
+ * Every parameter under the prefix becomes an env var of the same name, which
+ * is all `GOOGLE_API_KEY` or `GOOGLE_CLOUD_PROJECT` needs. Credentials are
+ * different: `GOOGLE_APPLICATION_CREDENTIALS` is a PATH, not a value, and
+ * `google-auth-library` resolves it by reading the file. Putting the JSON in
+ * that variable would leave the library looking for a file whose name is an
+ * entire private key, and failing with a path error that names none of this.
+ *
+ * ## Why the Lambda needs it at all
+ *
+ * The library's other two sources are gcloud's application-default login and a
+ * GCP metadata server. A laptop has the first; anything inside GCP has the
+ * second; Lambda has neither. Without this, setting `GOOGLE_CLOUD_PROJECT` on
+ * the deployed function would move image generation to Vertex and then fail
+ * every render on credentials — so the two belong together, and are documented
+ * together in infra/README.md.
+ *
+ * ## Absent is not an error
+ *
+ * Unset, this does nothing and image generation stays on `GOOGLE_API_KEY` —
+ * which is what every deployed environment did before Vertex existed and what
+ * they do until the parameter is written. Same reasoning `imageGenai()` gives
+ * for falling back rather than throwing.
+ */
+function materialiseGoogleCredentials(): void {
+    const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+
+    if (!json) return;
+
+    try {
+        writeFileSync(GOOGLE_CREDENTIALS_PATH, json, { mode: 0o600 });
+
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = GOOGLE_CREDENTIALS_PATH;
+
+        // The JSON is removed from the environment once it is on disk. It is a
+        // private key, and an env var is the thing most likely to be printed by
+        // a stack trace or a debug dump.
+        delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+
+        console.log(
+            `[secrets] Google credentials written; images bill to ${
+                process.env.GOOGLE_CLOUD_PROJECT ?? "(no GOOGLE_CLOUD_PROJECT — still on the API key)"
+            }`
+        );
+    } catch (cause) {
+        // Not fatal. A failed write means image generation falls back to the
+        // API key, which is a billing surprise rather than an outage — and
+        // taking the whole API down over it would turn one wrong invoice into
+        // no service at all.
+        console.error("[secrets] could not write Google credentials", cause);
+    }
+}
 
 let loading: Promise<void> | undefined;
 
@@ -85,6 +154,8 @@ async function fetchSecrets(): Promise<void> {
     // parameter written under the wrong environment. The per-lib throws that
     // would otherwise fire name one key at a time and say nothing about where it
     // was looked for.
+    materialiseGoogleCredentials();
+
     const missing = REQUIRED_KEYS.filter((key) => !process.env[key]);
 
     if (missing.length > 0) {

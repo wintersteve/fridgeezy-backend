@@ -1,0 +1,17 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "outDir": "out-tsc/admin",
+        "types": ["vite/client"],
+        "jsx": "react-jsx",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "noEmit": true
+    },
+    "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.mts"],
+    "exclude": ["eslint.config.mjs"],
+    "references": [
+        {
+            "path": "../../libs/admin-contract/tsconfig.lib.json"
+        }
+    ]
+}

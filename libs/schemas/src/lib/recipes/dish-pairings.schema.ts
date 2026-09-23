@@ -213,6 +213,29 @@ export const DishPairingsResponseSchema = z.object({
      * Empty is the ordinary answer. See migration `20260916000004`.
      */
     topUpCourses: z.array(z.string()),
+    /**
+     * Courses a deliberate "show me more" would add something to.
+     *
+     * The picker's button, and a SUPERSET of `topUpCourses` — same rule, with
+     * room measured against what the picker can draw (six) rather than against
+     * what makes a course a choice at all (two). The two are separate fields
+     * because they govern two different presses: `topUpCourses` is spent on the
+     * reader's behalf when they merely OPEN a thin course, this is spent when
+     * they ask for more. Collapsing them would charge for opening any course
+     * holding fewer than six.
+     *
+     * Empty means the button is not drawn — the course is full, or its
+     * generation budget is spent, or nothing honestly goes there. **Not
+     * derivable on the client**, for the reason `topUpCourses` gives at length:
+     * both the holdings and the budget are properties of the stored set, and a
+     * client only ever sees its own filtered view of it. A reader whose diet
+     * thins a full course to one dish must not be offered a press that would
+     * grow a shared set on their behalf — and must not be offered one that
+     * silently waives.
+     *
+     * See migration `20260922000003`.
+     */
+    moreCourses: z.array(z.string()),
     /** When the set was generated. Null when it never was. */
     generatedAt: z.string().nullable(),
     /**

@@ -65,8 +65,24 @@ export interface TechniqueArtResult {
  * hand-written lines precisely because those were written against a picture
  * somebody looked at.
  */
+export interface TechniqueArtOptions {
+    /**
+     * Draw even though the object is already there, replacing it.
+     *
+     * Every caller on the reading path wants the opposite — the short-circuit
+     * below is what makes this route free after its first 148 requests, and
+     * what bounds the whole feature at about ten dollars for all time. The
+     * admin console is the one caller that means "this painting is wrong, do it
+     * again", and for it the short-circuit refuses the only thing it asked for.
+     *
+     * Default false, so the app's own path is unchanged by its existence.
+     */
+    force?: boolean;
+}
+
 export async function getOrGenerateTechniqueArt(
     action: string,
+    { force = false }: TechniqueArtOptions = {},
 ): Promise<TechniqueArtResult | null> {
     const { data: row, error } = await supabaseAdmin
         .from("cooking_actions")
@@ -91,7 +107,7 @@ export async function getOrGenerateTechniqueArt(
         .from(BUCKET)
         .list("", { search: path });
 
-    if (existing?.some((file) => file.name === path)) {
+    if (!force && existing?.some((file) => file.name === path)) {
         return {
             action: row.name,
             imageUrl: publicUrl(path),

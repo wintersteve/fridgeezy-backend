@@ -5,8 +5,10 @@ import { PROSE_CSS, renderPage, SITE_NAME, SUPPORT_EMAIL } from "./chrome";
  *
  * One contact channel and the questions people actually hit. The FAQ uses
  * native `<details>` so the page stays script-free; the answers state the
- * honest current paths (account deletion is by email until the app grows an
- * in-app flow).
+ * honest current paths — account deletion leads with the in-app route
+ * (Settings -> Account -> Delete Account, shipped 2026-09-18), because App
+ * Store 5.1.1(v) asks for one and this page is the URL the listing points at.
+ * Email stays as the fallback for somebody locked out of the app.
  */
 
 const BODY = `
@@ -38,10 +40,13 @@ const BODY = `
 
   <details>
     <summary>How do I delete my account and data?</summary>
-    <p>Email us at <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a> from
-    the address you signed in with and we'll delete your account and everything
-    stored with it. Ingredients, recipes and lists can also be removed directly
-    in the app at any time.</p>
+    <p>In the app, open Settings &rarr; Account &rarr; <strong>Delete
+    Account</strong>. That removes your account and everything saved with it —
+    favourites, collections, shopping lists, your pantry, your versions and your
+    chats — for good, and it can't be undone.</p>
+    <p style="margin-bottom:0">If you can't get into the app, email us at
+    <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a> from the address you
+    signed in with and we'll do it for you.</p>
   </details>
 
   <details>

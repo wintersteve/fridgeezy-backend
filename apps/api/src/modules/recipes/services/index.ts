@@ -7,6 +7,7 @@ export * from "./derive-variant-label";
 export * from "./description-rules";
 export * from "./taste-profile";
 export * from "./modify-recipe-prompt";
+export * from "./food-safety-rules";
 export * from "./instruction-rules";
 export * from "./unit-rules";
 export * from "./ingredient-categories";

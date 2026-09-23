@@ -15,6 +15,19 @@ declare global {
     namespace Express {
         interface Request {
             supabaseUserId?: string;
+            /**
+             * The admin's own `profiles.id`, left by `requireAdmin`.
+             *
+             * Separate from `supabaseUserId` because it is a different key:
+             * `hidden_by` and every other actor column in the schema references
+             * `profiles`, not `auth.users`. Resolving it in the gate means a
+             * handler that stamps who did something does not look it up again,
+             * and — more usefully — cannot look up the WRONG one by reading an
+             * id out of the body.
+             *
+             * Read it only in a handler mounted behind `requireAdmin`.
+             */
+            adminProfileId?: string;
         }
     }
 }

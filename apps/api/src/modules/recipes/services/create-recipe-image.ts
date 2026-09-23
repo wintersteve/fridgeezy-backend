@@ -197,6 +197,27 @@ async function uploadVariants(
     return { url: publicUrl(heroStoragePath(name)), thumbhash };
 }
 
+/** What a caller wants from a render that a picture already exists for. */
+interface RenderOptions {
+    /**
+     * Render even though the storage object is already there, replacing it.
+     *
+     * Every caller on the generation path wants the opposite — the
+     * short-circuits below are what stop a re-promotion, a variant and a
+     * second device from each paying for the same picture. The admin console
+     * is the one caller whose entire intent is "this render is bad, do it
+     * again", and for it the short-circuit is not an optimisation but a
+     * refusal to do the only thing it asked for.
+     *
+     * **The legacy-PNG branch is skipped too.** That branch re-encodes existing
+     * bytes rather than generating, which is right when the goal is to satisfy
+     * a predicted `.webp` and wrong when the goal is new art: forced, it would
+     * answer a regeneration request with the same old picture in a new
+     * container.
+     */
+    force?: boolean;
+}
+
 async function renderRecipeImage(
     name: string,
     /**
@@ -213,7 +234,8 @@ async function renderRecipeImage(
      * first-writer-wins the name has always had, now with something visible
      * riding on it.
      */
-    ingredients?: string[]
+    ingredients?: string[],
+    { force = false }: RenderOptions = {}
 ): Promise<UploadedImage> {
     try {
         const heroPath = heroStoragePath(name);
@@ -226,8 +248,10 @@ async function renderRecipeImage(
             .from("recipes")
             .list("", { search: normalizeFileName(name) });
 
+        // Forced, nothing counts as already present — which collapses both
+        // short-circuits below without either of them growing a branch.
         const has = (path: string) =>
-            existing?.some((file) => file.name === path) ?? false;
+            !force && (existing?.some((file) => file.name === path) ?? false);
 
         // Already converted: nothing to do, and no model call. No hash comes
         // back either — the picture's own is already on whichever row was
@@ -358,12 +382,50 @@ export function generateAndUploadRecipeImage(
     name: string,
     ingredients?: string[]
 ): Promise<string> {
+    return renderAndRegister(name, ingredients).then((image) => image.url);
+}
+
+/**
+ * Regenerate a dish's illustration, replacing whatever is there.
+ *
+ * The admin console's route, and the only caller that passes `force`. It
+ * answers with the hash as well as the URL, because the console has a row to
+ * repoint and `attachRecipeThumbhash`'s two fallbacks — join the in-flight
+ * render, else copy a sibling's — are both wrong here: the sibling's hash
+ * describes the picture that was just replaced.
+ *
+ * **It never joins an in-flight render.** Joining is right for the generation
+ * path, where two promotions of one dish should share a model call; here it
+ * would hand a curator who pressed the button the picture they are replacing,
+ * and pressing it again would join the same one. It still REGISTERS, so a
+ * promotion racing this one picks up the new hash rather than starting a third.
+ */
+export function regenerateRecipeImage(
+    name: string,
+    ingredients?: string[]
+): Promise<UploadedImage> {
+    return renderAndRegister(name, ingredients, { force: true });
+}
+
+/**
+ * Start a render, publish it in {@link renders} for the length of its run, and
+ * take it out again — joining one already running unless `force` says not to.
+ *
+ * Extracted when the forced path arrived, because the registration is what
+ * `attachRecipeThumbhash` depends on and two copies of it is one that stops
+ * being updated.
+ */
+function renderAndRegister(
+    name: string,
+    ingredients?: string[],
+    { force = false }: RenderOptions = {}
+): Promise<UploadedImage> {
     const heroPath = heroStoragePath(name);
     const running = renders.get(heroPath);
 
-    if (running) return running.then((image) => image.url);
+    if (running && !force) return running;
 
-    const render = renderRecipeImage(name, ingredients);
+    const render = renderRecipeImage(name, ingredients, { force });
 
     renders.set(heroPath, render);
     void render
@@ -374,7 +436,7 @@ export function generateAndUploadRecipeImage(
             if (renders.get(heroPath) === render) renders.delete(heroPath);
         });
 
-    return render.then((image) => image.url);
+    return render;
 }
 
 /**

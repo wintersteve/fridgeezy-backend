@@ -372,11 +372,183 @@ async function otherUserCannotReach() {
     }
 }
 
+/**
+ * The HIDDEN half (2026-09-22).
+ *
+ * `20260922000001` added a second dimension to the same rule — a dish the admin
+ * console has pulled is visible to nobody, including the reader who saved it —
+ * and it lives in exactly the places ownership already did: five policies and
+ * four SECURITY DEFINER bodies. So it has the same failure mode this whole
+ * script exists for: nothing raises when one of nine forgets, a withdrawn dish
+ * simply comes back.
+ *
+ * It is a SEPARATE fixture from the two above rather than a flag on them,
+ * because it proves the opposite thing about the same row. The recipe here is
+ * UNOWNED — `created_by` null, an ordinary catalogue dish that every assertion
+ * above would expect a guest to read — so a pass means hiding did the work, not
+ * ownership. A hidden owned recipe would pass even if `hidden_at` were ignored
+ * entirely.
+ *
+ * The control is what makes that airtight: the same guest is asserted to SEE
+ * the dish before it is hidden. Without it the suite could pass by failing to
+ * create the fixture at all.
+ */
+async function hiddenReachesNobody() {
+    console.log("\nHIDDEN — a pulled dish must reach nobody, owner included:");
+
+    let recipeId: string | null = null;
+
+    try {
+        const { data: created, error } = await supabaseAdmin
+            .from("recipes")
+            .insert({
+                name: "ZZ Visibility Check Hidden — delete me",
+                // Unowned on purpose. See the note above: an owned row would
+                // pass these assertions without `hidden_at` doing anything.
+                created_by: null,
+            })
+            .select("id")
+            .single();
+
+        if (error) {
+            throw new Error(`could not create the test recipe: ${error.message}`);
+        }
+
+        recipeId = created.id;
+
+        await supabaseAdmin.from("recipe_instructions").insert({
+            recipe_id: recipeId,
+            step_number: 1,
+            instruction_text: "ZZ Visibility Check — must not survive hiding",
+        });
+
+        // ---- the control: while visible, a guest reaches all of it ----
+
+        const { data: beforeRow } = await supabase
+            .from("recipes")
+            .select("id")
+            .eq("id", recipeId);
+        check(
+            "control: a guest can read the catalogue dish first",
+            (beforeRow ?? []).length === 1,
+            (beforeRow ?? []).length === 0 ? "fixture never became visible" : ""
+        );
+
+        const { data: beforeFeed } = await supabase.rpc("find_recipes", {
+            limit_count: 500,
+            p_offset: 0,
+        });
+        check(
+            "control: it is in find_recipes first",
+            (beforeFeed ?? []).some(
+                (candidate: { id: string }) => candidate.id === recipeId
+            )
+        );
+
+        // ---- hide it, and ask again ----
+
+        await supabaseAdmin
+            .from("recipes")
+            .update({ hidden_at: new Date().toISOString() })
+            .eq("id", recipeId);
+
+        const { data: row } = await supabase
+            .from("recipes")
+            .select("id")
+            .eq("id", recipeId);
+        check(
+            "hidden recipe row is unreadable",
+            (row ?? []).length === 0,
+            (row ?? []).length > 0 ? "LEAK" : ""
+        );
+
+        const { data: steps } = await supabase
+            .from("recipe_instructions")
+            .select("instruction_text")
+            .eq("recipe_id", recipeId);
+        check(
+            "hidden recipe's instructions are unreadable",
+            (steps ?? []).length === 0,
+            (steps ?? []).length > 0 ? "LEAK — the method is readable" : ""
+        );
+
+        const { data: feed } = await supabase.rpc("find_recipes", {
+            limit_count: 500,
+            p_offset: 0,
+        });
+        const inFeed = (feed ?? []).some(
+            (candidate: { id: string }) => candidate.id === recipeId
+        );
+        check(
+            "hidden recipe is absent from find_recipes",
+            !inFeed,
+            inFeed ? "LEAK — it is still in the feed" : ""
+        );
+
+        // Dedup, which runs as the service role and asks a different question:
+        // "is this part of the shared corpus". A hidden dish is deliberately
+        // out of it, so the dish can be written again rather than every future
+        // attempt deduping onto an invisible row.
+        const { data: deduped, error: dedupError } = await supabaseAdmin.rpc(
+            "search_recipes",
+            {
+                // A zero threshold matches everything with an embedding; this
+                // fixture has none, so the assertion is that it is absent for
+                // the RIGHT reason — which the control below pins down.
+                match_threshold: 0,
+                match_count: 500,
+                query_embedding: `[${Array(1536).fill(0).join(",")}]`,
+            }
+        );
+
+        if (dedupError) {
+            check("search_recipes is callable", false, dedupError.message);
+        } else {
+            const inDedup = (deduped ?? []).some(
+                (candidate: { id: string }) => candidate.id === recipeId
+            );
+            check(
+                "hidden recipe is absent from dedup",
+                !inDedup,
+                inDedup ? "LEAK — dedup would match it" : ""
+            );
+        }
+
+        // ---- and it comes back ----
+
+        await supabaseAdmin
+            .from("recipes")
+            .update({ hidden_at: null })
+            .eq("id", recipeId);
+
+        const { data: restored } = await supabase
+            .from("recipes")
+            .select("id")
+            .eq("id", recipeId);
+        check(
+            "un-hiding restores it",
+            (restored ?? []).length === 1,
+            (restored ?? []).length === 0 ? "hiding is not reversible" : ""
+        );
+    } finally {
+        if (recipeId) {
+            await supabaseAdmin.from("recipes").delete().eq("id", recipeId);
+
+            const { data: left } = await supabaseAdmin
+                .from("recipes")
+                .select("id")
+                .eq("id", recipeId);
+            check("hidden fixture cleaned up", (left ?? []).length === 0);
+        }
+    }
+}
+
 async function main() {
     console.log("recipe visibility — an owned recipe must reach nobody else\n");
 
     await guestCannotReach();
     await otherUserCannotReach();
+    await hiddenReachesNobody();
 
     console.log(`\n${pass} passed, ${fail} failed`);
     if (fail > 0) process.exit(1);

@@ -1,6 +1,7 @@
 import { GenerateRecipeResponseDto } from "@fridgeezy/schemas";
 
 import { HEADER_DESCRIPTION_RULES } from "./description-rules";
+import { FOOD_SAFETY_RULES } from "./food-safety-rules";
 import { STEP_DURATION_RULES, TEMPERATURE_RULES } from "./instruction-rules";
 import { UNIT_CHOICE_RULE } from "./unit-rules";
 
@@ -55,6 +56,8 @@ Reference only (keep the recipe's existing tags unchanged):
 ${tags}
 
 ${TEMPERATURE_RULES}
+
+${FOOD_SAFETY_RULES}
 
 ${STEP_DURATION_RULES}
 

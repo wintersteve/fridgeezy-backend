@@ -191,6 +191,14 @@
                     "forwardAllArgs": true
                 }
             },
+            "eval-food-safety": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti src/evals/food-safety.eval.ts",
+                    "cwd": "apps/api",
+                    "forwardAllArgs": true
+                }
+            },
             "eval-difficulty-ladder": {
                 "executor": "nx:run-commands",
                 "options": {
@@ -233,7 +241,8 @@
         "cors": "^2.8.5",
         "dotenv": "^17.2.3",
         "express": "^5.2.1",
-        "zod": "^4.2.1"
+        "zod": "^4.2.1",
+        "@fridgeezy/admin-contract": "0.0.1"
     },
     "devDependencies": {
         "@anthropic-ai/bedrock-sdk": "^0.32.0",

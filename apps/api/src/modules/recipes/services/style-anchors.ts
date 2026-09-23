@@ -169,3 +169,38 @@ export async function fetchStyleAnchors(): Promise<StyleAnchor[]> {
 
     return cached;
 }
+
+/**
+ * The GATHERING anchor: one chosen mise-en-place render, by another dish.
+ *
+ * Separate from {@link fetchStyleAnchors} and deliberately not added to
+ * `ANCHORS`, because the two answer different questions. The six style anchors
+ * teach a PLATED dish's register; this one teaches a bench before cooking — the
+ * camera and its height, the kind of vessels, how they are grouped and spaced.
+ * `buildMiseArtPrompt`'s own note records that the camera took three rounds to
+ * settle with prose alone and only stopped moving once a picture carried it.
+ *
+ * Mixing it into the set would be worse than not having it: that set is
+ * meaningful AS A SET — the prompt says what those pictures share is the style —
+ * so adding a seventh that shares a different thing changes the claim for every
+ * hero as well.
+ *
+ * It lives in storage rather than on disk because the API reads it.
+ * `generate-step-art.ts` keeps its own copy at `operations/data/mise-anchor.webp`
+ * and reads that; the two are the same image and **must be replaced together**,
+ * or the console and the command line start drawing two different benches.
+ *
+ * Same contract as the set above: never throws, and null costs a picture its
+ * anchor rather than its existence — which is exactly what every gathering page
+ * drawn before the anchor existed had.
+ */
+let cachedMise: Promise<StyleAnchor | null> | undefined;
+
+export async function fetchMiseAnchor(): Promise<StyleAnchor | null> {
+    cachedMise ??= download("mise-anchor.webp").catch((error: unknown) => {
+        console.error("[style-anchors] mise anchor fetch failed:", error);
+        return null;
+    });
+
+    return cachedMise;
+}

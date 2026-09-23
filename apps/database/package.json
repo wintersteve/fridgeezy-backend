@@ -393,6 +393,14 @@
                     "cwd": "apps/database",
                     "forwardAllArgs": true
                 }
+            },
+            "repair-image-urls": {
+                "executor": "nx:run-commands",
+                "options": {
+                    "command": "npx jiti operations/repair-recipe-image-urls.ts",
+                    "cwd": "apps/database",
+                    "forwardAllArgs": true
+                }
             }
         }
     },

@@ -14,6 +14,7 @@ import {
     fetchPairingHoldings,
     generateDishPairings,
     loadSeedDish,
+    moreCourses,
     PAIRING_COURSES,
     recordDishPairings,
     resolveDishKey,
@@ -147,6 +148,10 @@ export const readDishPairings = createStreamHandler({
                     courses.includes(course),
                 ),
                 topUpCourses: topUpCourses({ set, holdings, courses }),
+                // The BUTTON's set, and the wider of the two — see the schema.
+                // Opening a course spends only on the first; asking for more
+                // spends up to the ceiling the picker can draw.
+                moreCourses: moreCourses({ set, holdings, courses }),
                 generatedAt: set?.generatedAt ?? null,
                 candidates: candidates.map(toDto),
             },
@@ -293,6 +298,7 @@ export const generateDishPairingsForRecipe = createStreamHandler({
                     courses: endorsed.filter((course) => courses.includes(course)),
                     askedCourses: asked.filter((course) => courses.includes(course)),
                     topUpCourses: topUpCourses({ set, holdings, courses }),
+                    moreCourses: moreCourses({ set, holdings, courses }),
                     generatedAt,
                     candidates: candidates.map(toDto),
                 },
@@ -333,16 +339,27 @@ export const generateDishPairingsForRecipe = createStreamHandler({
             : {};
 
         /**
-         * Courses worth asking a SECOND time — see `topUpCourses` for the four
-         * tests, and `20260916000004` for why there is a second time at all.
+         * Courses worth asking again — see `generatableCourses` for the four
+         * tests, and `20260916000004` / `20260922000003` for why there is an
+         * again at all.
+         *
+         * **`moreCourses`, not `topUpCourses`**, and the difference is the
+         * whole of what makes the picker's button work. This route's question
+         * is "would this press add anything", which is the WIDER rule: a reader
+         * pressing "show me more" on a course holding three has asked for
+         * something the narrower rule would waive, because that one is about
+         * whether to spend on their behalf when they merely open a course. The
+         * client decides WHICH press it is making; the route only has to be
+         * permissive enough to honour it, and still refuses a course that is
+         * full or out of budget.
          *
          * Narrowed to `target`, so it is still the reader's press that decides
          * which course is worked on. The warming operation names every course
-         * and so tops up every thin one, which is the right behaviour for it.
+         * and so refills every thin one, which is the right behaviour for it.
          */
-        const toTopUp = topUpCourses({ set: existing, holdings, courses: target });
+        const toRefill = moreCourses({ set: existing, holdings, courses: target });
 
-        const work = [...toFill, ...toTopUp];
+        const work = [...toFill, ...toRefill];
 
         // Somebody got here first, or every course the caller named is finished
         // — asked, and either full enough to be a choice or already given its
@@ -409,9 +426,9 @@ export const generateDishPairingsForRecipe = createStreamHandler({
             // to trigger a targeted call.
             targetCourses: work,
             chooseCourses: !existing,
-            // Only the courses being topped up contribute exclusions: a course
+            // Only the courses being REFILLED contribute exclusions: a course
             // being asked for the first time holds nothing.
-            excludeNames: toTopUp.flatMap(
+            excludeNames: toRefill.flatMap(
                 (course) => holdings[course]?.names ?? []
             ),
         });
@@ -429,11 +446,12 @@ export const generateDishPairingsForRecipe = createStreamHandler({
             // A targeted run fills its course and leaves the rest: replacing
             // would throw away what the first call found.
             merge: !!existing,
-            // Marks these courses as having had their one extra call, AND makes
-            // the write append to them rather than clear them first. Both halves
-            // matter — a merge that cleared a course it was topping up would
-            // delete the one dish it had. See `20260916000004`.
-            toppedUp: toTopUp,
+            // Makes the write APPEND to these courses rather than clear them
+            // first — a merge that cleared a course it was refilling would
+            // delete the dishes it already had. It no longer BOUNDS anything;
+            // `generation_attempts` does that, and the RPC raises it from
+            // `p_asked` without being told. See `20260922000003`.
+            toppedUp: toRefill,
         });
 
         if (!stored) {
@@ -443,7 +461,7 @@ export const generateDishPairingsForRecipe = createStreamHandler({
         }
 
         console.log(
-            `[Pairings] ${seed.seed.name}: ${existing ? `targeted [${toFill.join(", ")}]${toTopUp.length ? ` top-up [${toTopUp.join(", ")}]` : ""}` : `endorsed [${set.courses.join(", ")}]`}, ${set.pairings.length} dishes`
+            `[Pairings] ${seed.seed.name}: ${existing ? `targeted [${toFill.join(", ")}]${toRefill.length ? ` refill [${toRefill.join(", ")}]` : ""}` : `endorsed [${set.courses.join(", ")}]`}, ${set.pairings.length} dishes`
         );
 
         // Read back rather than assembled here: a merge unions `asked_courses`

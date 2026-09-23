@@ -70,3 +70,6 @@ apps/database/operations/output/
 .env
 .env.*
 !.env.example
+
+# Admin console local env (see infra/deploy-admin.sh for the deployed values)
+apps/admin/.env.local

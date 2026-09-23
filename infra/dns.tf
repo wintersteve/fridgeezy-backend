@@ -153,12 +153,308 @@ resource "aws_route53_record" "site" {
 }
 
 # ---------------------------------------------------------------------------
-# Mail is deliberately absent. support@fridgeezy.com has no mailbox yet, and
-# the address in apps/site's privacy policy is the data-protection contact — so
-# it stays pointed at a working inbox until MX records here make a new one
-# real. Resend's DKIM/SPF records for transactional mail belong here too, when
-# production auth mail moves off Supabase's shared sender.
+# Mail. Two providers, because the two directions have different blockers.
+#
+# RECEIVING is Mailgun (EU), which is what wintersteve.com already runs — so it
+# is an account and a routing model that already exists rather than a new one,
+# and it works the day the domain is added. Terraform owns the MX records only:
+# the domain itself and its routes are created in Mailgun's dashboard, and
+# **mail bounces until that is done**, because Mailgun rejects recipients for
+# domains it has never heard of. Point the MX here and nowhere else — Mailgun's
+# own SPF/DKIM records are for SENDING through them, which we deliberately do
+# not do, so they are absent on purpose rather than forgotten.
+#
+# SENDING is SES, in var.aws_region, which is the only option that lives
+# entirely in this file: `aws_sesv2_email_identity` emits its own DKIM tokens,
+# so there is no dashboard step and no value to paste. The catch is that the
+# account is in the SES SANDBOX — 200 messages a day, one a second, and only to
+# verified addresses. A production-access request was filed 2026-09-23
+# (`aws sesv2 get-account --region eu-central-1` reports the review status);
+# until it is granted these records are correct and unused, and Supabase auth
+# mail stays on Supabase's shared sender.
+#
+# SPF authorises SES and nothing else. Mailgun is not included, and that is not
+# an oversight: a Mailgun route FORWARDS with its own envelope sender, so
+# fridgeezy.com's SPF is never consulted for it. An include costs a DNS lookup
+# against the hard limit of ten and authorises a sender we do not use.
+#
+# NO ACCESS KEY IS CREATED HERE. The SMTP password Supabase needs is derived
+# from an IAM secret access key, and `aws_iam_access_key` exposes it as
+# `ses_smtp_password_v4` — which would write a live mail credential into the S3
+# state, permanently, since the bucket is versioned. versions.tf states the rule
+# this obeys. Terraform owns the user and its policy; the key is minted by
+# `infra/create-ses-smtp-credentials.sh`, which prints it once.
 # ---------------------------------------------------------------------------
+
+locals {
+  # Mail follows the domain: there is one delegated zone, so there is one place
+  # mail can be configured at all. See the header in this file.
+  mail_enabled = local.site_domain_enabled
+
+  # A subdomain, so SES's bounce handling gets an envelope domain of its own and
+  # the apex's SPF is not spent on it. SES publishes bounces to this MX.
+  mail_from_domain = local.site_domain_enabled ? "mail.${var.site_domain}" : null
+
+  ses_smtp_user = "${local.name_prefix}-ses-smtp"
+}
+
+# ---------------------------------------------------------------------------
+# Receiving — Mailgun EU.
+# ---------------------------------------------------------------------------
+
+resource "aws_route53_record" "mail_mx" {
+  count = local.mail_enabled ? 1 : 0
+
+  zone_id = aws_route53_zone.site[0].zone_id
+  name    = var.site_domain
+  type    = "MX"
+  ttl     = 300
+
+  # Equal priority on both, which is what Mailgun documents: they are a pair to
+  # be tried in either order, not a primary and a fallback.
+  records = [
+    "10 mxa.eu.mailgun.org",
+    "10 mxb.eu.mailgun.org",
+  ]
+}
+
+# ---------------------------------------------------------------------------
+# Sending — SES identity and its DKIM.
+# ---------------------------------------------------------------------------
+
+resource "aws_sesv2_email_identity" "mail" {
+  count = local.mail_enabled ? 1 : 0
+
+  email_identity = var.site_domain
+
+  # Easy DKIM: SES generates and rotates the key pair and hands back three
+  # tokens to publish. The alternative (BYODKIM) means holding a private key,
+  # which would land in state — see the header.
+  dkim_signing_attributes {
+    next_signing_key_length = "RSA_2048_BIT"
+  }
+
+  # The DEFAULT set for this identity, which is the only way it reaches our
+  # mail: a configuration set otherwise applies only to a message that names it
+  # in an X-SES-CONFIGURATION-SET header, and Supabase sends plain SMTP with no
+  # SES headers at all. Without this line the event destination below is wired
+  # to a set nothing ever uses, and the bounce monitoring the production-access
+  # request undertakes to do silently never happens.
+  configuration_set_name = aws_sesv2_configuration_set.mail[0].configuration_set_name
+
+  tags = {
+    Component = "mail"
+  }
+}
+
+resource "aws_route53_record" "ses_dkim" {
+  count = local.mail_enabled ? 3 : 0
+
+  zone_id = aws_route53_zone.site[0].zone_id
+  name    = "${aws_sesv2_email_identity.mail[0].dkim_signing_attributes[0].tokens[count.index]}._domainkey.${var.site_domain}"
+  type    = "CNAME"
+  ttl     = 300
+  records = ["${aws_sesv2_email_identity.mail[0].dkim_signing_attributes[0].tokens[count.index]}.dkim.amazonses.com"]
+
+  # A re-verification reissues the same three tokens; overwriting is the
+  # intended behaviour, the same reason cert_validation allows it.
+  allow_overwrite = true
+}
+
+# ---------------------------------------------------------------------------
+# Custom MAIL FROM. Without it the envelope sender is amazonses.com, so SPF and
+# DMARC align on Amazon's domain rather than ours and DMARC passes only on DKIM.
+# ---------------------------------------------------------------------------
+
+resource "aws_sesv2_email_identity_mail_from_attributes" "mail" {
+  count = local.mail_enabled ? 1 : 0
+
+  email_identity   = aws_sesv2_email_identity.mail[0].email_identity
+  mail_from_domain = local.mail_from_domain
+
+  # REJECT_MESSAGE rather than USE_DEFAULT_VALUE: if the MX below ever goes
+  # missing, refusing to send is better than silently falling back to
+  # amazonses.com, which would break DMARC alignment without any signal.
+  behavior_on_mx_failure = "REJECT_MESSAGE"
+
+  # SES validates the MAIL FROM domain's MX when the attributes are set, so the
+  # record has to exist first. Terraform cannot infer this — nothing here
+  # references the record.
+  depends_on = [aws_route53_record.mail_from_mx]
+}
+
+resource "aws_route53_record" "mail_from_mx" {
+  count = local.mail_enabled ? 1 : 0
+
+  zone_id = aws_route53_zone.site[0].zone_id
+  name    = local.mail_from_domain
+  type    = "MX"
+  ttl     = 300
+
+  # Region-specific: SES delivers bounce and complaint notifications here, and
+  # the endpoint only exists in the region the identity lives in.
+  records = ["10 feedback-smtp.${var.aws_region}.amazonses.com"]
+}
+
+resource "aws_route53_record" "mail_from_spf" {
+  count = local.mail_enabled ? 1 : 0
+
+  zone_id = aws_route53_zone.site[0].zone_id
+  name    = local.mail_from_domain
+  type    = "TXT"
+  ttl     = 300
+  records = ["v=spf1 include:amazonses.com -all"]
+}
+
+# ---------------------------------------------------------------------------
+# Apex SPF and DMARC.
+# ---------------------------------------------------------------------------
+
+resource "aws_route53_record" "spf" {
+  count = local.mail_enabled ? 1 : 0
+
+  zone_id = aws_route53_zone.site[0].zone_id
+  name    = var.site_domain
+  type    = "TXT"
+  ttl     = 300
+
+  # `~all` and not `-all` on the apex, unlike the MAIL FROM record above. The
+  # envelope sender for our own mail is the subdomain, so this record governs
+  # anything that puts fridgeezy.com in the envelope — which today is nothing
+  # we control. Softfail while that is true; tighten to `-all` once DMARC
+  # reports show a week with no legitimate sender missing from it.
+  records = ["v=spf1 include:amazonses.com ~all"]
+}
+
+resource "aws_route53_record" "dmarc" {
+  count = local.mail_enabled ? 1 : 0
+
+  zone_id = aws_route53_zone.site[0].zone_id
+  name    = "_dmarc.${var.site_domain}"
+  type    = "TXT"
+  ttl     = 300
+
+  # p=none is monitor-only and is the correct FIRST policy, not a weak one:
+  # nothing has ever sent as this domain, so there is no evidence yet about what
+  # a reject would break. `rua` needs a mailbox — add a Mailgun route for
+  # dmarc@ alongside support@, or the reports bounce. Move to p=quarantine once
+  # a fortnight of reports shows only SES.
+  records = ["v=DMARC1; p=none; rua=mailto:dmarc@${var.site_domain}; fo=1"]
+}
+
+# ---------------------------------------------------------------------------
+# Bounce and complaint visibility. The account-level suppression list is already
+# enabled for BOUNCE and COMPLAINT, so a bad address stops being retried on its
+# own; this is what makes the RATE observable rather than inferred, which is
+# what the production-access request undertakes to monitor.
+# ---------------------------------------------------------------------------
+
+resource "aws_sns_topic" "mail_events" {
+  count = local.mail_enabled ? 1 : 0
+
+  name = "${local.name_prefix}-mail-events"
+
+  tags = {
+    Component = "mail"
+  }
+}
+
+resource "aws_sesv2_configuration_set" "mail" {
+  count = local.mail_enabled ? 1 : 0
+
+  configuration_set_name = "${local.name_prefix}-mail"
+
+  delivery_options {
+    # Refuse to fall back to cleartext. A sign-in code is the payload.
+    tls_policy = "REQUIRE"
+  }
+
+  reputation_options {
+    reputation_metrics_enabled = true
+  }
+
+  sending_options {
+    sending_enabled = true
+  }
+
+  suppression_options {
+    suppressed_reasons = ["BOUNCE", "COMPLAINT"]
+  }
+
+  tags = {
+    Component = "mail"
+  }
+}
+
+resource "aws_sesv2_configuration_set_event_destination" "mail" {
+  count = local.mail_enabled ? 1 : 0
+
+  configuration_set_name = aws_sesv2_configuration_set.mail[0].configuration_set_name
+  event_destination_name = "sns"
+
+  event_destination {
+    enabled = true
+
+    # Deliveries are included deliberately: a bounce rate is meaningless without
+    # the denominator, and SES's own console figure lags.
+    matching_event_types = [
+      "BOUNCE",
+      "COMPLAINT",
+      "REJECT",
+      "DELIVERY",
+      "DELIVERY_DELAY",
+      "RENDERING_FAILURE",
+    ]
+
+    sns_destination {
+      topic_arn = aws_sns_topic.mail_events[0].arn
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# The SMTP identity Supabase authenticates as. User and policy only — see the
+# header for why the key is not here.
+# ---------------------------------------------------------------------------
+
+resource "aws_iam_user" "ses_smtp" {
+  count = local.mail_enabled ? 1 : 0
+
+  name = local.ses_smtp_user
+  path = "/mail/"
+
+  tags = {
+    Component = "mail"
+  }
+}
+
+resource "aws_iam_user_policy" "ses_smtp" {
+  count = local.mail_enabled ? 1 : 0
+
+  name = "ses-send"
+  user = aws_iam_user.ses_smtp[0].name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ses:SendRawEmail"]
+        Resource = "*"
+        Condition = {
+          # The credential can send as this domain and nothing else, so a leaked
+          # key cannot be used to send as anybody. StringLike rather than a
+          # fixed no-reply@ address: Supabase sends auth mail from whatever
+          # sender its own config names, and pinning one here turns a settings
+          # change over there into a silent 554 over here.
+          StringLike = {
+            "ses:FromAddress" = "*@${var.site_domain}"
+          }
+        }
+      },
+    ]
+  })
+}
 
 output "site_nameservers" {
   description = <<-EOT

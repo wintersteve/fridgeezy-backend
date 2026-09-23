@@ -563,8 +563,10 @@ consumed via the global scope, not by import — hence the `ignore` there.
 ```
 apps/api          Express API (@fridgeezy/api)
 apps/database     Supabase migrations, seeds, embedding + maintenance scripts
+apps/admin        Admin console (React + Vite) — exported to S3, see "The admin console"
 apps/site         Static marketing/legal pages — exported to S3, see "The public site"
 infra             Terraform for the Lambda deployment + the site's S3/CloudFront
+libs/admin-contract     Wire contract for /rest/admin — NOT packed for the client
 libs/schemas      Zod v4 request/response schemas — packed for the client
 libs/types        Generated database.types.ts + derived entity types — packed for the client
 libs/domain       Platform-agnostic domain types, repo interfaces, Result/base-error
@@ -641,6 +643,7 @@ mount path anyway; the nesting only made every import inside it `../../../`.
 | `DELETE /rest/prompts/:id` | `modules/prompts` |
 | `POST /rest/billing/revenuecat` | `modules/billing` — **open** |
 | `GET /rest/health` | direct — **open** |
+| `* /rest/admin/*` | `modules/admin` — the admin console, behind `requireAdmin` |
 
 **Premium** means the route requires an active subscription
 (`requireEntitlement`, 402); **metered** means a free account may reach it a
@@ -785,9 +788,745 @@ The tiers are:
 | Tier | Gets |
 | --- | --- |
 | **guest** | the catalog, read straight from Supabase — never reaches this API |
-| **account** | `POST /speech/synthesize` and `/prompts`. Nothing else |
+| **account** | `POST /speech/synthesize`, `/prompts`, `/account`, `/billing` — and `/admin`, which is not free in the sense the others are: it costs nothing a READER would be billed for, and carries a gate of its own |
 | **metered** | reachable N times a month by a free account, then 402 — every route under it carries `requireQuota` (see below) |
 | **subscriber** | `/suggestions/generate` and `/speech/command`, plus `/recipes/:id/personalise` when it lights up |
+
+### A stored storage URL carries a HOST, and that host can be somebody's laptop
+
+Found in production on 2026-09-23 and repaired the same day: **49 of 54
+recipes** carried
+`http://192.168.1.6:54321/storage/v1/object/public/recipes/<dish>.webp` in
+`recipes.image` — a developer's LAN address, in the shared catalogue. Every
+share link served it as `og:image` and as the page's `<img>`, so every preview
+in iMessage, WhatsApp and Slack had been broken for as long as the rows existed;
+and because the app reads `recipes.image` straight from Supabase and
+`find_recipes` returns it, the catalogue had no pictures in the app either.
+
+**It was invisible for exactly the reason it was possible.** On the developer's
+own phone, on the same Wi-Fi, with the local stack up, `192.168.1.6:54321`
+resolves and every picture loads.
+
+- **The bytes were never wrong.** All 94 objects — 47 dishes, hero plus card
+  variant — were in the production bucket under exactly the right keys, and the
+  canonical URL returned 200. Only the stored host was wrong, which is what
+  made this a URL rewrite rather than 47 regenerations.
+- **The API cannot have written them.** `toDeviceReachable` swaps loopback for
+  the Mac's LAN address on a storage URL about to reach a phone — a no-op in
+  every deployed configuration by construction, since Lambda's `SUPABASE_URL`
+  is the project's https origin and has no loopback host to match. And it
+  DERIVES from `SUPABASE_URL`, so the host in the URL and the database being
+  written are always the same machine. **A private host cannot be written into
+  production; it can only be copied there** — a dump and restore, or a seed
+  built from a local stack. Nothing in the code path can prevent that, which is
+  why what was added instead is the ability to SEE it.
+- **`npx nx run @fridgeezy/database:repair-image-urls`** is the fix. Dry run by
+  default, `--remote` to reach the deployed project, `--apply` to write; it
+  prints the target host in every mode and proves each object exists before
+  repointing its row. `apps/database/.env` only ever holds local values on
+  purpose, so this builds its own client from an explicitly named target rather
+  than inheriting one.
+- **The console reports it**, as "Unreachable art" on the Overview beside "No
+  illustration", linking into `/recipes?unreachableImage=true`. Kept a separate
+  count from the missing-illustration one deliberately: the two look identical
+  to a reader — no picture — and are opposite jobs. One needs a generation; this
+  needs a string replaced.
+- **It reads 0 against a LOCAL stack and that is correct**, not a broken
+  filter. There a private storage host IS the stored value and it resolves, so
+  there is nothing unreachable to report. The count only means something for a
+  database the public is served from.
+
+#### Which Google account the console's images are billed to
+
+Both art screens spend money on `generateImage`, and `libs/genai` already
+chooses between two backends by which variable is set: `GOOGLE_API_KEY` is the
+Gemini API in AI Studio, `GOOGLE_CLOUD_PROJECT` is Vertex, and **only IMAGE
+generation moves** — speech stays on the key because the TTS models this repo
+pins are not served by Vertex.
+
+**The point is billing.** AI Studio cannot be paid for with Google Cloud
+credit; Vertex bills as an ordinary Cloud service and can. `apps/database/.env`
+has had the project for the CLI operation since it was written;
+`apps/api/.env` did not, so everything the console drew went to the prepay
+balance. It has both now, and `imageGenai()` does the rest — **no code in the
+admin module chose a backend and none should**.
+
+- **The switch is process-wide for images.** Setting it on the API moves the
+  console's step and technique art AND the hero art on the generation path.
+  That is more credit used rather than a side effect to avoid, but it is worth
+  knowing before it is set on the deployed function.
+- **Credentials are NOT configured with it.** `google-auth-library` resolves
+  them itself — `GOOGLE_APPLICATION_CREDENTIALS`, then gcloud's
+  application-default login, then a metadata server — so a laptop that has run
+  `gcloud auth application-default login` needs nothing further. That is why
+  local worked the moment the project was set.
+- **Lambda has none of those three**, which is why `load-secrets.ts` grew
+  `materialiseGoogleCredentials`: every other SSM parameter becomes an env var
+  of the same name and is done, but `GOOGLE_APPLICATION_CREDENTIALS` is a PATH.
+  A `GOOGLE_SERVICE_ACCOUNT_JSON` parameter is written to
+  `/tmp/google-service-account.json`, the variable is pointed at it, and the
+  JSON is deleted from the environment — it is a private key, and an env var is
+  the thing most likely to end up in a stack trace. Absent, nothing happens and
+  images stay on the API key.
+- **A failed write is not fatal.** Falling back to the API key is a billing
+  surprise; taking the API down over it turns one wrong invoice into no
+  service.
+- **Both art screens SAY which budget they spend**, beside the price rather
+  than in a settings page — `BillingBadge`, from an `ImageBillingPath` the two
+  endpoints report. Vertex is drawn as the quiet state and AI Studio as the
+  loud one, which is the opposite of a usual status badge: Vertex is where
+  these screens are meant to be, and falling back is the case worth noticing
+  because it is invisible in every other way — the render succeeds, the picture
+  is identical, and the wrong account pays. The same line goes into the log
+  with every spend, the way `generate-step-art.ts` prints it.
+
+#### Technique art (`/operations/techniques`)
+
+The other half of Operations, and a much better bargain than step art. Same
+shape — pick what to draw, see what it costs, press — and the arithmetic is the
+opposite way round:
+
+| | step art | technique art |
+| --- | --- | --- |
+| Keyed on | a recipe's steps | a row in `cooking_actions` |
+| Total possible cost | unbounded, ~$0.54 per dish forever | **~$9.92, once, for all time** |
+| Today | off by default | drawn on FIRST REQUEST |
+
+**What is being bought is a WAIT, not a picture.** `/rest/techniques/illustrate`
+is free to any signed-in account precisely because the vocabulary is closed —
+148 rows, and the service refuses anything outside it, so a 149th distinct
+request cannot exist. What that free route does NOT avoid is the first reader of
+each verb waiting at a hob for a render to learn what "deglaze" means. Drawing
+the set retires that permanently. 9 of 148 were drawn when this shipped.
+
+- **It calls the app's own generator**, `getOrGenerateTechniqueArt`, which owns
+  the prompt, the 4:3 framing, the white-ground correction that lets one
+  backdrop sit behind every plate, and the refusal of unknown verbs. A console
+  that drew these itself would be a second copy free to drift — and the drift
+  would show as two techniques in two styles inside one sheet.
+- **`force` was added to that generator** for the same reason step art needed
+  it: the short-circuit is what makes the reading path free after 148 requests,
+  and it refuses the only thing a curator asking for a redraw wants. Default
+  false, so the app's path is unchanged.
+- **A batch is capped at 12 and the cap is timing, not taste.** A render is
+  ~10s at three concurrent, so twelve is ~40s — inside Lambda's 300s. All 139
+  at once is eight minutes and a timeout. The console presses it repeatedly,
+  which also keeps the spend visible a batch at a time rather than arriving as
+  one number at the end.
+- **The UI picks the batch; the server draws exactly what it is given.** A
+  "draw the next N" route would have the server choosing what to spend money on,
+  and the console could not put the price on the button before it was pressed.
+- **One failure does not discard the batch.** The generator throws — on a model
+  that answered with text, on a failed upload — so each verb is caught and
+  reported against its own name. Eleven paid renders must not be lost to a
+  twelfth.
+- **A grid, not the rows step art uses.** These are 148 single words with a
+  picture each and no sentence to read beside them; the picture IS the content.
+  The tile ground is white rather than the page's cream, matching what
+  `normaliseGround` corrects every render to — a tinted tile would hide the one
+  defect worth spotting, a plate whose own ground drifted.
+
+#### The sidebar is grouped, and Operations is the one that spends
+
+**Insights** reports, **Catalogue** is the shared corpus a reader sees,
+**Accounts** is people, **Operations** is work that costs something to run.
+
+"Catalogue" rather than "Entities" or "Database" deliberately: those are
+implementation vocabulary, and the app already has a word for this. A console
+that names its sections after tables teaches its reader the schema instead of
+the product. Accounts sits on its own rather than being filed under Catalogue
+because a person is not catalogue content, and lumping them together is how a
+tool starts treating readers as rows.
+
+**Only the first three carry counts, and every count is a DEFECT.** A badge
+beside Operations would read as a backlog, and an undrawn step method is not
+one — see below.
+
+#### Step illustrations (`/operations/step-art`)
+
+Per-step cook-mode art, drawn for a dish you choose. **The most expensive thing
+in this console by an order of magnitude**: ~$0.067 a render against six to
+twelve steps, so $0.40-$0.80 for a method, against ~$0.067 for a dish's hero.
+
+- **`RECIPE_STEP_ART_ENABLED` does NOT gate it, and must not.** That flag
+  governs drawing art AUTOMATICALLY for every dish the app writes, which at
+  this price is indefensible — its own note says so. Choosing a handful of
+  dishes by hand is the opposite decision, and it is the one
+  `operations/generate-step-art.ts` already makes from the command line: "a
+  decision a person makes about a dish rather than a flag a deployment sets".
+  A console button that silently did nothing because a deployment variable was
+  unset would be worse than no button.
+- **`renderRecipeStepArt` is the shared pool**, extracted from
+  `generateRecipeStepArt` rather than copied. The automatic path keeps the flag
+  and delegates; the console reaches the shared function directly. Two copies
+  of a render pool is two places for the concurrency limit to drift.
+- **It SKIPS a step that already has a picture unless `force` is passed.** The
+  automatic path never needed that — it fired once per recipe at creation, and
+  `renderStep` uploads with `upsert: true` without looking — and it becomes
+  wrong the moment a human can press the button twice. "Draw missing" is
+  therefore free to press repeatedly; "Redraw" is the one that costs.
+- **The bucket IS the record.** No column says a step was drawn, so both the
+  read and the skip check list `recipe_step_art/<recipe_id>/` once — the same
+  shape `recipe-art.ts` uses for heroes, and the same reason: a probe per step
+  is a dozen requests to draw one screen. A URL is returned only for a step
+  whose object exists; it is derivable for any step at all, so returning it
+  unconditionally would put a broken `<img>` on every undrawn step.
+- **Every button carries its price in the LABEL** — "Draw 4 missing · $0.27" —
+  rather than in a confirmation. A dialog that appears after the reader has
+  decided is a thing to click through; a number on the button is part of the
+  decision.
+- **The cost REPORTED counts attempts, not successes.** A failed render still
+  cost a call, and a skipped one cost nothing. It is the only version of the
+  figure that cannot understate a bill.
+- **The art slot is 4:3**, the ratio the renders are asked for and the band cook
+  mode draws them in. A different ratio here would make the console a poor place
+  to judge whether a picture is any good, which is the only reason to look.
+- **It is a BROWSER, and that is a reversal.** It opened on a search box, on
+  the argument that the dish is one somebody already has in mind. That is true
+  of half the visits: the question this screen actually gets asked is "which
+  dishes have NO step art", which is a filter over the catalogue rather than a
+  lookup. `GET /rest/admin/step-art/recipes` answers it, the method opens BELOW
+  the list so working through several is scrolling rather than navigating, and
+  every row carries the price of FINISHING that dish.
+- **The filter runs server-side off ONE storage listing.** Keys are
+  `<recipe_id>/<step>.webp`, so the bucket root's entries are exactly the
+  recipe ids with at least one picture — which makes "has none" and "has some"
+  answerable for the whole catalogue in a single request, and therefore
+  expressible as a PostgREST filter before paging. There is deliberately no
+  "partly drawn" filter: that would need a listing inside every recipe's folder
+  across the catalogue. The precise `3 of 8` is per-ROW and costs a listing only
+  for the rows on this page that are in the set at all — today, almost none.
+- **Hidden dishes are excluded outright** rather than offered as a filter.
+  Paying $0.40 to illustrate a method no reader can reach is the one mistake
+  this screen should make impossible.
+- **Selecting a dish SCROLLS to its method, and three separate things had to
+  be right before it did.** The panel sits below the list — which is correct,
+  it keeps your place while you work through several dishes — and that is what
+  made selecting look broken: 25 rows is about 2,300 pixels, so the press
+  changed something nobody could see.
+  - **`behavior: "smooth"` is a silent no-op** in some browsers and contexts.
+    Measured: 0px of movement from the same call that moves 2,336px with
+    `auto`, same element, same page, no error and no warning. It cannot be
+    feature-detected — the call returns void either way. Instant is also the
+    right interaction for this distance, and it is the reduced-motion answer,
+    so there is no branch.
+  - **`requestAnimationFrame` NEVER RUNS in a hidden tab.** rAF is tied to
+    painting and a browser suspends painting for a tab that is not visible —
+    measured as `visibilityState: "hidden"`, `rafFired: false`,
+    `timeoutFired: true`. It was being used as "after React commits", which it
+    is not: an effect is, and React runs one whether or not anything is
+    painted. **Do not reach for rAF to sequence work after a render.**
+  - **The scroll target has to stop MOVING first.** Arriving by URL scrolled
+    80px: the method and the list are two requests, the method usually wins,
+    and at that moment the list is empty — so the panel sits near the top of a
+    short page. The list then lands, grows the page by two thousand pixels and
+    carries the panel away. The arrival scroll therefore waits for BOTH reads;
+    a press does not, because the list is already there.
+- **The GATHERING PAGE is a first-class slot** (2026-09-23). It costs the same
+  render, lives in the same bucket under the same key shape, and is drawn or
+  missing exactly like a step — so it leads the list, which is the order a cook
+  meets them: the bench before step one.
+
+  What it is NOT is a step. It has no `recipe_instructions` row and no number,
+  which is why `StepArtSlot` is `number | "mise"` — the same sentinel
+  `generate-step-art.ts` has always used, shared rather than re-invented so one
+  object key means one thing across all three callers. Its `instructionText`
+  carries the INGREDIENT LIST it will be drawn from, because there is no
+  sentence, and the row is washed peach with no number so it reads as separate
+  before it is read at all.
+
+  - **A different prompt and different references.** `buildMiseArtPrompt` takes
+    the ingredient NAMES — never quantities, because servings are adjustable and
+    a picture drawn around "two cucumbers" is wrong for everybody who changed
+    the number — plus TWO reference images whose order is load-bearing:
+    `generateImage` puts them before the text in array order, so the clause's
+    "the FIRST" and "the SECOND" are claims about the payload. The list of names
+    and the list of images are built from one condition for that reason.
+  - **The gathering anchor had to move into storage.** The CLI reads it from
+    `operations/data/mise-anchor.webp`; the API cannot, so the same image is
+    uploaded to `art_direction/mise-anchor.webp` and read by `fetchMiseAnchor`.
+    **Replace them together** or the console and the command line start drawing
+    two different benches. It is deliberately NOT added to `ANCHORS`: that set
+    teaches a PLATED dish's register and is meaningful as a set, where this one
+    teaches a bench — adding a seventh that shares a different thing changes the
+    claim for every hero too.
+  - **Both anchors degrade to null rather than throwing.** A gathering page
+    without them is what every one drawn before references existed was; a
+    gathering page that failed is a hole in the method.
+  - **`NUMBERED_STEP` is still needed in the BROWSER's count.** `mise.webp` sits
+    beside `1.webp`-`7.webp`, and counting every object there reported "8 of 7
+    drawn" — a number that cannot be true, on exactly the dishes that had art.
+    The browser column counts numbered steps; the detail page counts slots,
+    including mise. The two answer different questions and neither is the other.
+  - KNOWN AND ACCEPTED: a folder holding ONLY a mise picture counts as "has
+    some" in the browser's filter, so such a dish is missing from "no step
+    illustrations". Telling that apart means the per-recipe listing the root
+    listing exists to avoid.
+
+#### "No illustration" asks STORAGE, not the column
+
+`missingImage` shipped as `image IS NULL` and could never match. Persistence
+stores a PREDICTED url derived from the dish's name without waiting for the
+upload — deliberately, so a save is not blocked on a render — so the column is
+non-null for essentially every row ever written, including those whose upload
+never landed. Production proved it: `missingImage: 0` on a catalogue that
+contained a dish with no object in the bucket at all.
+
+It now lists the bucket ONCE per request and compares each row's object key
+(`services/recipe-art.ts`). Four things about that:
+
+- **The key comes from the stored URL, not re-derived from the name.** They
+  agree today and stop agreeing the moment a dish is renamed, at which point
+  re-deriving would report missing a picture that is sitting there under its
+  old key. The URL is what a reader's browser actually fetches.
+- **An unreadable listing reports NOTHING, never everything.** `usable: false`
+  on a storage error or on hitting the 1000-object cap, because the alternative
+  is marking the whole catalogue as missing art on a hiccup.
+- **The filter resolves ids first and hands them back as an `in`**, so paging,
+  the count and the sort stay server-side. Bounded by that filter's own
+  ceiling — PostgREST puts it in the query string, refused past roughly 250
+  ids with a 414 — which is the same trade `listTags` records for its usage
+  sort.
+- **The Overview count and the filter share the predicate**, so the tile and
+  the list cannot disagree about which dishes are affected.
+
+**And the flags are not `z.coerce.boolean()`.** Coercion is `Boolean(value)`,
+and `Boolean("false")` is `true` — so `?missingImage=false` APPLIED the filter.
+It survived because the console only sends the parameter when a box is ticked,
+which is luck rather than design: a bookmark or a link would hit it at once.
+`FlagSchema` in `@fridgeezy/admin-contract` is the replacement and every
+checkbox filter uses it.
+
+**The rule is private-vs-public, never "differs from the origin we expect"**,
+and `isPrivateHost` / `isPubliclyServed` (`@fridgeezy/toolkit`) exist so the
+repair and the console cannot disagree about it. The origin comparison is the
+obvious test and it is wrong in the case that matters: on a local stack
+`SUPABASE_URL` is loopback while the stored URL deliberately carries the LAN
+address, so comparing origins flags every correct row — and "repairing" them to
+`127.0.0.1` would break image loading on every physical device, which is the
+exact bug `toDeviceReachable` exists to prevent. Both drafts of the repair made
+that mistake before the local dry run caught it. A local run is now a no-op by
+construction, and the console's count is 0 there for the same reason.
+
+**One row is left broken on purpose**: Peking Shredded Pork has no object in the
+bucket at all, so there is no URL to repair. It needs its illustration
+regenerating, which is a button in the admin console.
+
+### Food safety is a prompt rule, and it outranks the cook
+
+`FOOD_SAFETY_RULES` (`modules/recipes/services/food-safety-rules.ts`) is shared
+by the four instruction-AUTHORING prompts — `promote`, `generate-recipe`,
+`escalate-difficulty` and `modify-recipe` — the same way `TEMPERATURE_RULES` is,
+and for a sharper reason: two of those four REWRITE a method that was generated
+clean, and what they would undo here is a cooking temperature rather than a
+unit.
+
+Before 2026-09-23 **no prompt in this repo mentioned food safety at all.** The
+only constraint on a doneness instruction was `TEMPERATURE_RULES`, which governs
+which UNIT a number is written in and says nothing about the number — so nothing
+stopped a generated recipe finishing chicken on a visual cue, giving a
+slow-cooker method for dried kidney beans, or building a hollandaise on raw eggs.
+
+- **It is NOT in `read-recipe-from-image`**, which is the fifth consumer of the
+  shared blocks. Import is TRANSCRIPTION: the cook photographed their own book,
+  the row is written with `created_by` set and is private to them, and the job
+  is fidelity. A rule that raised a temperature there would silently rewrite
+  somebody's grandmother's recipe and present the edit as the original — a worse
+  failure than the one it prevents, because nothing shows it happened.
+- **It outranks the cook's own instruction**, which is why it is in the two
+  rewriting prompts. "Make it quicker" is the case that matters: the cook time
+  on a chicken IS the safety margin, and a model asked to compress it has no
+  reason not to.
+- **Two clauses offer a CHOICE of mitigation, and that is not softness.** Dried
+  kidney beans may be hard-boiled or simply tinned; raw egg may be cooked to
+  71°C or bought pasteurised. A rule with one route makes the model choose
+  between obeying this block and obeying something else — which is exactly what
+  the first draft did, and `food-safety.eval.ts` caught it: it demanded
+  "pasteurised eggs" in the INGREDIENT LIST, contradicting three older rules in
+  `generate-recipe` (use only the given ingredients, use their exact names, put
+  qualifiers in `comment`) that exist because ingredient names are matched
+  against the catalogue. The model obeyed the older rules — correctly — and
+  scored 0/2 on Eggs Benedict while every other dish passed. **A safety rule
+  that fights the pipeline loses, silently.**
+
+**Measured**, five dishes chosen to trigger one clause each, three runs apiece
+on gpt-4.1: hazard removed in **3/15 without the block and 13/15 with it**,
+while safety mentions per step went 10% → 17% — it puts a temperature in the
+right step rather than turning every step into a warning. The known weak case is
+hollandaise at 1/3; the file's own header carries why, and why chasing it on an
+n=3 sample is the wrong move.
+
+```bash
+npx nx run @fridgeezy/api:eval-food-safety                          # both variants
+npx nx run @fridgeezy/api:eval-food-safety -- --repeat=3 --only=b_safety
+```
+
+The eval builds its baseline by CUTTING the block out of the shipped prompt,
+since it is already wired in — and refuses to run if that removal changes
+nothing, because two identical variants score identically and the natural
+reading of that is "the rules make no difference".
+
+**It also loads `.env` and `.env.dev` through `evals/load-env.ts`**, which is a
+side-effect module rather than three lines at the top of the eval: imports are
+evaluated before any statement in the importing file, so a `config()` call
+anywhere in the body runs after `@fridgeezy/supabase` has already thrown on a
+missing `SUPABASE_URL`. The older evals in that directory read `.env` alone and
+so only run for somebody who has merged the two files by hand.
+
+### The admin console (apps/admin)
+
+A React + Vite SPA on its own S3+CloudFront distribution at
+**admin.fridgeezy.com**, talking to `/rest/admin/*` on the existing Lambda.
+Six screens: an overview, recipes (edit, hide, repaint, delete), suggestions,
+ingredients, tags and users. Added 2026-09-22.
+
+**There is exactly one gate and it is `requireAdmin`**
+(`modules/admin/services`). It runs behind the mount's `requireSupabaseUser`,
+reads `profiles.is_admin` against the id that verification produced, and
+answers a non-admin **404 rather than 403** — there is nothing for them to act
+on, and nothing to gain by confirming the surface exists. Four things about it:
+
+- **The flag is read per request, not carried in the token.** A custom JWT
+  claim would save a round trip and would also be minted at sign-in, so
+  revoking an admin would take effect whenever their access token happened to
+  expire. Same trade `requireSupabaseUser` records, on the connection that one
+  already opened.
+- **It does NOT stand down for `ALLOW_UNAUTHENTICATED`.** That escape hatch
+  leaves no user id, so every admin request is refused under it. A local
+  console therefore needs a real session and a real flag, which is what
+  production needs. A gate that turns itself off on an environment variable is
+  one variable away from being no gate.
+- **`is_admin` is not client-writable, and RLS could not do it.** Policies
+  govern rows, never columns, and `users_update_own_profile` lets a caller
+  write their own row — so the column would have been one PATCH away from being
+  set by the person it governs. `20260922000001` revokes the table-wide UPDATE
+  grant on `profiles` and re-issues it column by column. **Anything added to
+  that table from now on is un-updatable by the client until it is named in
+  that grant**, which is the right direction to fail in.
+- **The console never reads Supabase directly.** Its client holds the anon key
+  and is used for one thing: signing in. Every row comes from the API as the
+  service role, which is why the anon key sitting in a public bundle is worth
+  nothing.
+
+#### It is built on MUI, and the theme is what keeps it ours
+
+`@mui/material` (+ emotion) since 2026-09-23, on the owner's call. The console
+was hand-rolled controls on a 520-line stylesheet, and what that cost was
+visible in the CONTROLS rather than in the layout: a `<select>` with the
+browser's own arrow, a checkbox nobody had styled, a dialog with a
+hand-written focus trap, a toast with a hand-written timer.
+
+**The library is here for behaviour, not for appearance.** Everything it brings
+is something that was going to be written badly by hand: a real select, a
+dialog that traps focus and restores it, a table header that sorts and carries
+`aria-sort`, a snackbar with a live region, a field with a label and a helper
+line that line up. The LOOK is `theme.ts`, which is long on purpose — stock MUI
+is Roboto on white with a blue accent and a shadow on everything, and a console
+that looked like that would be a second brand.
+
+- **`TOKENS` in `theme.ts` is the second copy of the palette and there are only
+  two.** `styles.css` declares the same values as custom properties for what is
+  left of the stylesheet; every `sx` reads `TOKENS`. Change a colour in both.
+- **What MUI owns**: buttons, fields, selects, checkboxes, tables, chips,
+  dialogs, the snackbar, the progress bar, alerts. **What the stylesheet still
+  owns**: the shell's grid, the sidebar, the wordmark, page heads, art
+  thumbnails, and the composite blocks that are layout rather than widgets (a
+  step row, the technique grid, the save bar). Moving the frame into `sx` as
+  well is the tempting next step and it would put the console's layout into
+  eight files instead of one.
+- **Three Material defaults are turned OFF and each was a decision**: uppercase
+  button labels (this product writes "Email me a code"), the elevation ramp
+  (a card here is separated by a hairline outline and the warm ground, not by a
+  shadow — `shadows` is the app's own three), and the ripple (a press is
+  acknowledged by a tint, which is the app's `tint` tier; an expanding circle
+  is a second vocabulary for one event).
+- **`spacing` is 4, not Material's 8**, because the app's grid is four-point.
+  Every `sx={{ mb: 4 }}` in this console is 16px.
+- **The bundle went from ~64KB to ~243KB gzipped.** Stated rather than hidden:
+  it is an internal tool one person opens on a desktop, the assets are a year
+  cached, and what was bought is every control above. It would be the wrong
+  trade in the phone client, which is why that one still has none of this.
+- **`autoFocus` inside a `Dialog` does not work and is not the fix.** The
+  dialog's focus trap takes focus to the paper when it mounts, AFTER React has
+  applied `autoFocus`, so the reader lands on a `<div>` and their first
+  keystroke goes nowhere — measured, not assumed. `ConfirmDelete` focuses its
+  field from `slotProps.transition.onEntered`, which is also the moment the
+  dialog has finished travelling.
+- **MUI restores focus to the opener, and the one case it cannot is worth
+  knowing**: if the page re-renders that button away while the dialog is open
+  (a mutation's `reload()` behind it), the node it restores to is detached and
+  focus falls to `<body>`. It is not worth code; it is worth not being
+  surprised by.
+- **The hand-rolled dialog's two bugs are gone with it**, and they are recorded
+  because they are what the library is being paid for: the opener had to be
+  read during RENDER (an effect-time read captures the dialog's own field), and
+  the restore had to be scheduled a tick late so StrictMode's double-invoked
+  effect could cancel it.
+
+#### It looks like the app, and the serif is the whole of that
+
+Light only (owner's call, 2026-09-23) — the dark set is deleted rather than
+left following the system. The app carries a stored preference because a cook
+holds a phone in a dark kitchen; a desktop tool for curating a cream-grounded
+catalogue has no such argument, and half the reason to open this screen is to
+judge a painting whose ground is baked in. Reinstating it means lifting the
+block back out of `chrome.ts`, not inventing one.
+
+Otherwise the tokens are the site's, copied — same names, same values — because
+a console with a palette of its own is how one product ends up with two brands.
+The ground is the APP's `#FCFAF6` rather than the site's, which is the 10% warm
+blend the owner settled on after two fuller-warmth attempts were reverted.
+
+**Lora appears on a DISH'S NAME and nowhere else**, which is the client's own
+rule ("the serif is reserved for a dish's NAME") applied rather than a
+decoration. Recipe rows, suggestion rows and the detail page's masthead take
+it; page titles, section headings, table headers, ingredient names and tag
+names are chrome and stay in Poppins — the same split the app reached when its
+empty pages and welcome screen moved from serif to sans. Spreading it further
+reads as "more branded" for a day and then the one signal that says *this row
+is a dish* is gone.
+
+- **The faces are self-hosted**, converted from `@expo-google-fonts/lora`'s
+  TTFs and subset to Latin + Latin-1 + Latin Extended-A. That range is not
+  optional: dish names are Béchamel, Ragù, Niçoise and Gougères, and a subset
+  that dropped the accents would fall back mid-word. 130KB TTF → ~21KB woff2
+  each.
+- **Section headings are the app's quiet-heading idiom** — 11px, tracked,
+  uppercase, muted ink — not a bold 17px, which competes with the page title
+  two ranks above it.
+- **A row's hover is the peach wash**, not a neutral grey: a tint is the app's
+  hover and selection treatment everywhere, and grey on a white card reads as a
+  disabled row.
+- **Thumbnails are 3:4**, the ratio every illustration is rendered at. A square
+  crop takes the sides off the plate, which is exactly why the app's own recipe
+  row holds its picture in a 3:4 frame.
+
+**Granting the first admin is a SQL statement, deliberately.** There is no
+bootstrap route and there should not be one:
+
+```sql
+update public.profiles set is_admin = true
+ where user_id = (select id from auth.users where email = 'you@example.com');
+```
+
+After that the console's Users screen can grant and revoke. **An admin cannot
+remove their OWN flag** (409) — not paternalism, it is the only guard against
+locking everybody out, since there is no other door back in.
+
+#### A list is sorted from its own COLUMN HEADERS
+
+Every table here pages server-side — fifty rows of four hundred — so a header
+that reordered what is on screen would sort a twentieth of the table while
+claiming to sort it, and the answer would change with the page you happened to
+be on. `SortTh` therefore writes `sort`/`dir` into the URL and the request goes
+again, and **only a column the API can genuinely order by is drawn as a
+button**; everything else is a plain `TableCell` rather than a control that
+lies. `TableSortLabel` carries the `aria-sort` and the arrow, which was the
+hand-written half. The sort `<select>`s are gone — two controls for one
+question is two places to look and one of them to keep in step.
+
+**The contract names a COLUMN and a DIRECTION separately, and that is what made
+the headers possible** (2026-09-23). The enums used to name both at once —
+`newest`, `oldest`, `name`, `favourites` — which reads well in a dropdown and
+cannot express half of what a header needs: there was no way to ask for Z–A or
+for the least-saved dish, so a column could sort one way and then had nothing to
+do on a second press. The keys are the console's own row FIELDS (`createdAt`,
+`favouriteCount`, `useCount`, `recipeCount`, `aiCalls`), not database columns —
+the header sits over a field, and a tag's usage count is not a column at all.
+The old values are **rejected, not translated**: nothing links to them and a
+silent alias is how a vocabulary stays doubled forever.
+
+- **A first press takes the column's natural direction** — a name A–Z, a count
+  biggest-first, a date newest-first — and pressing the sorted column reverses
+  it. `first` on `SortTh` is that per-column decision.
+- **Two sorts rank in JS over the WHOLE table and page afterwards**: tags by
+  usage (the count is not a column, so the database cannot order by it) and
+  users by AI calls. The users one was a page-scoped sort before it was a
+  header, which was tolerable in a dropdown labelled "Heaviest usage" and is not
+  when a column claims to have ordered the directory. Its window is read once
+  for everybody and the same tally fills the page's own column — **and it is
+  deliberately not filtered by `user_id` on that branch**, because every
+  account's id in a PostgREST `in` list is exactly the shape that reaches
+  **414 URI Too Long**.
+- **`useListParams` owns the URL rules**, which were six copies of one
+  `setParam` — including "any change but paging returns to page one", which is
+  the rule that goes missing in the sixth copy and is invisible until a filtered
+  list looks empty. `clearOnChange` is the step-art screen's extra rule (its
+  open dish has to go when the list changes), declared once so the SORT obeys it
+  too — which the page's own copy did not, sorting having been a select outside
+  it.
+
+#### A press is answered by a TOAST; a condition is still chrome
+
+The banner under the page heading said what happened *there*: on the recipe
+detail page a curator presses Save at the foot of a long form and the answer
+lands eight hundred pixels above them, so the only visible sign of the press is
+the page not appearing to do anything. `ToastHost` is mounted **outside the
+router**, so a notice survives the navigation that is its own consequence —
+deleting a recipe answers and then leaves for the list.
+
+- **One at a time, newest wins.** A stack is what you build when several
+  unrelated things can finish at once, and in a console driven by one person's
+  presses they cannot; two visible toasts is instead how the second answer to a
+  press hides behind the first.
+- **What stays a banner is anything STANDING** — a list that could not be read
+  (`ResourceState`), the rename warning beside the picture. Those are true for
+  as long as they are on screen and would be wrong to time out.
+- **A failure gets twice the dwell of a success** (7s against 3.5). A success is
+  read in a glance and its consequence is on the page behind it; a failure names
+  something that has to be understood before it can be acted on. Neither is a
+  limit on reading it — the toast is dismissible and is `role="status"`.
+- **The live region is drawn whether or not anything is in it.** A
+  `role="status"` element inserted at the same moment as its text is not
+  reliably announced.
+
+#### The delete dialog behaves like one
+
+`ConfirmDelete` gained Escape and a focus trap (2026-09-23). Without the trap,
+Tab walks out of the dialog into the page behind it — which here is a table of
+destructive buttons, under a backdrop that hides where the focus went. Two
+things about it are measured rather than assumed:
+
+- **The opener is captured during RENDER, not in the effect.** React applies the
+  field's `autoFocus` during the commit and effects run after it, so by the time
+  an effect could look, `document.activeElement` is the dialog's own input —
+  and "restore the opener" restores focus to an element about to be unmounted.
+  Focus then falls to `<body>` and the reader is at the top of the page, which
+  is the exact failure the restore exists to prevent.
+- **The restore is scheduled a tick late so StrictMode can cancel it.** React
+  mounts, unmounts and remounts every effect in development, so the cleanup runs
+  once while the dialog is still on screen — restoring focus there pulls it
+  straight out of the field the dialog just focused. The second run clears the
+  pending restore; a real unmount has no second run.
+- **The focusable set is queried on each Tab rather than cached**, because the
+  confirm button is disabled until the typed name matches and a disabled control
+  is not focusable — so the set genuinely changes while the dialog is open.
+
+#### Hiding: `hidden_at`, and why a function signature changed
+
+Hiding is **gone for everyone** (owner's call, 2026-09-22), not "dropped from
+discovery": a hidden dish leaves the feed, search, pairings, components and its
+share link, AND stops resolving for readers who saved it. The console counts
+those references and says so before the press rather than refusing it.
+
+`recipe_is_visible(uuid)` could not express it — it is handed `created_by` and
+nothing else — so it became `recipe_is_visible(uuid, timestamptz)` and **the
+one-argument version was DROPPED**. That drop is the design rather than tidying:
+an overload would leave every existing call site compiling, running and
+silently not filtering. Postgres refuses to drop a function anything depends
+on, so the migration fails unless all five policies and three function bodies
+have been updated — which is the review the change needs.
+
+- **RLS covers every ordinary read and every SECURITY INVOKER function.** What
+  it does not cover is a DEFINER function, which sees past policies entirely.
+  The set was taken from `pg_proc` rather than guessed: `find_recipes`,
+  `find_dishes_using_components`, `pairing_candidates_for_recipe`,
+  `record_ingredient_substitution` and `search_recipes`. Each body in
+  `20260922000001` is the live definition from `pg_get_functiondef` with one
+  predicate added and marked `THE EDIT` — re-dumped rather than re-derived,
+  because a hand-rebuilt copy is how an earlier migration's fix gets silently
+  reverted.
+- **`search_recipes` excludes hidden dishes from DEDUP too**, which is the one
+  worth pausing on. It runs as the service role with no user, so it asks "is
+  this part of the shared corpus" — and a hidden dish is deliberately out of
+  it. Hiding a bad render therefore lets the dish be written again rather than
+  deduping every future attempt onto an invisible row, which is exactly why a
+  curator reaches for the control.
+- **Suggestions hide through their own column**, and the migration tightened
+  their two child tables at the same time: `recipe_suggestion_ingredients` and
+  `recipe_suggestion_tags` were both `using (true)`, so a hidden suggestion's
+  contents stayed readable by id — the hole `20260815000005` closed for
+  recipes, still open here because nothing had ever been hidden.
+- **KNOWN AND ACCEPTED**, unchanged from `20260815000005`:
+  `recipe_display_tags` and `recipe_dietary` are views without
+  `security_invoker`, so a hidden dish's TAG NAMES are still reachable by
+  anyone holding its id. No name, no picture, no ingredients, no method.
+
+#### Regenerating a picture
+
+`POST /rest/admin/recipes/:id/image` is the one route here that spends money —
+two image generations a press, since the renderer rolls twice and keeps the
+better-framed one. Three things bite:
+
+- **`force` had to be added to the renderer.** `generateAndUploadRecipeImage`
+  short-circuits on an existing storage object, which is exactly right on the
+  generation path and exactly wrong here; forced, it also skips the legacy-PNG
+  re-encode branch, which would answer a regeneration with the same old picture
+  in a new container. It never joins an in-flight render either — joining would
+  hand the curator the picture they are replacing.
+- **It is AWAITED, unlike every other caller.** Elsewhere the render is
+  deliberately unawaited because the URL is predicted from the name. Here the
+  request IS the render.
+- **The URL does not change and nothing is written to `recipes.image`.** The
+  storage path is derived from the dish's name. A cache-busting query parameter
+  was considered and rejected: `uploadVariants` files the thumbhash with
+  `.eq("image", <canonical url>)`, so a versioned URL in that column would
+  silently stop matching and every future render would fail to attach a hash.
+  **The console cache-busts its own `<img>` instead.** On hosted Supabase the
+  objects are served `no-cache` whatever the upload asks for, so devices
+  revalidate; the LOCAL stack honours the year-long max-age, which is why art
+  replaced there stays stale until the client's dev menu drops its image cache.
+
+#### Things that will bite
+
+- **`admin_user_directory` exists because `auth.users` is not in the exposed
+  schema**, and its guard is `auth.role()`, NOT `current_user`. Inside a
+  SECURITY DEFINER body `current_user` is the function's owner whoever called
+  it, so the service-role exemption was a constant that never matched and the
+  API was refused its own route. The check is in the BODY rather than on the
+  grant, so a later `grant execute … to authenticated` cannot quietly turn it
+  into an email-address oracle.
+- **`libs/admin-contract` is a lib of its own and not part of
+  `@fridgeezy/schemas`.** That package is packed into the React Native client,
+  so every schema in it is installed on a phone; nothing here is of any use to
+  the app.
+- **The admin router parses JSON; the rest of the app deliberately does not.**
+  `express-app.ts` omits `express.json()` because the AI handlers read the raw
+  stream themselves. That reasoning is about those handlers, so the parser is
+  applied to this router only. CORS gained `PATCH` and `PUT` for the same
+  change — React Native's fetch does not preflight, so an unlisted method is
+  invisible from the app and fails only in a browser.
+- **The console routes on the HASH.** Real paths would need CloudFront to
+  rewrite every unknown path to `index.html`, which is a deploy and an
+  infrastructure change that have to stay in step forever. The hash costs an
+  ugly URL on a tool nobody links to.
+- **Steps are replaced WHOLESALE (`PUT …/steps`), never patched row by row.**
+  `step_number` is a position, so per-row editing makes the caller responsible
+  for renumbering after every insert and delete. There is no transaction — a
+  failure between the delete and the insert leaves the recipe stepless, and the
+  route says so rather than reporting success.
+- **Ingredient rows and tags are read-only on the recipe page.** A recipe
+  ingredient is a join to the ingredient catalogue plus a quantity and a unit,
+  which is what the generator resolves with a model; getting it wrong writes a
+  recipe that filters and shops incorrectly.
+- **Deleting a dish with reader versions is refused (409).**
+  `recipe_variants.base_recipe_id` cascades, so deleting a base would destroy
+  every reader's personal copy as a side effect of catalogue tidying. Hide it
+  instead — a variant is its own row with its own visibility.
+- **The storage object is never deleted with a recipe.** Art is keyed by NAME,
+  so another row of the same name is pointing at the same object.
+
+#### Deploying it
+
+```bash
+npx nx run @fridgeezy/database:env-remote   # SUPABASE_URL/ANON_KEY from SSM
+terraform -chdir=infra apply -var-file=environments/dev.tfvars
+./infra/deploy-admin.sh
+```
+
+Vite inlines `import.meta.env.VITE_*` at build time, so a deployed console
+cannot be repointed without rebuilding — which is why `deploy-admin.sh` reads
+all three values at deploy time from the places this repo already treats as
+authoritative (`apps/api/.env.production` for Supabase, `terraform output
+function_url` for the backend) and refuses outright if the Supabase URL points
+at a local stack. Locally, `apps/admin/.env.local` holds the same three and
+`npx nx run @fridgeezy/admin:serve` runs it on :4300.
+
+**`index.html` is `no-store` and the hashed assets are a year.** That second
+value is not symmetric with the first: `index.html` is the one object whose
+name stays the same while its contents change, so a cached copy keeps pointing
+browsers at the previous bundle's filenames — which are still in the bucket, so
+nothing errors and the deploy is simply invisible.
 
 ## The allowance (`require-quota.ts`, 2026-09-03)
 

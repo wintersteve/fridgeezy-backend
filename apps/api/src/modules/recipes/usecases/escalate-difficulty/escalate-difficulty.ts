@@ -22,6 +22,7 @@ import {
     formatUnitsForPrompt,
     recordTasteSignal,
     HEADER_DESCRIPTION_RULES,
+    FOOD_SAFETY_RULES,
     TEMPERATURE_RULES,
     STEP_DURATION_RULES,
     UNIT_CHOICE_RULE,
@@ -120,6 +121,8 @@ ${tags}
 - Dietary tags (shellfish-free, vegan, gluten-free, etc.) MUST remain unchanged regardless of difficulty
 
 ${TEMPERATURE_RULES}
+
+${FOOD_SAFETY_RULES}
 
 ${STEP_DURATION_RULES}
 

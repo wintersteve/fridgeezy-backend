@@ -302,6 +302,7 @@ export type Database = {
           courses: string[]
           created_at: string
           generated_at: string
+          generation_attempts: Json
           main_dish_key: string
           model: string | null
           topped_up_courses: string[]
@@ -311,6 +312,7 @@ export type Database = {
           courses?: string[]
           created_at?: string
           generated_at?: string
+          generation_attempts?: Json
           main_dish_key: string
           model?: string | null
           topped_up_courses?: string[]
@@ -320,6 +322,7 @@ export type Database = {
           courses?: string[]
           created_at?: string
           generated_at?: string
+          generation_attempts?: Json
           main_dish_key?: string
           model?: string | null
           topped_up_courses?: string[]
@@ -1400,6 +1403,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          is_admin: boolean
           onboarding_completed: boolean
           updated_at: string
           user_id: string
@@ -1409,6 +1413,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          is_admin?: boolean
           onboarding_completed?: boolean
           updated_at?: string
           user_id: string
@@ -1418,6 +1423,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          is_admin?: boolean
           onboarding_completed?: boolean
           updated_at?: string
           user_id?: string
@@ -1899,6 +1905,9 @@ export type Database = {
           description_ascii: string | null
           difficulty: Database["public"]["Enums"]["difficulty_type"] | null
           embedding: string | null
+          hidden_at: string | null
+          hidden_by: string | null
+          hidden_reason: string | null
           id: string
           identity_cuisine: string | null
           name: string
@@ -1914,6 +1923,9 @@ export type Database = {
           description_ascii?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           embedding?: string | null
+          hidden_at?: string | null
+          hidden_by?: string | null
+          hidden_reason?: string | null
           id?: string
           identity_cuisine?: string | null
           name: string
@@ -1929,6 +1941,9 @@ export type Database = {
           description_ascii?: string | null
           difficulty?: Database["public"]["Enums"]["difficulty_type"] | null
           embedding?: string | null
+          hidden_at?: string | null
+          hidden_by?: string | null
+          hidden_reason?: string | null
           id?: string
           identity_cuisine?: string | null
           name?: string
@@ -1937,7 +1952,15 @@ export type Database = {
           name_en_ascii?: string | null
           total_time_minutes?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "recipe_suggestions_hidden_by_fkey"
+            columns: ["hidden_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       recipe_tags: {
         Row: {
@@ -2085,6 +2108,9 @@ export type Database = {
           fat: number | null
           favourite_count: number
           fts: string | null
+          hidden_at: string | null
+          hidden_by: string | null
+          hidden_reason: string | null
           id: string
           identity_cuisine: string | null
           image: string | null
@@ -2120,6 +2146,9 @@ export type Database = {
           fat?: number | null
           favourite_count?: number
           fts?: string | null
+          hidden_at?: string | null
+          hidden_by?: string | null
+          hidden_reason?: string | null
           id?: string
           identity_cuisine?: string | null
           image?: string | null
@@ -2155,6 +2184,9 @@ export type Database = {
           fat?: number | null
           favourite_count?: number
           fts?: string | null
+          hidden_at?: string | null
+          hidden_by?: string | null
+          hidden_reason?: string | null
           id?: string
           identity_cuisine?: string | null
           image?: string | null
@@ -2195,6 +2227,13 @@ export type Database = {
           {
             foreignKeyName: "recipes_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipes_hidden_by_fkey"
+            columns: ["hidden_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -2582,6 +2621,15 @@ export type Database = {
       }
     }
     Functions: {
+      admin_user_directory: {
+        Args: { p_user_ids: string[] }
+        Returns: {
+          confirmed_at: string
+          email: string
+          last_sign_in_at: string
+          user_id: string
+        }[]
+      }
       ai_quota_period_length: { Args: { p_period: string }; Returns: unknown }
       ai_quota_period_start: {
         Args: { p_anchor: string; p_now?: string; p_period: string }
@@ -2719,6 +2767,7 @@ export type Database = {
       has_user: { Args: { email: string }; Returns: boolean }
       ingredient_canonical_id: { Args: { input_text: string }; Returns: string }
       ingredient_identity_ids: { Args: { p_ids: string[] }; Returns: string[] }
+      is_admin: { Args: never; Returns: boolean }
       menu_by_id: {
         Args: { p_menu_id: string }
         Returns: {
@@ -2926,7 +2975,10 @@ export type Database = {
           menu_title: string
         }[]
       }
-      recipe_is_visible: { Args: { p_created_by: string }; Returns: boolean }
+      recipe_is_visible: {
+        Args: { p_created_by: string; p_hidden_at: string }
+        Returns: boolean
+      }
       record_dish_pairings: {
         Args: {
           p_asked?: string[]
@@ -2942,6 +2994,7 @@ export type Database = {
           courses: string[]
           created_at: string
           generated_at: string
+          generation_attempts: Json
           main_dish_key: string
           model: string | null
           topped_up_courses: string[]

@@ -47,6 +47,12 @@
         },
         {
             "path": "./libs/components"
+        },
+        {
+            "path": "./libs/admin-contract"
+        },
+        {
+            "path": "./apps/admin"
         }
     ]
 }

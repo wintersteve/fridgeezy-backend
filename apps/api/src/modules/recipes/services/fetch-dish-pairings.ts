@@ -57,9 +57,47 @@ export interface DishPairingSetRow {
      * asked once and topped up is a course that is as good as it gets.
      */
     toppedUpCourses: string[];
+    /**
+     * Course -> how many times this set has gone and asked about it.
+     *
+     * The bound behind the picker's "show me more". It replaced
+     * `toppedUpCourses` in that job on 2026-09-22 because a set cannot count,
+     * and a button that can be pressed on purpose needs a budget rather than a
+     * latch — see `20260922000003`. That column kept its OTHER job, which is
+     * telling the write to append rather than clear.
+     *
+     * A course absent from here has never been asked, which reads as zero. That
+     * is also what a set written before the column existed says about itself,
+     * and why the migration backfills from `askedCourses` rather than
+     * defaulting: an empty map would hand the whole budget back to every dish
+     * already in the catalogue.
+     */
+    attempts: Record<string, number>;
     generatedAt: string;
     model: string | null;
 }
+
+/**
+ * The attempt map, narrowed out of the column's `Json`.
+ *
+ * Anything that is not a positive integer is read as zero rather than thrown
+ * on: the value decides whether to OFFER a press, so a garbled entry costing a
+ * dish its remaining budget is a far cheaper failure than one taking out the
+ * whole picker.
+ */
+const readAttempts = (value: unknown): Record<string, number> => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+    const attempts: Record<string, number> = {};
+
+    for (const [course, count] of Object.entries(value)) {
+        if (typeof count === "number" && Number.isFinite(count) && count > 0) {
+            attempts[course] = Math.floor(count);
+        }
+    }
+
+    return attempts;
+};
 
 const DIFFICULTIES = new Set(["easy", "medium", "hard"]);
 
@@ -131,7 +169,9 @@ export async function fetchDishPairingSet(
 ): Promise<DishPairingSetRow | null> {
     const { data, error } = await supabaseAdmin
         .from("dish_pairing_sets")
-        .select("courses, asked_courses, topped_up_courses, generated_at, model")
+        .select(
+            "courses, asked_courses, topped_up_courses, generation_attempts, generated_at, model"
+        )
         .eq("main_dish_key", mainDishKey)
         .maybeSingle();
 
@@ -146,6 +186,7 @@ export async function fetchDishPairingSet(
         courses: data.courses ?? [],
         askedCourses: data.asked_courses ?? [],
         toppedUpCourses: data.topped_up_courses ?? [],
+        attempts: readAttempts(data.generation_attempts),
         generatedAt: data.generated_at,
         model: data.model ?? null,
     };
@@ -238,14 +279,27 @@ export async function fetchPairingHoldings(
 }
 
 /**
- * Below this, a course is worth asking about a second time.
+ * Below this, a course is worth asking about WITHOUT being asked to.
  *
- * Three, and it is the SAME number as the client's `PAIRING_FLOOR` on purpose:
- * that is the count below which the picker stops presenting a course as a
- * choice and draws its search field instead. A course the picker will not
- * present is exactly the course worth one more call, and two numbers here would
- * drift into a press that generates for a course the reader was never shown a
- * problem with — or, worse, an offer that always waives.
+ * TWO since 2026-09-21, moving with `PAIRINGS_PER_COURSE`: one dish is a dish
+ * somebody chose for the reader, and two is the thinnest thing that is still a
+ * choice. A course below that is exactly the course worth spending on
+ * unprompted.
+ *
+ * **It had a twin on the client, `PAIRING_FLOOR`, and no longer does**
+ * (2026-09-23). That constant governed a line under a thin course — "Only one
+ * on file for this course" — and the line was removed, so the number had
+ * nothing left to draw and went with it. What the picker says about a thin
+ * course now is the `More ideas` button, which is driven by `moreCourses` off
+ * the wire rather than by any client-side count. So this threshold is the only
+ * copy of the judgement, which is simpler than the pair was: nothing can drift
+ * from it.
+ *
+ * **This is the AUTOMATIC threshold, not the button's.** Opening a course spends
+ * a call only below this; the reader pressing "show me more" spends one up to
+ * {@link PAIRING_CANDIDATE_CEILING}. Two thresholds because they answer two
+ * questions — "is this so thin it is not worth showing" against "could this hold
+ * more" — and collapsing them would charge for opening any course under six.
  *
  * It is a FLOOR on the set, not on what a reader can see: `fetchPairingHoldings`
  * counts the stored rows, where `fetchPairingCandidates` returns the caller's
@@ -254,7 +308,69 @@ export async function fetchPairingHoldings(
  * dishes the model was never told to avoid, so the next reader pays for their
  * diet.
  */
-export const PAIRING_TOP_UP_BELOW = 3;
+export const PAIRING_TOP_UP_BELOW = 2;
+
+/**
+ * The most a course may accumulate from generation.
+ *
+ * SIX, the same number as the client's `MAX_COURSE_CANDIDATES`, and twinned for
+ * the reason that cap exists at all: the picker draws a column of horizontal
+ * cards and the reader is choosing ONE, so past about six the page stops being
+ * a decision. Generating past what the read will return is paying for dishes
+ * nobody can see.
+ *
+ * It is what CLOSES the button rather than what hides dishes, which is the
+ * whole point of pairing the two numbers. A display cap the reader can collide
+ * with by pressing something is hostile — they pay, and either nothing visibly
+ * changes or a dish they were weighing up is pushed off the bottom. Withhold
+ * the offer at the ceiling instead and the cap never silently swallows
+ * anything.
+ *
+ * ## It counts PROPOSALS, and evidence is the gap
+ *
+ * `fetchPairingHoldings` reads `dish_pairings` alone, so this measures the
+ * generated layer. The picker's cap applies to the MERGED list, and evidence
+ * always ranks ahead of proposals — so a course with four dishes somebody
+ * actually served and two proposals is already full on screen while this reads
+ * two, and the button would be offered for dishes that land below the cut.
+ *
+ * Left as it stands, knowingly. It needs four evidence pairings for one course
+ * of one dish, and evidence comes from saved publishable menus — of which the
+ * catalogue had exactly one against fifty-six recipes when the layer was built,
+ * so this is not currently reachable. It becomes reachable as menus accumulate,
+ * on the popular dishes first.
+ *
+ * **The fix is a wider holdings count, not a wider view of the candidates.**
+ * Counting what the READ returned would judge the ceiling on the caller's
+ * filtered list, which is the one thing this whole file refuses: a reader whose
+ * diet thins a full course would be offered a press that grows a SHARED set on
+ * their behalf, with dishes the model was never told to avoid. The honest
+ * version counts menu evidence server-side and reader-independently, alongside
+ * the proposals, and it costs a query nobody needs yet.
+ */
+export const PAIRING_CANDIDATE_CEILING = 6;
+
+/**
+ * How many times one course of one dish may EVER be asked about.
+ *
+ * Three, which at `PAIRINGS_PER_COURSE` of two is about what it takes to fill a
+ * course. The second bound, and it catches a different failure from the ceiling
+ * above: that one stops a FULL course being asked again, this one stops a thin
+ * course being asked forever.
+ *
+ * It has to exist because every call excludes what the course already holds, so
+ * a dish with two honest pairings answers the third ask with nothing and the
+ * fourth with nothing — and `record_dish_pairings` drops a repeat on the unique
+ * constraint, so the holdings never move and the offer never withdraws. Without
+ * this, a thin dish draws a button forever and every reader who presses it pays
+ * to rediscover the same dead end.
+ *
+ * Counted on the SET, so it is spent per dish rather than per reader. That is
+ * the same trade the whole pairing layer makes — one answer written once and
+ * read by everybody — and it is why the budget is three rather than one: at one
+ * it belonged to whoever got there first.
+ */
+export const PAIRING_MAX_ATTEMPTS = 3;
 
 /**
  * Which courses one more generation would actually help.
@@ -267,11 +383,10 @@ export const PAIRING_TOP_UP_BELOW = 3;
  *
  * Four tests, and each excludes a different mistake:
  *
- * - **Asked** — a course never solicited is not a top-up, it is the first call.
- * - **Not already topped up** — the bound. One extra call per course, ever, so
- *   a dish with one honest pairing costs two calls across its life rather than
- *   one per press.
- * - **Thin** — at or above the floor there is a choice already.
+ * - **Asked** — a course never solicited is not a refill, it is the first call.
+ * - **Budget left** — {@link PAIRING_MAX_ATTEMPTS}. The bound that stops a
+ *   course the model has nothing more to say about being asked forever.
+ * - **Room left** — `below`, which is what the two exported wrappers differ by.
  * - **Endorsed OR holding something** — the one that needed a second look.
  *
  * That last test started as `endorsed` alone, to stop a course the model
@@ -281,21 +396,23 @@ export const PAIRING_TOP_UP_BELOW = 3;
  * and `p_merge` deliberately leaves `courses` alone so a reader's override
  * never rewrites the model's opinion. So a course the model declined, the
  * reader asked for, and one dish came back for was permanently stuck at one:
- * exactly the dead end this whole third state exists to remove, reached from
- * the other side.
+ * exactly the dead end the third state exists to remove, reached from the other
+ * side.
  *
  * Holding at least one dish is the evidence that something does go there,
  * whatever the model said first. What is still excluded is the genuinely
  * exhausted case — asked, not endorsed, and nothing came back — where two
  * different calls have now said there is nothing to serve.
  */
-export const topUpCourses = (params: {
+const generatableCourses = (params: {
     set: DishPairingSetRow | null;
     holdings: Record<string, { count: number }>;
     /** Narrowed to the courses the caller asked about. */
     courses: string[];
+    /** The holdings threshold — a floor for the automatic pass, a ceiling for the button. */
+    below: number;
 }): string[] => {
-    const { set, holdings, courses } = params;
+    const { set, holdings, courses, below } = params;
 
     if (!set) return [];
 
@@ -304,12 +421,44 @@ export const topUpCourses = (params: {
 
         return (
             set.askedCourses.includes(course) &&
-            !set.toppedUpCourses.includes(course) &&
-            held < PAIRING_TOP_UP_BELOW &&
+            (set.attempts[course] ?? 0) < PAIRING_MAX_ATTEMPTS &&
+            held < below &&
             (set.courses.includes(course) || held > 0)
         );
     });
 };
+
+/**
+ * Courses too thin to present, which opening one is worth spending on.
+ *
+ * What `needsGeneration` on the client is built from, so it governs the press
+ * that OPENS a course. Deliberately the tighter of the two: this one spends
+ * without the reader having asked for more, so it fires only where the course
+ * would otherwise not be a choice at all.
+ */
+export const topUpCourses = (params: {
+    set: DishPairingSetRow | null;
+    holdings: Record<string, { count: number }>;
+    courses: string[];
+}): string[] =>
+    generatableCourses({ ...params, below: PAIRING_TOP_UP_BELOW });
+
+/**
+ * Courses a deliberate "show me more" would add something to.
+ *
+ * A superset of {@link topUpCourses} — same rule, room measured against the
+ * ceiling instead of the floor. It is what the picker's button is drawn from,
+ * and what the GENERATE route decides its work on: the route's job is "would
+ * this press add anything", which is this question and not the narrower one.
+ * Asking the narrower one there would waive every press on a course holding
+ * three, which is most of what the button is for.
+ */
+export const moreCourses = (params: {
+    set: DishPairingSetRow | null;
+    holdings: Record<string, { count: number }>;
+    courses: string[];
+}): string[] =>
+    generatableCourses({ ...params, below: PAIRING_CANDIDATE_CEILING });
 
 export interface FetchPairingCandidatesOptions {
     recipeId: string;

@@ -95,14 +95,38 @@ variable "lambda_memory_size" {
     GB-seconds against that wall-clock time — on 15-30s streams, memory is the
     largest cost lever in this stack.
 
-    1024 keeps cold starts comfortable for a Node runtime without paying for
-    headroom nothing uses. This is a reasoned starting point, NOT a measurement:
-    validate with AWS Lambda Power Tuning against a real recipe stream before
-    treating it as settled, since the loopback proxy in lambda.ts and the JSONL
-    accumulation do use some CPU.
+    1024 kept cold starts comfortable without paying for headroom nothing uses,
+    and said of itself that it was a reasoned starting point rather than a
+    measurement. **It has now been measured, and it is 1769** (2026-09-22).
+
+    1769 MB is where Lambda allocates ONE FULL vCPU; 1024 gets ~0.58 of one.
+    That is what is being bought here — not memory. Across 5,558 production
+    invocations the peak `maxMemoryUsed` was 270 MB and the average 165, so the
+    function has never wanted more than a quarter of what it already has.
+
+    What made CPU the suspect: `recipe.pairings` ran 17.7s for 411 output
+    tokens — 41.5 ms/token, SEVEN TIMES the 5-6 ms/token every other streamed
+    call managed in the same window — with a healthy 626 ms to first token, so
+    the model started promptly and then delivered slowly. Nine other model calls
+    completed INSIDE that stream's window, in the same invocation: the per-dish
+    judging `generate-dish-pairings` dispatches without awaiting, precisely so
+    the loop does not block. It does not block, but ten concurrent SSE streams
+    being decoded, parsed and zod-validated on one Node thread at 0.58 vCPU
+    compete, and the pairings reader is the one starved.
+
+    The cost objection above still stands in principle — this bills GB-seconds
+    against wall-clock, so 1.73x the memory is 1.73x the rate — and it does not
+    bite yet: 3,143 seconds of billed compute over ten days is about four cents,
+    so the experiment costs three. **Re-read that when traffic grows**, because
+    at scale the trade inverts unless the duration falls with it.
+
+    Validate the same way it was suspected: `firstTokenMs` against `latencyMs`
+    per label (see `reportUsage`). If the streaming half of `recipe.pairings`
+    does not tighten toward the others, the CPU theory is wrong and this goes
+    back to 1024 — it is one variable and one in-place update either way.
   EOT
   type        = number
-  default     = 1024
+  default     = 1769
 }
 
 variable "lambda_timeout" {

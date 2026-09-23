@@ -71,6 +71,9 @@ streaming behaviour end-to-end. Both need a deploy.
 | `main.tf` | Locals, artifact zipping |
 | `lambda.tf` | Function, Function URL, log group |
 | `iam.tf` | Execution role: logs, Bedrock, SSM |
+| `site.tf` | Static site: S3 + CloudFront, the `/r/*` share behaviour |
+| `admin.tf` | Admin console: S3 + CloudFront on its own subdomain |
+| `dns.tf` | Route 53 zone, ACM certificate, apex + www records |
 | `outputs.tf` | Function URL, ARNs, log group |
 | `environments/*.tfvars` | Per-environment, non-secret config |
 
@@ -198,6 +201,72 @@ terraform apply -var-file=environments/dev.tfvars
 ```
 
 Point clients at the `function_url` output.
+
+### The two static sites
+
+Terraform creates the buckets and distributions; the CONTENT is pushed by
+scripts, because objects are artifacts rather than infrastructure.
+
+```bash
+./infra/deploy-site.sh     # the marketing/legal pages (apps/site)
+./infra/deploy-admin.sh    # the admin console (apps/admin)
+```
+
+`deploy-admin.sh` needs `apps/api/.env.production`, which
+`npx nx run @fridgeezy/database:env-remote` writes from SSM — Vite inlines its
+environment at build time, so those values are baked into the bundle and the
+script refuses to build against a local Supabase URL. It reads the backend URL
+from `terraform output function_url`, the same source-of-truth pattern
+`deploy-site.sh` uses for `SITE_ORIGIN`.
+
+**The console is public to fetch and useless without an admin account.** What
+the distribution serves is a JavaScript bundle and the Supabase anon key — the
+same key every copy of the mobile app carries. Every row it draws comes from
+`/rest/admin/*`, which verifies a Supabase token and reads `profiles.is_admin`
+before answering. See "The admin console" in the repo's CLAUDE.md, including
+how to grant the first admin.
+
+### Billing image generation to Google Cloud credit
+
+Image generation goes to Vertex when `GOOGLE_CLOUD_PROJECT` is set and to the
+Gemini API in AI Studio otherwise. Only images move — speech stays on
+`GOOGLE_API_KEY` whatever this says. The difference is which budget pays:
+**AI Studio cannot be paid for with Google Cloud credit and Vertex can.**
+
+Locally it is two lines in `apps/api/.env` plus `gcloud auth
+application-default login`, which is how the admin console's art screens already
+bill to the credit.
+
+The deployed function has neither gcloud nor a GCP metadata server, so it needs
+a service-account key. Three steps, all manual and none of them Terraform's:
+
+```bash
+# 1. In GCP: a service account with "Vertex AI User" on the project, and a
+#    JSON key for it.
+gcloud iam service-accounts keys create key.json \
+  --iam-account=fridgeezy-images@<project>.iam.gserviceaccount.com
+
+# 2. Both parameters into SSM, under the same prefix as the rest.
+aws ssm put-parameter --type SecureString --name /fridgeezy/dev/GOOGLE_CLOUD_PROJECT \
+  --value '<project>'
+aws ssm put-parameter --type SecureString --name /fridgeezy/dev/GOOGLE_SERVICE_ACCOUNT_JSON \
+  --value "$(cat key.json)"
+
+# 3. Delete the local copy. It is a private key and SSM now has it.
+rm key.json
+```
+
+`load-secrets.ts` does the rest on the next cold start: every parameter becomes
+an env var of the same name, and `GOOGLE_SERVICE_ACCOUNT_JSON` is additionally
+written to `/tmp/google-service-account.json` with
+`GOOGLE_APPLICATION_CREDENTIALS` pointed at it — because that variable is a
+PATH, not a value. The boot log names the project it will bill.
+
+**This moves every image the API generates**, including recipe hero art on the
+generation path, not only what the console draws. That is the point if the goal
+is to spend the credit; it is also why it is a deliberate step rather than a
+default. Remove the two parameters and the next cold start is back on the API
+key with nothing else to undo.
 
 ## Why a Function URL and not API Gateway
 

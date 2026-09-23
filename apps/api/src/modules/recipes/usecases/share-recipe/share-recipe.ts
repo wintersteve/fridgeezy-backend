@@ -134,7 +134,16 @@ export async function shareRecipe(req: Request, res: Response) {
     // is buildable — a signed, expiring share token minted by the owner through
     // an authenticated route — and that is what to build if it is wanted. Do not
     // "fix" it by opening the read.
-    if (!summary || summary.createdBy) {
+    //
+    // A HIDDEN dish is refused on the same line and for a sharper reason
+    // (2026-09-22). `hidden_at` is applied by five RLS policies and by four
+    // SECURITY DEFINER readers that write the predicate out by hand — and this
+    // route is neither: it reads through the service role, so nothing upstream
+    // filters it. Without this line a dish withdrawn from the entire app would
+    // carry on serving its own public page, with an image and a description, to
+    // anyone holding the link. Same 404 as the other two cases, for the reason
+    // above: the status must not tell a stranger which of them it was.
+    if (!summary || summary.createdBy || summary.hiddenAt) {
         res.status(404)
             .type("html")
             .send(

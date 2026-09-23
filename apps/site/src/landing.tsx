@@ -1,11 +1,21 @@
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Container from "@mui/material/Container";
+import Link from "@mui/material/Link";
+import Paper from "@mui/material/Paper";
+import Typography from "@mui/material/Typography";
+
 import {
     APP_STORE_URL,
-    APPLE_GLYPH,
+    AppleGlyph,
+    CONTAINER_SX,
     DOWNLOAD_HREF,
     renderPage,
     SITE_NAME,
     SUPPORT_EMAIL,
 } from "./chrome";
+import { EXAMPLE_RECIPE } from "./example-recipe";
+import { buildTimeline, formatSpan } from "./timeline";
 
 /**
  * The landing page.
@@ -18,6 +28,18 @@ import {
  * phone layout first, with `min-width` queries that only ever widen it — and
  * the two multi-screen sections are **swipeable rails**, which is both the
  * native gesture and the app's own idiom (`RecipeCards`, the community rail).
+ *
+ * ## What is MUI here and what is not
+ *
+ * The page's STRUCTURE and its controls are MUI — `Container`, `Typography`,
+ * `Button`, `Link`, `Paper` — so the download button on this page and the
+ * one in the console are the same object with the same palette. The page's
+ * PICTURE is not: the phone frames, the scroll-snap rails, the hero's radial
+ * washes, the keyframes and the reveal transitions stay in `STYLES` below as
+ * ordinary CSS. `chrome.tsx` carries the full argument; the short version is
+ * that those rules are static and are the most heavily commented thing here,
+ * and an `sx` object literal is a worse place to explain why a corner radius is
+ * concentric.
  *
  * Three deliberate echoes of the app, because the page's job is to look like
  * the product it advertises:
@@ -277,17 +299,13 @@ const STYLES = `
 }
 
 /* ---------- download controls ---------- */
-.get{
-  display:inline-flex;align-items:center;gap:11px;
-  padding:15px 26px;border-radius:var(--r-pill);
-  text-decoration:none;font-weight:700;font-size:16px;letter-spacing:.1px;
-  background:var(--primary);color:var(--on-primary);
-  box-shadow:var(--shadow-raised);
-  position:relative;
-  transition:transform .15s ease,box-shadow .15s ease;
-}
-.get:hover{transform:translateY(-1px);box-shadow:var(--shadow-floating)}
-.get svg{width:20px;height:20px;fill:currentColor;flex:none}
+/* The FILL, the pill radius, the shadow and the hover lift are the shared
+   theme's MuiButton override — this is a contained Button and the console's
+   buttons are the same object. What is left here is what the theme
+   has no opinion about: the two-rank label, and the position needed by the
+   halo below. Do not re-declare a background or a radius here; that is how the
+   two surfaces drift into two peaches. */
+.get{position:relative;gap:11px;padding:15px 26px;font-size:16px}
 .get .stack{display:flex;flex-direction:column;line-height:1.15;text-align:left}
 .get .stack small{font-size:11px;font-weight:500;letter-spacing:.4px;opacity:.86}
 /* The halo only ever plays on a control that leads somewhere. A pulse on a
@@ -355,6 +373,39 @@ const STYLES = `
   .menu-rail > *{width:auto}
   .menu-rail .rail-card h3{font-size:17px;margin-top:18px}
 }
+
+/* ---------- the example recipe ---------- */
+/* Picture beside the pitch, the picture leading. Stacked on a phone; at 760 the
+   image takes a fixed track and the copy takes the rest, which is the cook
+   page's step layout and deliberately so — the two places a dish and its
+   writing sit side by side should sit the same way. */
+.proof-card{display:grid;gap:24px;padding:20px;margin-top:28px;align-items:center}
+.proof-card img{
+  width:100%;border-radius:var(--r-xxl);box-shadow:var(--shadow-floating);
+}
+@media (min-width: 760px){
+  .proof-card{grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:40px;padding:28px}
+}
+.proof-title{
+  font-family:'Lora',Georgia,serif;font-size:clamp(26px,4.4vw,34px);line-height:1.15;
+  color:var(--ink-strong);margin:6px 0 10px;
+}
+.proof-copy{font-size:16px;line-height:1.55;color:var(--ink-soft);max-width:46ch}
+
+/* The same three figures the recipe page draws, at card scale — hairlines
+   between them, not gaps, so they read as one table rather than three stats. */
+.proof-spans{display:flex;align-items:stretch;margin:20px 0 24px;max-width:420px}
+.proof-spans div{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;padding:12px 4px;text-align:center;
+}
+.proof-spans div + div{border-left:1px solid var(--rule)}
+.proof-spans b{font-size:18px;font-weight:700;line-height:22px;color:var(--ink-strong)}
+.proof-spans span{
+  font-size:10px;font-weight:600;line-height:14px;letter-spacing:1px;
+  text-transform:uppercase;color:var(--ink-muted);
+}
+.proof-cta{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}
 
 /* ---------- the menu section ---------- */
 /* Its own ground, because this is the one capability with no equivalent
@@ -456,137 +507,283 @@ document.documentElement.classList.add('js');
  * somewhere, and email is the channel the support and feature-request pages
  * already use.
  */
-function renderGet(): string {
+
+const Get = () => {
     const [over, under] = APP_STORE_URL
         ? ["Download on the", "App Store"]
         : ["Coming to the App Store", "Get an early invite"];
 
-    return `<a class="get" href="${DOWNLOAD_HREF}">${APPLE_GLYPH}
-      <span class="stack"><small>${over}</small>${under}</span>
-    </a>`;
-}
+    return (
+        <Button variant="contained" href={DOWNLOAD_HREF} className="get">
+            <AppleGlyph />
+            <Box component="span" className="stack">
+                <small>{over}</small>
+                {under}
+            </Box>
+        </Button>
+    );
+};
 
-function renderTourStep(step: TourStep, index: number): string {
-    return `<div class="rail-card reveal" style="--i:${index}">
-  <div class="phone">
-    <img src="/assets/screens/${step.screen}.webp" alt="${step.title} — the ${SITE_NAME} app"
-      width="780" height="1696" ${index < 2 ? "" : 'loading="lazy" '}decoding="async">
-  </div>
-  <span class="eyebrow">${step.eyebrow}</span>
-  <h3>${step.title}</h3>
-  <p>${step.copy}</p>
-</div>`;
-}
+/**
+ * A section's heading block. Three ranks with one measure, used by all three
+ * sections, so the eyebrow/title/lede rhythm cannot drift between them.
+ *
+ * The EYEBROW is `variant="h2"`, which is the theme's quiet heading — small,
+ * tracked, uppercase, muted — and therefore the same object the console's table
+ * headers and sidebar labels wear. That is the sharing doing its job.
+ *
+ * The TITLE is deliberately NOT that variant, and this cost a revision to
+ * learn: `h2` in this theme means the quiet heading, so a display title asking
+ * for it came out tracked and UPPERCASE ("ONE DISH. A WHOLE MENU."). It renders
+ * as a plain `h2` element and takes its size from `.sec-head h2` below. The
+ * element and the variant are different questions, which is what `component`
+ * is for — the eyebrow is a `<p>` for the same reason, or `.sec-head h2` would
+ * catch it and draw it at display size too.
+ */
+const SecHead = ({ eyebrow, title, lede }: { eyebrow: string; title: string; lede?: string }) => (
+    <Box className="sec-head reveal">
+        <Typography variant="h2" component="p" className="eyebrow">{eyebrow}</Typography>
+        <Typography component="h2" className="sec-title">{title}</Typography>
+        {lede ? <Typography className="lede">{lede}</Typography> : null}
+    </Box>
+);
 
-function renderMenuSlide(slide: MenuSlide, index: number): string {
-    return `<div class="rail-card reveal" style="--i:${index}">
-  <div class="phone">
-    <img src="/assets/screens/${slide.screen}.webp" alt="${slide.title} — the ${SITE_NAME} app"
-      width="780" height="1696" loading="lazy" decoding="async">
-  </div>
-  <h3>${slide.title}</h3>
-  <p>${slide.copy}</p>
-</div>`;
-}
+const PhoneShot = ({
+    screen,
+    alt,
+    eager,
+}: {
+    screen: string;
+    alt: string;
+    eager?: boolean;
+}) => (
+    <Box className="phone">
+        <img
+            src={`/assets/screens/${screen}.webp`}
+            alt={alt}
+            width="780"
+            height="1696"
+            {...(eager ? { fetchPriority: "high" as const } : { loading: "lazy" as const })}
+            decoding="async"
+        />
+    </Box>
+);
 
-function renderExtra(card: ExtraCard, index: number): string {
-    return `<div class="card reveal" style="background:${card.wash};--i:${index}">
-  <svg viewBox="0 0 24 24" aria-hidden="true" style="color:${card.ink}">${card.icon}</svg>
-  <h3 style="color:${card.ink}">${card.title}</h3>
-  <p>${card.copy}</p>
-</div>`;
-}
+const RailCard = ({
+    screen,
+    eyebrow,
+    title,
+    copy,
+    index,
+    eager,
+}: {
+    screen: string;
+    eyebrow?: string;
+    title: string;
+    copy: string;
+    index: number;
+    eager?: boolean;
+}) => (
+    <Box className="rail-card reveal" style={{ "--i": index } as React.CSSProperties}>
+        <PhoneShot screen={screen} alt={`${title} — the ${SITE_NAME} app`} eager={eager} />
+        {eyebrow ? <Typography variant="h2" component="p" className="eyebrow">{eyebrow}</Typography> : null}
+        <Typography component="h3">{title}</Typography>
+        <Typography>{copy}</Typography>
+    </Box>
+);
 
-const BODY = `
-<main>
-  <section class="hero">
-    <span class="wash sage" aria-hidden="true"></span>
-    <span class="wash peach" aria-hidden="true"></span>
-    <div class="container">
-      <div class="hero-copy">
-        <h1>
-          <span class="rise rise-1" style="display:block">Cook something</span>
-          <span class="cycle rise rise-2" aria-label="${WORDS.join(" ")}">
-            ${WORDS.map((word) => `<span>${word}</span>`).join("\n            ")}
-          </span>
-        </h1>
-        <p class="sub rise rise-3">Tell Fridgeezy what's in your fridge. It finds tonight's
-        dinner, writes the recipe, and cooks it with you — one step at a time.</p>
-        <div class="cta-row rise rise-4">
-          ${renderGet()}
-          <a class="ghost" href="#tour">See how it works</a>
-        </div>
-      </div>
-      <div class="hero-art rise rise-5">
-        <div class="phone">
-          <img src="/assets/screens/home.webp" alt="The ${SITE_NAME} home screen"
-            width="780" height="1696" fetchpriority="high" decoding="async">
-        </div>
-      </div>
-    </div>
-  </section>
+const exampleTimeline = buildTimeline(EXAMPLE_RECIPE.steps);
 
-  <section class="sec" id="tour">
-    <div class="container">
-      <div class="sec-head reveal">
-        <p class="eyebrow">How it works</p>
-        <h2>Fridge to plate, in five steps</h2>
-        <p class="lede">No meal-kit box, no ten-paragraph story about somebody's
-        grandmother. Just the food you already own, turned into dinner.</p>
-      </div>
-      <div class="rail tour-rail">
-        ${TOUR.map(renderTourStep).join("\n        ")}
-      </div>
-    </div>
-  </section>
+const Landing = () => (
+    <Box component="main">
+        <Box component="section" className="hero">
+            <Box component="span" className="wash sage" aria-hidden="true" />
+            <Box component="span" className="wash peach" aria-hidden="true" />
+            <Container maxWidth="lg" disableGutters className="container" sx={CONTAINER_SX}>
+                <Box>
+                    <Typography variant="h1">
+                        <Box component="span" className="rise rise-1" sx={{ display: "block" }}>
+                            Cook something
+                        </Box>
+                        <Box component="span" className="cycle rise rise-2" aria-label={WORDS.join(" ")}>
+                            {WORDS.map((word) => (
+                                <span key={word}>{word}</span>
+                            ))}
+                        </Box>
+                    </Typography>
+                    <Typography className="sub rise rise-3">
+                        Tell Fridgeezy what&apos;s in your fridge. It finds tonight&apos;s dinner,
+                        writes the recipe, and cooks it with you — one step at a time.
+                    </Typography>
+                    <Box className="cta-row rise rise-4">
+                        <Get />
+                        <Link href="#tour" underline="none" className="ghost">
+                            See how it works
+                        </Link>
+                    </Box>
+                </Box>
+                <Box className="hero-art rise rise-5">
+                    <PhoneShot screen="home" alt={`The ${SITE_NAME} home screen`} eager />
+                </Box>
+            </Container>
+        </Box>
 
-  <section class="menus">
-    <div class="container">
-      <div class="sec-head reveal">
-        <p class="eyebrow">The part nobody else does</p>
-        <h2>One dish. A whole menu.</h2>
-        <p class="lede">Pick the main you want and Fridgeezy builds the evening
-        around it — a starter, a side, something sweet — then puts every course
-        on one clock so they land together.</p>
-      </div>
-      <div class="rail menu-rail">
-        ${MENU_SLIDES.map(renderMenuSlide).join("\n        ")}
-      </div>
-      <p class="foot reveal">And one shopping list for all of it, merged across
-      the courses and sorted by aisle.</p>
-    </div>
-  </section>
+        <Box component="section" className="sec" id="tour">
+            <Container maxWidth="lg" disableGutters className="container" sx={CONTAINER_SX}>
+                <SecHead
+                    eyebrow="How it works"
+                    title="Fridge to plate, in five steps"
+                    lede="No meal-kit box, no ten-paragraph story about somebody's grandmother. Just the food you already own, turned into dinner."
+                />
+                <Box className="rail tour-rail">
+                    {TOUR.map((step, index) => (
+                        <RailCard key={step.screen} {...step} index={index} eager={index < 2} />
+                    ))}
+                </Box>
+            </Container>
+        </Box>
 
-  <section class="sec extras">
-    <div class="container">
-      <div class="sec-head reveal">
-        <p class="eyebrow">And when you need it</p>
-        <h2>Little helpers, on hand</h2>
-      </div>
-      <div class="grid">
-        ${EXTRAS.map(renderExtra).join("\n        ")}
-      </div>
-    </div>
-  </section>
+        {/* The example recipe gets a SECTION, not a link.
+            It had been a "Read a real one" line inside the third rail card,
+            which is the wrong weight twice over: it was the only card that
+            linked out, so it read as an afterthought on a card people swipe
+            past — and what it points at is the one page on this site that
+            PROVES something rather than claiming it. A page that exists to say
+            "a recipe, not an essay" has to put the recipe where it can be seen.
+            */}
+        <Box component="section" className="sec proof">
+            <Container maxWidth="lg" disableGutters className="container" sx={CONTAINER_SX}>
+                <SecHead
+                    eyebrow="Don't take our word for it"
+                    title="Here is a whole one"
+                    lede="Every dish is written out like this — the amounts for your table, the nutrition per serving, and every step timed. Read it before you install anything."
+                />
+                <Paper elevation={1} className="proof-card reveal">
+                    <img
+                        src={EXAMPLE_RECIPE.image}
+                        alt={EXAMPLE_RECIPE.name}
+                        width="896"
+                        height="1200"
+                        loading="lazy"
+                        decoding="async"
+                    />
+                    <div className="proof-body">
+                        <Typography variant="h2" component="p">
+                            {EXAMPLE_RECIPE.cuisine} ·{" "}
+                            {EXAMPLE_RECIPE.tags.find((tag) => tag.type === "course")?.name}
+                        </Typography>
+                        <Typography component="h3" className="proof-title">
+                            {EXAMPLE_RECIPE.name}
+                        </Typography>
+                        <Typography className="proof-copy">
+                            {EXAMPLE_RECIPE.shortDescription} — {EXAMPLE_RECIPE.steps.length} steps,
+                            {" "}
+                            {EXAMPLE_RECIPE.ingredients.length} ingredients, each one painted.
+                        </Typography>
 
-  <section class="closing">
-    <div class="container">
-      <div class="band reveal">
-        <p class="line">Cook something delicious, tonight.</p>
-        <div class="cta-row">
-          ${renderGet()}
-          <span class="get-note">${APPLE_GLYPH}${
-              APP_STORE_URL
-                  ? "Free to browse. iPhone, iOS 16 and up."
-                  : `${SITE_NAME} is coming to the App Store.`
-          }</span>
-        </div>
-        <p class="fine">Questions? <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
-      </div>
-    </div>
-  </section>
-</main>
-`;
+                        {/* The three figures, because they are the thing no other
+                            recipe site can tell you and the reason the page is
+                            worth opening: most of this dish is waiting. */}
+                        <div className="proof-spans">
+                            {(
+                                [
+                                    ["Start to finish", exampleTimeline.totalSeconds],
+                                    ["Hands on", exampleTimeline.activeSeconds],
+                                    ["Hands off", exampleTimeline.waitingSeconds],
+                                ] as const
+                            ).map(([label, seconds]) => (
+                                <div key={label}>
+                                    <b>{formatSpan(seconds)}</b>
+                                    <span>{label}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="proof-cta">
+                            <Button variant="contained" href={`/recipes/${EXAMPLE_RECIPE.slug}`}>
+                                Read the recipe
+                            </Button>
+                            <Link
+                                href={`/recipes/${EXAMPLE_RECIPE.slug}/cook`}
+                                underline="none"
+                                className="ghost"
+                            >
+                                Or the method, step by step
+                            </Link>
+                        </div>
+                    </div>
+                </Paper>
+            </Container>
+        </Box>
+
+        <Box component="section" className="menus">
+            <Container maxWidth="lg" disableGutters className="container" sx={CONTAINER_SX}>
+                <SecHead
+                    eyebrow="The part nobody else does"
+                    title="One dish. A whole menu."
+                    lede="Pick the main you want and Fridgeezy builds the evening around it — a starter, a side, something sweet — then puts every course on one clock so they land together."
+                />
+                <Box className="rail menu-rail">
+                    {MENU_SLIDES.map((slide, index) => (
+                        <RailCard key={slide.screen} {...slide} index={index} />
+                    ))}
+                </Box>
+                <Typography className="foot reveal">
+                    And one shopping list for all of it, merged across the courses and sorted by
+                    aisle.
+                </Typography>
+            </Container>
+        </Box>
+
+        <Box component="section" className="sec extras">
+            <Container maxWidth="lg" disableGutters className="container" sx={CONTAINER_SX}>
+                <SecHead eyebrow="And when you need it" title="Little helpers, on hand" />
+                <Box className="grid">
+                    {EXTRAS.map((card, index) => (
+                        <Paper
+                            key={card.title}
+                            elevation={0}
+                            className="card reveal"
+                            style={{ background: card.wash, "--i": index } as React.CSSProperties}
+                        >
+                            <Box
+                                component="svg"
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
+                                sx={{ color: card.ink }}
+                                dangerouslySetInnerHTML={{ __html: card.icon }}
+                            />
+                            <Typography component="h3" sx={{ color: card.ink }}>
+                                {card.title}
+                            </Typography>
+                            <Typography>{card.copy}</Typography>
+                        </Paper>
+                    ))}
+                </Box>
+            </Container>
+        </Box>
+
+        <Box component="section" className="closing">
+            <Container maxWidth="lg" disableGutters className="container" sx={CONTAINER_SX}>
+                <Paper className="band reveal" elevation={1}>
+                    <Typography className="line">Cook something delicious, tonight.</Typography>
+                    <Box className="cta-row">
+                        <Get />
+                        <Typography component="span" className="get-note">
+                            <AppleGlyph size={14} />
+                            {APP_STORE_URL
+                                ? "Free to browse. iPhone, iOS 16 and up."
+                                : `${SITE_NAME} is coming to the App Store.`}
+                        </Typography>
+                    </Box>
+                    <Typography className="fine">
+                        Questions? <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
+                    </Typography>
+                </Paper>
+            </Container>
+        </Box>
+    </Box>
+);
 
 export function renderLandingPage(origin?: string): string {
     return renderPage({
@@ -596,9 +793,8 @@ export function renderLandingPage(origin?: string): string {
         origin,
         path: "/",
         styles: STYLES,
-        head: `<link rel="preload" href="/assets/fonts/lora-600-italic.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="/assets/screens/home.webp" as="image" type="image/webp">`,
-        body: BODY,
+        head: `<link rel="preload" href="/assets/screens/home.webp" as="image" type="image/webp">`,
         script: SCRIPT,
+        children: <Landing />,
     });
 }

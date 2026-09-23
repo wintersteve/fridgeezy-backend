@@ -1,19 +1,17 @@
 import type { AdminSuggestionRow, Page } from "@fridgeezy/admin-contract";
-import Button from "@mui/material/Button";
+import { TOKENS } from "@fridgeezy/design";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TableCell from "@mui/material/TableCell";
-import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import { useToast } from "../components/toast";
 import {
-    ConfirmDelete,
     DataTable,
     FilterBar,
     FilterSelect,
+    LinkRow,
+    PageHead,
     Pager,
     Pill,
     ResourceState,
@@ -24,7 +22,6 @@ import { api, queryString } from "../lib/api";
 import { formatDate, formatMinutes } from "../lib/format";
 import { useListParams } from "../lib/use-list-params";
 import { useDebounced, useResource } from "../lib/use-resource";
-import { TOKENS } from "../theme";
 
 const PAGE_SIZE = 50;
 
@@ -48,10 +45,6 @@ export function SuggestionsPage() {
         sort: "createdAt",
         dir: "desc",
     });
-    const toast = useToast();
-    const [pending, setPending] = useState<AdminSuggestionRow>();
-    const [typed, setTyped] = useState("");
-    const [busy, setBusy] = useState(false);
 
     const query = get("query");
     const visibility = get("visibility", "visible");
@@ -75,40 +68,14 @@ export function SuggestionsPage() {
         [debouncedQuery, visibility, promoted, sort, dir, offset]
     );
 
-    const toggleHidden = async (row: AdminSuggestionRow) => {
-        try {
-            await api.post(`/suggestions/${row.id}/hidden`, { hidden: !row.hiddenAt });
-            suggestions.reload();
-            toast.show("ok", row.hiddenAt ? `${row.name} is visible again.` : `${row.name} is hidden.`);
-        } catch (cause) {
-            toast.show("error", (cause as Error).message);
-        }
-    };
 
-    const remove = async () => {
-        if (!pending) return;
-
-        setBusy(true);
-
-        try {
-            await api.delete(`/suggestions/${pending.id}`);
-            setPending(undefined);
-            suggestions.reload();
-            toast.show("ok", `${pending.name} deleted.`);
-        } catch (cause) {
-            toast.show("error", (cause as Error).message);
-        } finally {
-            setBusy(false);
-        }
-    };
 
     return (
         <>
-            <Typography variant="h1">Suggestions</Typography>
-            <Typography variant="body2" className="page-lede">
-                Dish ideas the generator has written. These have no method until somebody
-                promotes one — until then they are a name, a gloss and an ingredient list.
-            </Typography>
+            <PageHead
+                title="Suggestions"
+                lede="Dish ideas the generator has written. These have no method until somebody promotes one — until then they are a name, a gloss and an ingredient list."
+            />
 
             <FilterBar count={suggestions.data ? `${suggestions.data.total} matching` : null}>
                 <SearchField
@@ -161,14 +128,15 @@ export function SuggestionsPage() {
                                     first="desc"
                                     onSort={setSort}
                                 />
-                                <TableCell align="right">Actions</TableCell>
                             </>
                         }
                     >
                         {suggestions.data?.rows.map((row) => (
-                            <TableRow key={row.id}>
+                            <LinkRow key={row.id} to={`/suggestions/${row.id}`}>
                                 <TableCell>
-                                    <div className="dish">{row.name}</div>
+                                    <Link to={`/suggestions/${row.id}`} className="dish">
+                                        {row.name}
+                                    </Link>
                                     {row.description ? (
                                         <Typography
                                             variant="caption"
@@ -204,29 +172,7 @@ export function SuggestionsPage() {
                                 <TableCell sx={{ color: TOKENS.inkMuted, whiteSpace: "nowrap" }}>
                                     {formatDate(row.createdAt)}
                                 </TableCell>
-                                <TableCell align="right">
-                                    <Stack direction="row" spacing={2} justifyContent="flex-end">
-                                        <Button
-                                            size="small"
-                                            variant="outlined"
-                                            onClick={() => void toggleHidden(row)}
-                                        >
-                                            {row.hiddenAt ? "Restore" : "Hide"}
-                                        </Button>
-                                        <Button
-                                            size="small"
-                                            variant="outlined"
-                                            color="error"
-                                            onClick={() => {
-                                                setTyped("");
-                                                setPending(row);
-                                            }}
-                                        >
-                                            Delete
-                                        </Button>
-                                    </Stack>
-                                </TableCell>
-                            </TableRow>
+                            </LinkRow>
                         ))}
                     </DataTable>
                     <Pager
@@ -238,22 +184,6 @@ export function SuggestionsPage() {
                 </ResourceState>
             </Paper>
 
-            {pending ? (
-                <ConfirmDelete
-                    what="idea"
-                    name={pending.name}
-                    typed={typed}
-                    onTyped={setTyped}
-                    busy={busy}
-                    warning={
-                        pending.promotedRecipeId
-                            ? "The recipe promoted from it is not affected and stays in the catalogue."
-                            : "Nothing else references it — no reader can have saved an idea."
-                    }
-                    onCancel={() => setPending(undefined)}
-                    onConfirm={() => void remove()}
-                />
-            ) : null}
         </>
     );
 }

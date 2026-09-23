@@ -1,20 +1,16 @@
-import type { AdminTagRow, AdminTagUpdate, Page } from "@fridgeezy/admin-contract";
-import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import MenuItem from "@mui/material/MenuItem";
+import type { AdminTagRow, Page } from "@fridgeezy/admin-contract";
+import { TOKENS } from "@fridgeezy/design";
 import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
 import TableCell from "@mui/material/TableCell";
-import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import { Link } from "react-router-dom";
 
-import { useToast } from "../components/toast";
 import {
     DataTable,
     FilterBar,
     FilterSelect,
+    LinkRow,
+    PageHead,
     Pager,
     Pill,
     ResourceState,
@@ -24,7 +20,6 @@ import {
 import { api, queryString } from "../lib/api";
 import { useListParams } from "../lib/use-list-params";
 import { useDebounced, useResource } from "../lib/use-resource";
-import { TOKENS } from "../theme";
 
 const PAGE_SIZE = 50;
 
@@ -52,8 +47,6 @@ export function TagsPage() {
         sort: "recipeCount",
         dir: "desc",
     });
-    const toast = useToast();
-    const [editing, setEditing] = useState<string>();
 
     const query = get("query");
     const type = get("type");
@@ -75,24 +68,13 @@ export function TagsPage() {
         [debouncedQuery, type, sort, dir, offset]
     );
 
-    const save = async (id: string, patch: AdminTagUpdate) => {
-        try {
-            await api.patch(`/tags/${id}`, patch);
-            setEditing(undefined);
-            tags.reload();
-            toast.show("ok", "Tag saved.");
-        } catch (cause) {
-            toast.show("error", (cause as Error).message);
-        }
-    };
 
     return (
         <>
-            <Typography variant="h1">Tags</Typography>
-            <Typography variant="body2" className="page-lede">
-                Cuisines, courses, dish forms and dietary marks. The count is how many
-                recipes carry each — a tag on one dish is usually a spelling to merge.
-            </Typography>
+            <PageHead
+                title="Tags"
+                lede="Cuisines, courses, dish forms and dietary marks. The count is how many recipes carry each — a tag on one dish is usually a spelling to merge."
+            />
 
             <FilterBar count={tags.data ? `${tags.data.total} tags` : null}>
                 <SearchField
@@ -137,22 +119,15 @@ export function TagsPage() {
                                     align="right"
                                     onSort={setSort}
                                 />
-                                <TableCell align="right">Actions</TableCell>
                             </>
                         }
                     >
-                        {tags.data?.rows.map((row) =>
-                            editing === row.id ? (
-                                <TagEditor
-                                    key={row.id}
-                                    row={row}
-                                    onCancel={() => setEditing(undefined)}
-                                    onSave={(patch) => void save(row.id, patch)}
-                                />
-                            ) : (
-                                <TableRow key={row.id}>
+                        {tags.data?.rows.map((row) => (
+                                <LinkRow key={row.id} to={`/tags/${row.id}`}>
                                     <TableCell>
-                                        <div className="cell-title">{row.name}</div>
+                                        <Link to={`/tags/${row.id}`} className="cell-title">
+                                            {row.name}
+                                        </Link>
                                         {row.aliases.length ? (
                                             <Typography
                                                 variant="caption"
@@ -175,18 +150,8 @@ export function TagsPage() {
                                     >
                                         {row.recipeCount}
                                     </TableCell>
-                                    <TableCell align="right">
-                                        <Button
-                                            size="small"
-                                            variant="outlined"
-                                            onClick={() => setEditing(row.id)}
-                                        >
-                                            Edit
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            )
-                        )}
+                                </LinkRow>
+                        ))}
                     </DataTable>
                     <Pager
                         total={tags.data?.total ?? 0}
@@ -206,61 +171,3 @@ const TYPE_OPTIONS = [
     ...TYPES.map((value) => ({ value, label: value })),
 ];
 
-function TagEditor({
-    row,
-    onCancel,
-    onSave,
-}: {
-    row: AdminTagRow;
-    onCancel: () => void;
-    onSave: (patch: AdminTagUpdate) => void;
-}) {
-    const [name, setName] = useState(row.name);
-    const [type, setType] = useState(row.type);
-
-    return (
-        <TableRow hover={false}>
-            <TableCell colSpan={5} sx={{ background: TOKENS.bgVariant }}>
-                <Stack direction="row" spacing={4} sx={{ mb: 4 }} flexWrap="wrap" useFlexGap>
-                    <TextField
-                        label="Name"
-                        value={name}
-                        onChange={(event) => setName(event.target.value)}
-                        helperText="Renaming changes the display name only. What the tag joins on is its canonical id, which is not editable — changing that is a merge."
-                        sx={{ flex: 1, minWidth: 260 }}
-                    />
-                    <TextField
-                        select
-                        label="Type"
-                        value={type}
-                        onChange={(event) => setType(event.target.value)}
-                        helperText={
-                            row.parentName && type !== row.type
-                                ? `This tag sits under ${row.parentName}. Changing its type leaves it under a parent of a different kind.`
-                                : " "
-                        }
-                        sx={{ minWidth: 200 }}
-                    >
-                        {TYPES.map((value) => (
-                            <MenuItem key={value} value={value}>
-                                {value}
-                            </MenuItem>
-                        ))}
-                    </TextField>
-                </Stack>
-                <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
-                    <Button size="small" variant="text" onClick={onCancel}>
-                        Cancel
-                    </Button>
-                    <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() => onSave({ name, type: type as AdminTagUpdate["type"] })}
-                    >
-                        Save
-                    </Button>
-                </Box>
-            </TableCell>
-        </TableRow>
-    );
-}

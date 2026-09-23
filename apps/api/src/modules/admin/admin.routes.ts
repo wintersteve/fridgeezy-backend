@@ -73,19 +73,32 @@ router.post("/techniques/art", free, AdminController.drawTechniqueArt);
 router.delete("/recipes/:id", free, AdminController.deleteRecipe);
 
 router.get("/suggestions", free, AdminController.listSuggestions);
+router.get("/suggestions/:id", free, AdminController.getSuggestion);
 router.post("/suggestions/:id/hidden", free, AdminController.setSuggestionHidden);
 router.delete("/suggestions/:id", free, AdminController.deleteSuggestion);
 
 // `/categories` before `/ingredients/:id` would be a collision if it lived
 // under that prefix; it does not, and is kept a sibling for that reason.
 router.get("/ingredients", free, AdminController.listIngredients);
+router.get("/ingredients/:id", free, AdminController.getIngredient);
 router.patch("/ingredients/:id", free, AdminController.updateIngredient);
 router.get("/categories", free, AdminController.listCategories);
 
 router.get("/tags", free, AdminController.listTags);
+router.get("/tags/:id", free, AdminController.getTag);
 router.patch("/tags/:id", free, AdminController.updateTag);
 
 router.get("/users", free, AdminController.listUsers);
+router.get("/users/:profileId", free, AdminController.getUser);
 router.patch("/users/:profileId", free, AdminController.updateUser);
+
+// Catalogue upkeep — the handful of jobs that come back as the catalogue is
+// used, against the fifty one-off scripts in `apps/database/operations` that do
+// not. ONE run route rather than five: every job has the same shape — take a
+// job and a size, do that much, report what was done and what is left — and
+// five routes would be five places for the clamp and the error accounting to
+// drift apart.
+router.get("/upkeep", free, AdminController.getUpkeep);
+router.post("/upkeep/run", free, AdminController.runUpkeep);
 
 export const AdminRoutes = router;

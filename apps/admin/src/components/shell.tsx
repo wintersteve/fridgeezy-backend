@@ -96,6 +96,15 @@ export function Shell({
                 <NavLink to="/operations/techniques" className="nav-link">
                     Technique art
                 </NavLink>
+                {/* Everything on Upkeep IS a defect, so by the rule above it
+                    has earned a badge — and it does not carry one, because the
+                    five counts behind it are ten queries and the overview would
+                    pay for them on every page of the console to decorate one
+                    sidebar row. The page is one click away and reports them all
+                    itself. Revisit if anybody starts missing them. */}
+                <NavLink to="/operations/upkeep" className="nav-link">
+                    Upkeep
+                </NavLink>
 
                 <div className="sidebar-foot">
                     <div className="who">{session.user.email}</div>

@@ -437,6 +437,66 @@ say which is which:
   `generate-types` (Supabase → `database.types.ts`) and `generate-entity-types`
   (that file → the `entities/` wrappers). Deterministic, no production effects.
 
+### Which operations come BACK, and which are done forever
+
+`operations/` holds about fifty scripts and the great majority are **one-offs**:
+a prompt bug is fixed and a backfill repairs the rows written before it, or an
+art direction moves and a set is re-rendered by hand. Every one of those has a
+header saying so — "the prompt is fixed, so new rows are fine; this is only for
+the rows written before that" — and a one-off is a script somebody runs once
+with that header open in front of them.
+
+**Five jobs are not one-offs**, and they are the ones whose outstanding work
+grows as the catalogue is used. Each is now a button on the console's **Upkeep**
+screen (`/operations/upkeep`), because each degrades SILENTLY: nothing raises,
+no page breaks, a reader just waits or a dish quietly stops being findable.
+
+| Job | What comes back | What it costs to skip |
+| --- | --- | --- |
+| `warm-dish-pairings` | Every new catalogue dish is cold | The first reader to compose around it waits at a spinner for the model |
+| `classify-ingredient-diet` | Ingredients the API failed to classify on the write path | Every recipe using one is EXCLUDED from every dietary filter |
+| `classify-ingredient-component` | The same, for make-or-buy | No "make it yourself" offer, and its dishes are generated rather than found |
+| `generate-embeddings` | Rows whose vector write failed | A dish stops deduping and is generated again, paid for again; a tag cannot be matched by spelling, so the vocabulary widens |
+| `repair-recipe-image-urls` | Rows pointing at an unreachable host | Every share preview of the dish is broken |
+
+**The embeddings one is the sharpest and the least obvious.** All four vectors
+are written on the write path, so a missing one is a write that FAILED —
+`persist-recipe.ts` says as much, that storing the signature is best-effort and
+"a failure leaves `fts` stale and the row can be re-embedded by the backfill".
+Nothing reports it. Measured on the local stack 2026-09-23: **240 of 240 tags
+and 25 of 25 units carried no embedding at all**, which disables step 2 of
+`matchTags` outright — the vector step that catches a spelling the aliases do
+not. **This has not been checked against production and should be.**
+
+**Two of them can quietly do nothing, and the console says so rather than
+offering a button that lies.** `repair-recipe-image-urls` reports zero on a
+local stack, because a private host is CORRECT there and rewriting every row
+would break them. And `backfill-shelf-life` is NOT on the list despite looking
+like a member: measured 2026-09-23, 569 of 569 ingredients have no
+`default_shelf_life_days` **and none of them has a `shelf_life` sentence to read
+one from** — so the op has nothing to work with, and the Overview's "No shelf
+life" tile points at work no script can do. The gap is upstream: nothing fills
+`shelf_life` for an ingredient the API creates, and only the curated seed ever
+carried one.
+
+**The eight `check-*` scripts are GUARDS, not upkeep**, and they do not belong
+on that screen. They assert a rule still holds — a visibility predicate, the
+canonical-id parity between SQL and TypeScript — by trying to break it, and the
+right trigger is a pull request rather than a curator's press. **There is no CI
+in this repo**, so today they run when somebody remembers. That is the gap worth
+closing next, and it is worth more than any button: `check-recipe-visibility`
+and `check-menu-visibility` each guard a silent LEAK.
+
+**Anything pure SQL that needs no judgement belongs in `pg_cron`, not on a
+button.** It is enabled and already runs one job (`prune_ai_usage_events`,
+daily, `20260918000006`). The outstanding candidate is
+`delete_orphan_generated_recipes`, defined and deliberately unscheduled since
+`20260801000015` — its own header says to schedule it once `is_generated`
+separates drafts from catalogue entries and image cleanup is handled. Neither is
+true yet, so it stays unscheduled, and `prune_viewed_recipe_interactions` now
+depends on that being decided (a pruned view stops protecting a generated
+recipe).
+
 Put a new script on the correct side — it is the difference between "safe to run
 any time" and "this writes to prod". These were `src/scripts/` and `tools/`,
 which carried none of that meaning and left the distinction living only in this
@@ -1466,6 +1526,161 @@ better-framed one. Three things bite:
   objects are served `no-cache` whatever the upload asks for, so devices
   revalidate; the LOCAL stack honours the year-long max-age, which is why art
   replaced there stays stale until the client's dev menu drops its image cache.
+
+#### Every entity has a DETAIL PAGE, and the inline editors are gone
+
+Owner's call, 2026-09-23, reversing a recorded decision. Ingredients and tags
+edited in place — a row expanded into its own form and collapsed again — and the
+argument for that is still worth reading: an ingredient has four editable fields
+and no children, so a route each way to change one number is ceremony on the
+screen most likely to be used for a long pass of small corrections.
+
+**What it missed is that the question is almost never "change this number".** It
+is "is this the row everything joins on, or the duplicate?" — and the answer is
+the twenty dishes using the ingredient, which no table cell has room for. So a
+detail page is not a bigger form; it is the form plus the one list that makes
+the form answerable. Each page carries exactly that:
+
+| Page | What earns it, beyond the fields |
+| --- | --- |
+| Ingredient | The dishes using it, and whether it has a vector at all |
+| Tag | The recipes carrying it, and the children a type change would drag along |
+| Suggestion | The ingredient list — where a bad idea is visibly bad |
+| User | What the server believes about the subscription, and library COUNTS |
+
+- **`DetailLayout` owns the gap BETWEEN the sections, and no card carries a
+  margin of its own.** The two columns are `Stack spacing={4}`, which is the 16
+  that `.detail`'s own column gap already uses — so the distance between two
+  cards is the same number whether they are stacked or side by side, and it is
+  written once. It was `sx={{ mt: 4 }}` on every card after the first: the same
+  number twelve times across four pages, and **missed entirely on the fifth**,
+  which is how the recipe page came to draw eight sections with nothing between
+  them. A per-card margin also cannot be right at the top of a column, so every
+  one of those call sites had to know whether it was first — which is exactly
+  the thing a parent can see and a child cannot.
+- **The cost the old note named is real and is now paid**: a long correction
+  pass costs two navigations per row. If that bites, the answer is a keyboard
+  path through the list, not the inline editor coming back.
+- **Every context list is CAPPED at 20 and reports the true total.** `Salt` is
+  in 121 recipes; returning all of them to draw a sidebar would make the
+  cheapest page in the console the heaviest read in it.
+- **Destructive controls moved OFF the rows.** Hide and delete were on every one
+  of 189 suggestion rows; granting console access was a button on every user
+  row. Neither decision should be made without the page that explains it, and a
+  destructive control repeated down a table is a mis-tap waiting to happen.
+- **The ROW is the target, and there is no Open button** (owner's call,
+  2026-09-23). An `Open` action was a second control for the thing the row
+  already meant — and the app's own idiom is that a row press opens what the row
+  is about. `LinkRow` makes the whole row navigate, and the name STAYS an `<a>`:
+  a clickable `<tr>` is not focusable, is not announced as a link and cannot be
+  cmd-clicked into a new tab, so the anchor carries the semantics and the row
+  carries the hit target. A click that started on a control inside the row is
+  left alone, or the link would navigate and the row would navigate again.
+- **The step-art browser's row is NOT a `LinkRow`.** It does not navigate: it
+  opens the method BELOW the list, which is the whole shape of that screen —
+  working through several dishes is scrolling rather than going back and forth.
+  A dish with no method takes no press and says so with the cursor; the
+  catalogue has no such dish today, so that branch is written and unexercised.
+- **The user page is COUNTS, never contents.** Every figure is a `head: true`
+  count, so the rows are not fetched and there is nothing to leak even by
+  accident. "41 saved recipes" answers whether an account is used; the list of
+  them answers a question nobody asked.
+- **`AdminSuggestionDetail` has no `servings` and its ingredients no amounts**,
+  because `recipe_suggestions` has neither column. That is the same fact as
+  having no method: the yield and the quantities are decided at promotion.
+
+**The ingredient page found a live defect the inline editor had.**
+`ingredients_shelf_life_check` (`20260801000005`) makes expiry and shelf life
+ONE decision — `expires_by_default = false` requires a null shelf life, `true`
+requires a positive one — and the inline editor drew the days field with no
+switch at all. Setting a shelf life on anything that does not expire was a
+**500 from the database**, every time, with the form still full of the reader's
+typing. The page has a switch that carries both fields together, and `SaveBar`
+grew a `blocked` reason so the refusal is stated where the press is rather than
+discovered by making it.
+
+#### Every filter is a DROPDOWN; there are no checkboxes
+
+Owner's call, 2026-09-23. The filter bars mixed two control vocabularies — a
+search field, some selects, and a checkbox or two on the end — so a bar that
+asks four questions looked like it asked two and then said something else. Every
+filter is a labelled `TextField select` now, each with its own "Any …" default,
+and `CheckFilter` is deleted rather than left as surface nothing passes.
+
+- **A flag filter gets TWO options and no third.** "Any illustration" / "No
+  illustration". The API's `FlagSchema` has two states — off, or select the rows
+  that want work — so an "only dishes that DO have art" option would be a filter
+  the server cannot answer and nobody has asked for.
+- **The one form toggle went with them.** The ingredient page's expiry control
+  was a `Switch` labelled "Expires", which left its OFF state unlabelled — on
+  the one field pair the database refuses in the wrong combination, which is the
+  worst place for silence. It is a "Keeps" select now and both answers are
+  written out: "Keeps indefinitely" / "Expires".
+
+#### A CSS class cannot set a margin on a MUI component here
+
+Found 2026-09-23, and it is the general rule rather than one page's bug. Every
+page title used `<Typography className="page-lede">` for the line under it, and
+`.page-lede` carried `margin: 4px 0 20px`. None of it applied:
+`.MuiTypography-root` sets `margin: 0`, the two selectors have the SAME
+specificity (0,1,0), so the winner is source order — and emotion injects its
+styles at runtime, after the stylesheet. Measured on the recipes page: computed
+`marginTop: 0px`, `marginBottom: 0px`, and a gap of exactly **0** between the
+description and the filter bar. The Overview looked right only because it had
+never been converted and still drew a bare `<p>`.
+
+Nothing errors, nothing warns, and the class is right there in the markup — so
+it reads as a stylesheet that is being ignored for no reason.
+
+- **The spacing lives in `sx` now**, in the same layer as the defaults it has
+  to beat, inside one `PageHead` component every page calls. All nine routes
+  measure 8px title-to-lede and 20px head-to-content — the second is what
+  Overview had by accident, the first was 4 and was raised on the owner's
+  call.
+- **`PageHead` takes `dish`** for the two pages whose title is a recipe NAME
+  (the detail page and the step-art browser): the serif at 30px over a row of
+  state pills, which sit closer than prose because they read as part of the
+  title rather than as a sentence about it.
+- **`h1` is gone from the stylesheet with them.** No bare `<h1>` is left, so the
+  only one in the document carries `.MuiTypography-h1` and is set from the
+  theme; an element selector could never have won. `h2` and `h3` ARE still bare
+  elements (a card's section label, the Overview's block headings) and keep
+  their rules.
+
+#### Upkeep — the five jobs that come back
+
+`/operations/upkeep`, added 2026-09-23. One screen rather than five, because
+each job is a handful of rows most weeks and zero on a good one — five screens
+would be five places to go and find nothing. The full classification of what
+earned a place, and what did not, is under "Which operations come BACK" above.
+
+- **The counts are drawn even at zero.** A job that vanished when it was done
+  would make an empty screen indistinguishable from a broken one, and confirming
+  there is nothing to do is the usual reason to open the page.
+- **Every button is priced before it is pressed**, and names what it would touch
+  — six dish names, or "137 in tags". A count cannot be sanity-checked and six
+  names can, which is the last moment before the money goes.
+- **The sidebar row carries NO badge**, although by the rail's own rule
+  (a badge reports a DEFECT, and all five of these are defects) it has earned
+  one. The five counts are ten queries and the overview would pay for them on
+  every page of the console to decorate one row. Revisit if anybody misses them.
+- **`generateDishPairings` GENERATES and writes nothing** — `recordDishPairings`
+  is the second call, and the route has always made both. Calling only the first
+  spends a model call and throws the answer away: a warm run that reports success
+  and leaves every dish exactly as cold as it found it. That is precisely the
+  bug this screen was written to make visible, and it was caught during the build
+  by the outstanding count failing to move.
+- **The embeddings job fills `tags` and `units` only.** `recipes` and
+  `recipe_suggestions` embed a dish SIGNATURE, and rebuilding that text here
+  would be a second copy of what `persist-recipe` and `persist-suggestion`
+  construct — the drift `buildSuggestionSignature` was extracted to prevent.
+  Those two are COUNTED so the gap is visible and left to
+  `nx run @fridgeezy/database:embed-recipes`, which imports the real builder.
+- **The classifiers report by RE-READING, not by trusting the call.** Neither
+  throws and neither reports, by design: an unclassified ingredient is the SAFE
+  state, so a failure must not fail the request that created it. The difference
+  in the outstanding count is the only honest number, and it is how a model that
+  quietly skipped a row shows up.
 
 #### Things that will bite
 

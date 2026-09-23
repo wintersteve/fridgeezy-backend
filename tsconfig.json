@@ -53,6 +53,9 @@
         },
         {
             "path": "./apps/admin"
+        },
+        {
+            "path": "./libs/design"
         }
     ]
 }

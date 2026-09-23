@@ -48,3 +48,28 @@ export const AdminUserUpdateSchema = z.object({
 });
 
 export type AdminUserUpdate = z.infer<typeof AdminUserUpdateSchema>;
+
+/**
+ * One account, and nothing the console has no business showing.
+ *
+ * The row's rule holds harder on a page: what a person cooks, saves and plans
+ * is THEIRS. So this adds only what the tool itself is responsible for — the
+ * access flag, what the server believes about their subscription, and what
+ * they have spent — plus the counts that answer a support question without
+ * reading anybody's dinner.
+ *
+ * **The counts are counts, never contents.** "41 saved recipes" answers "is
+ * this account actually used"; the list of them answers a question nobody
+ * asked and the reader did not consent to.
+ */
+export interface AdminUserDetail extends AdminUserRow {
+    /** AI calls by bucket over the same 30 days, and the total. */
+    usageTotal: number;
+    library: {
+        favourites: number;
+        collections: number;
+        shoppingLists: number;
+        menus: number;
+        importedRecipes: number;
+    };
+}

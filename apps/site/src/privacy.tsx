@@ -1,4 +1,5 @@
-import { PROSE_CSS, renderPage, SITE_NAME, SUPPORT_EMAIL } from "./chrome";
+import { renderPage, SITE_NAME, SUPPORT_EMAIL } from "./chrome";
+import { Prose } from "./prose";
 
 /**
  * Privacy policy.
@@ -16,7 +17,6 @@ import { PROSE_CSS, renderPage, SITE_NAME, SUPPORT_EMAIL } from "./chrome";
  */
 
 const BODY = `
-<main class="prose">
   <h1>Privacy Policy</h1>
   <p class="updated">Last updated: 9 August 2026</p>
 
@@ -117,7 +117,6 @@ const BODY = `
   <h2>13. Contact</h2>
   <p>Questions, concerns, requests:
   <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>.</p>
-</main>
 `;
 
 export function renderPrivacyPage(origin?: string): string {
@@ -126,7 +125,6 @@ export function renderPrivacyPage(origin?: string): string {
         description: `What ${SITE_NAME} collects, why, and the choices you have.`,
         origin,
         path: "/privacy",
-        styles: PROSE_CSS,
-        body: BODY,
+        children: <Prose html={BODY} />,
     });
 }

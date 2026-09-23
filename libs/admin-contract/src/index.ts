@@ -6,4 +6,5 @@ export * from "./lib/step-art";
 export * from "./lib/suggestions";
 export * from "./lib/tags";
 export * from "./lib/techniques";
+export * from "./lib/upkeep";
 export * from "./lib/users";

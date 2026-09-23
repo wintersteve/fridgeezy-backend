@@ -1,9 +1,6 @@
 import { z } from "zod/v4";
 
-import {
-    clampToDetailLength,
-    clampToTitleLength,
-} from "../text/clamp-description";
+import { clampToTitleLength } from "../text/clamp-description";
 
 /**
  * Shared Zod schemas for recipe generation and manipulation.
@@ -13,7 +10,18 @@ import {
 // Schema for header section
 export const HeaderSchema = z.object({
     type: z.literal("header"),
-    description: z.string().transform(clampToDetailLength),
+    /**
+     * The recipe screen's own sentence, taken WHOLE.
+     *
+     * It was clamped to `DETAIL_DESCRIPTION_MAX` at a sentence boundary, or at
+     * a word boundary with an ellipsis where there was no sentence to end on —
+     * and the second case is what shipped: two catalogue recipes are stored
+     * reading "…served with a…". The screen draws this with no
+     * `numberOfLines` and a whole page to wrap into, so the clamp was
+     * shortening prose nothing was too small to hold. The length lives in the
+     * prompt now; see `clamp-description.ts` before putting one back.
+     */
+    description: z.string().trim(),
     // One-sentence version for recipe cards. Optional: the client falls back to
     // `description`.
     shortDescription: z.string().trim().optional(),

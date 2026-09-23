@@ -1,4 +1,5 @@
-import { PROSE_CSS, renderPage, SITE_NAME, SUPPORT_EMAIL } from "./chrome";
+import { renderPage, SITE_NAME, SUPPORT_EMAIL } from "./chrome";
+import { Prose } from "./prose";
 
 /**
  * Terms of use.
@@ -16,7 +17,6 @@ const APPLE_EULA =
     "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/";
 
 const BODY = `
-<main class="prose">
   <h1>Terms of Use</h1>
   <p class="updated">Last updated: 9 August 2026</p>
 
@@ -86,7 +86,6 @@ const BODY = `
 
   <h2>10. Contact</h2>
   <p><a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
-</main>
 `;
 
 export function renderTermsPage(origin?: string): string {
@@ -95,7 +94,6 @@ export function renderTermsPage(origin?: string): string {
         description: `The terms for using ${SITE_NAME}, including the AI cooking safety disclaimer.`,
         origin,
         path: "/terms",
-        styles: PROSE_CSS,
-        body: BODY,
+        children: <Prose html={BODY} />,
     });
 }

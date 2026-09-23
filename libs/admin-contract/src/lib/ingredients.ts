@@ -1,8 +1,16 @@
 import { z } from "zod/v4";
 
+import type { AdminDishRef } from "./common";
 import { FlagSchema, PageRequestSchema, SortDirectionSchema } from "./common";
 
 export const COMPONENT_KINDS = ["dish", "prep", "bought"] as const;
+
+/**
+ * Narrowed rather than `string`, and it earns that the same way `Difficulty`
+ * does: the database column IS this enum, and a row typed as a loose string
+ * makes every edit site cast on the way back into `AdminIngredientUpdate`.
+ */
+export type ComponentKind = (typeof COMPONENT_KINDS)[number];
 
 export const AdminIngredientFilterSchema = PageRequestSchema.extend({
     query: z.string().trim().max(200).optional(),
@@ -29,7 +37,7 @@ export interface AdminIngredientRow {
     useCount: number;
     defaultShelfLifeDays: number | null;
     expiresByDefault: boolean | null;
-    componentKind: string | null;
+    componentKind: ComponentKind | null;
     componentDish: string | null;
     aliases: string[];
 }
@@ -54,6 +62,28 @@ export const AdminIngredientUpdateSchema = z
     .partial();
 
 export type AdminIngredientUpdate = z.infer<typeof AdminIngredientUpdateSchema>;
+
+/**
+ * One ingredient, with the things a ROW cannot hold.
+ *
+ * The editable fields are the row's, unchanged — what earns this a page of its
+ * own is the rest: every alias in full rather than the first three, and the
+ * dishes that actually use it. That last list is the answer to the question a
+ * curator is really asking when they open an ingredient ("is this the row
+ * everything joins on, or the duplicate?"), and it is the one thing a table
+ * cell has no room for.
+ */
+export interface AdminIngredientDetail extends AdminIngredientRow {
+    description: string | null;
+    shelfLife: string | null;
+    storageTips: string | null;
+    /** Vector present, so the resolver can reach this row by similarity. */
+    hasEmbedding: boolean;
+    dietaryProperties: string[] | null;
+    /** Recipes holding it, newest first, capped — see the usecase. */
+    usedIn: AdminDishRef[];
+    usedInTotal: number;
+}
 
 export interface AdminCategory {
     id: string;

@@ -11,6 +11,9 @@
     "exclude": ["eslint.config.mjs"],
     "references": [
         {
+            "path": "../../libs/design/tsconfig.lib.json"
+        },
+        {
             "path": "../../libs/admin-contract/tsconfig.lib.json"
         }
     ]

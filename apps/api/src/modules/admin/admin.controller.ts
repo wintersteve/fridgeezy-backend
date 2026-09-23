@@ -5,19 +5,25 @@ import {
     deleteSuggestion,
     drawStepArt,
     drawTechniqueArt,
+    getIngredient,
     getOverview,
     getRecipe,
     getStepArt,
+    getSuggestion,
+    getTag,
+    getUpkeep,
+    getUser,
     listCategories,
     listIngredients,
     listRecipes,
     listStepArtRecipes,
-    listTechniques,
     listSuggestions,
     listTags,
+    listTechniques,
     listUsers,
     regenerateImage,
     replaceRecipeSteps,
+    runUpkeep,
     setRecipeHidden,
     setSuggestionHidden,
     updateIngredient,
@@ -56,6 +62,15 @@ export class AdminController {
 
     static listTechniques = handle(listTechniques);
     static drawTechniqueArt = handle(drawTechniqueArt);
+    // One per entity, each returning the row plus the context a table cell
+    // cannot hold — see `get-entity.ts` for why the inline editors were not
+    // enough.
+    static getIngredient = handle(getIngredient);
+    static getTag = handle(getTag);
+    static getSuggestion = handle(getSuggestion);
+    static getUser = handle(getUser);
+    static getUpkeep = handle(getUpkeep);
+    static runUpkeep = handle(runUpkeep);
     static deleteRecipe = handle(deleteRecipe);
 
     static listSuggestions = handle(listSuggestions);

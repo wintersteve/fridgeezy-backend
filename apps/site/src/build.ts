@@ -1,10 +1,13 @@
 import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { renderCookPage } from "./cook";
+import { EXAMPLE_RECIPE } from "./example-recipe";
 import { renderFeatureRequestPage } from "./feature-request";
 import { renderLandingPage } from "./landing";
 import { renderNotFoundPage } from "./not-found";
 import { renderPrivacyPage } from "./privacy";
+import { renderRecipePage } from "./recipe";
 import { renderSupportPage } from "./support";
 import { renderTermsPage } from "./terms";
 import { appleAppSiteAssociation, assetLinks } from "./well-known";
@@ -43,6 +46,17 @@ const PAGES: Array<{ file: string; html: string }> = [
     },
     { file: "privacy/index.html", html: renderPrivacyPage(origin) },
     { file: "terms/index.html", html: renderTermsPage(origin) },
+    // One real recipe, so the landing page's "a recipe, not an essay" can be
+    // checked rather than taken on faith. Its own file explains why it is a
+    // committed fixture and what a page PER recipe would additionally cost.
+    {
+        file: `recipes/${EXAMPLE_RECIPE.slug}/index.html`,
+        html: renderRecipePage(EXAMPLE_RECIPE, origin),
+    },
+    {
+        file: `recipes/${EXAMPLE_RECIPE.slug}/cook/index.html`,
+        html: renderCookPage(EXAMPLE_RECIPE, origin),
+    },
     { file: "404.html", html: renderNotFoundPage(origin) },
 ];
 

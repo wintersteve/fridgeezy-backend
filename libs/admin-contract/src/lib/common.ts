@@ -112,3 +112,17 @@ export interface ImageBillingPath {
     project: string | null;
     location: string | null;
 }
+
+/**
+ * A dish, named and linkable, as a detail page refers to one.
+ *
+ * Deliberately not `AdminRecipeRow`: these lists are CONTEXT — which recipes
+ * use this ingredient, which carry this tag — and a page that embedded the full
+ * card row for each would fetch every column and every child of forty recipes
+ * to print forty names. A name and an id is what a link needs.
+ */
+export interface AdminDishRef {
+    id: string;
+    name: string;
+    hiddenAt: string | null;
+}

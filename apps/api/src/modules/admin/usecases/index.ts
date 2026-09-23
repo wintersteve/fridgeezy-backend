@@ -1,4 +1,5 @@
 export * from "./delete-recipe";
+export * from "./get-entity";
 export * from "./get-recipe";
 export * from "./list-ingredients";
 export * from "./list-recipes";
@@ -11,3 +12,4 @@ export * from "./set-recipe-hidden";
 export * from "./step-art";
 export * from "./techniques";
 export * from "./update-recipe";
+export * from "./upkeep";

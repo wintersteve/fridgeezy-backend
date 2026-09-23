@@ -1,4 +1,5 @@
-import { PROSE_CSS, renderPage, SITE_NAME, SUPPORT_EMAIL } from "./chrome";
+import { renderPage, SITE_NAME, SUPPORT_EMAIL } from "./chrome";
+import { Prose } from "./prose";
 
 /**
  * The page the app's "Feature request" settings row opens.
@@ -61,28 +62,29 @@ const MAIL_LINK = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
 )}&body=${encodeURIComponent(MAIL_BODY)}`;
 
 /**
- * One extra rule beyond `PROSE_CSS`: the button. The prose pages have never
+ * One extra rule beyond the shared prose styling: the button. The prose pages
+ * have never
  * needed one — support and the legal pages are read, not acted on — so rather
  * than widen the shared stylesheet for a single element, the page brings it.
- * `.btn` from `BASE_CSS` is the landing page's primary call to action and is
- * too loud for a reading column, so this is the quieter surface variant.
+ * A MUI contained Button is the landing page's primary call to action and is
+ * too loud for a reading column, so this is the quieter surface variant. It
+ * stays CSS because it lives inside the page's authored markup — see
+ * `prose.tsx` for why those bodies are still strings.
  */
 const STYLES = `
-${PROSE_CSS}
-.prose .btn-mail{
+.btn-mail{
   display:inline-block;margin:4px 0 2px;padding:12px 22px;
   border-radius:var(--r-pill);background:var(--primary);color:var(--on-primary);
   font-weight:600;font-size:15px;letter-spacing:.1px;text-decoration:none;
   box-shadow:var(--shadow-raised);
   transition:transform .15s ease,box-shadow .15s ease;
 }
-.prose .btn-mail:hover{transform:translateY(-1px);box-shadow:var(--shadow-floating)}
-.prose .fallback{font-size:14px;color:var(--ink-muted);margin:12px 0 0}
-.prose .fallback a{color:var(--ink-mid)}
+.btn-mail:hover{transform:translateY(-1px);box-shadow:var(--shadow-floating)}
+.fallback{font-size:14px;color:var(--ink-muted);margin:12px 0 0}
+.fallback a{color:var(--ink-mid)}
 `;
 
 const BODY = `
-<main class="prose">
   <h1>Feature requests</h1>
   <p class="lede">${SITE_NAME} is small and still being built. If something's
   missing, tell us — at this size it genuinely changes what gets made next.</p>
@@ -142,7 +144,6 @@ const BODY = `
   send us — see the <a href="/privacy">Privacy Policy</a>. Nothing on this page
   collects anything: there is no form, no analytics, and no third party between
   you and the address above.</p>
-</main>
 `;
 
 export function renderFeatureRequestPage(origin?: string): string {
@@ -152,6 +153,6 @@ export function renderFeatureRequestPage(origin?: string): string {
         origin,
         path: "/feature-request",
         styles: STYLES,
-        body: BODY,
+        children: <Prose html={BODY} />,
     });
 }

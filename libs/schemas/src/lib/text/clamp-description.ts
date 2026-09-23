@@ -1,14 +1,27 @@
 /**
- * Length limits for the two description fields, and the clamps that enforce
- * them.
+ * Length budgets for the description fields and the step headline.
  *
- * Enforced as `.transform()` and deliberately NOT as `.max()`: these schemas
- * parse a streamed JSONL frame, and a failed frame is dropped whole. A recipe
- * whose description ran three characters long would lose its prep time and cook
- * time with it. Clamping keeps the frame and shortens the text.
+ * **NEITHER DESCRIPTION IS CLAMPED ANY MORE.** Both numbers are written into
+ * the PROMPTS and nothing enforces them on the way in — the card gloss lost its
+ * clamp first, the detail description on 2026-09-23, and both for the same
+ * reason: a cut sentence is exactly the thing the limit existed to prevent.
+ * "Crispy breaded chicken bites … and a…" is not a shorter description, it is a
+ * broken one, and the recipe screen has no `numberOfLines` and a whole page to
+ * wrap into, so nothing was being protected. Two of the 54 catalogue recipes
+ * were stored mid-sentence like that.
  *
- * The prompts ask for something comfortably under each limit, so a clamp firing
- * is the exception. These numbers are the backstop, not the target.
+ * **If a model ever writes an essay here, shorten the PROMPT — do not put a
+ * clamp back.** That is the same instruction {@link CARD_DESCRIPTION_MAX}
+ * carries, and it has held.
+ *
+ * {@link clampToTitleLength} survives, and the reason it is different is that a
+ * step headline is a LABEL: over-long, it is prose in a slot drawn on one line,
+ * so a marked cut is the honest reading. A description is prose already.
+ *
+ * What the surviving clamp keeps from the original design: it is a
+ * `.transform()` and deliberately NOT a `.max()`. These schemas parse a
+ * streamed JSONL frame and a failed frame is dropped whole, so a headline three
+ * characters long would cost the instruction it belongs to.
  */
 
 /**
@@ -29,9 +42,14 @@
 export const CARD_DESCRIPTION_MAX = 34;
 
 /**
- * The detail screen's description card. One sentence — the prompts used to ask
- * for "2-3 sentences" with no bound at all, which filled the screen above the
- * ingredients with copy nobody reads.
+ * The recipe screen's description, used to write the PROMPTS — it is
+ * deliberately not enforced on the way in.
+ *
+ * One sentence, because the prompts used to ask for "2-3 sentences" with no
+ * bound at all, which filled the screen above the ingredients with copy nobody
+ * reads. The number is what the prompt asks for; the sentence is short because
+ * it was asked for short, not because anything cuts it afterwards. See the
+ * header of this file before reaching for a clamp.
  */
 export const DETAIL_DESCRIPTION_MAX = 160;
 
@@ -63,38 +81,6 @@ const clampToWord = (trimmed: string, max: number): string => {
     const clamped = lastSpace > max / 3 ? cut.slice(0, lastSpace) : cut;
 
     return `${clamped.replace(TRAILING_PUNCTUATION, "")}…`;
-};
-
-/**
- * Clamp a detail description to {@link DETAIL_DESCRIPTION_MAX}, preferring a
- * SENTENCE boundary.
- *
- * The overrun this exists for is a model writing two sentences where one was
- * asked for, and dropping the second one reads as finished prose. Only when
- * there is no sentence to end on does it fall back to a marked word-boundary
- * cut.
- */
-export const clampToDetailLength = (value: string): string => {
-    const trimmed = value.trim();
-
-    if (trimmed.length <= DETAIL_DESCRIPTION_MAX) {
-        return trimmed;
-    }
-
-    const cut = trimmed.slice(0, DETAIL_DESCRIPTION_MAX);
-    const lastSentence = Math.max(
-        cut.lastIndexOf(". "),
-        cut.lastIndexOf("! "),
-        cut.lastIndexOf("? ")
-    );
-
-    // A sentence that ends in the first third is not the description, it is a
-    // fragment of it — keep the word-boundary cut instead.
-    if (lastSentence > DETAIL_DESCRIPTION_MAX / 3) {
-        return trimmed.slice(0, lastSentence + 1);
-    }
-
-    return clampToWord(trimmed, DETAIL_DESCRIPTION_MAX);
 };
 
 /**

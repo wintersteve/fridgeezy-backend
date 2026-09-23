@@ -38,6 +38,10 @@ node_modules/
 .expo/
 .yarn/
 dist/
+
+# The site's esbuild bundle, written on the way to dist/ because node
+# cannot run JSX directly. Generated on every build.
+.build/
 npm-debug.*
 *.jks
 *.p8

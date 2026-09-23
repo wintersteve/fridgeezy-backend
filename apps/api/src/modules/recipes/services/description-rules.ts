@@ -6,13 +6,15 @@ import { CARD_DESCRIPTION_MAX, DETAIL_DESCRIPTION_MAX } from "@fridgeezy/schemas
  * `modify-recipe`.
  *
  * All four carried a byte-identical copy of this block, which is how the old
- * "max 60 characters" survived in four places at once. The limits are
- * interpolated from the same constants the schema clamps with, so a prompt can
- * no longer promise a length the parser then shortens.
+ * "max 60 characters" survived in four places at once.
  *
- * The numbers are lower than the clamps on purpose: the clamp is a backstop that
- * appends an ellipsis, and an ellipsis on a card is the truncation this is
- * trying to avoid.
+ * **THIS BLOCK IS NOW THE ONLY LENGTH LIMIT EITHER FIELD HAS.** Both clamps are
+ * gone (see `clamp-description.ts`), so the constants interpolated here are
+ * budgets the prompt ASKS for rather than headroom under a parser that would
+ * cut. Both asks stay a little under their constant because that is what has
+ * been producing one comfortable sentence and a two-to-five-word gloss; if a
+ * model overruns, tighten the words asked for here — nothing downstream will
+ * shorten the text, and a cut sentence was the whole reason the clamps went.
  */
 export const HEADER_DESCRIPTION_RULES = `The two description fields are different lengths and both are required:
 - "description": ONE sentence, max ${DETAIL_DESCRIPTION_MAX - 40} characters — what the dish IS, not a pitch. Never more than one sentence.

@@ -1,18 +1,19 @@
 import type { AdminRecipeRow, Page } from "@fridgeezy/admin-contract";
+import { TOKENS } from "@fridgeezy/design";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TableCell from "@mui/material/TableCell";
-import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
 
 import {
-    CheckFilter,
     DataTable,
     FilterBar,
     FilterSelect,
+    LinkRow,
+    PageHead,
     Pager,
     Pill,
     ResourceState,
@@ -23,7 +24,6 @@ import { api, queryString } from "../lib/api";
 import { formatDate, formatMinutes } from "../lib/format";
 import { useListParams } from "../lib/use-list-params";
 import { useDebounced, useResource } from "../lib/use-resource";
-import { TOKENS } from "../theme";
 
 const PAGE_SIZE = 50;
 
@@ -94,11 +94,10 @@ export function RecipesPage() {
 
     return (
         <>
-            <Typography variant="h1">Recipes</Typography>
-            <Typography variant="body2" className="page-lede">
-                Everything readers can find, plus everything you have pulled. Hiding a dish
-                removes it from every read path; deleting one is permanent.
-            </Typography>
+            <PageHead
+                title="Recipes"
+                lede="Everything readers can find, plus everything you have pulled. Hiding a dish removes it from every read path; deleting one is permanent."
+            />
 
             <FilterBar count={recipes.data ? `${recipes.data.total} matching` : null}>
                 <SearchField
@@ -118,19 +117,23 @@ export function RecipesPage() {
                     label="Difficulty"
                     options={LEVELS}
                 />
-                <CheckFilter
-                    checked={missingImage}
-                    onChange={(on) => setParam("missingImage", on ? "true" : null)}
-                    label="No illustration"
+                <FilterSelect
+                    value={missingImage ? "true" : ""}
+                    onChange={(value) => setParam("missingImage", value || null)}
+                    label="Illustration"
+                    width={190}
+                    options={ILLUSTRATION}
                 />
-                {/* Separate from "No illustration" because they look the same
-                    to a reader and are opposite jobs: that one needs a
-                    generation, this one needs a URL rewritten — the art is
-                    already in the bucket. */}
-                <CheckFilter
-                    checked={unreachableImage}
-                    onChange={(on) => setParam("unreachableImage", on ? "true" : null)}
-                    label="Unreachable image host"
+                {/* A separate control from "No illustration" because the two
+                    look the same to a reader and are opposite jobs: that one
+                    needs a generation, this one needs a URL rewritten — the art
+                    is already in the bucket. */}
+                <FilterSelect
+                    value={unreachableImage ? "true" : ""}
+                    onChange={(value) => setParam("unreachableImage", value || null)}
+                    label="Image host"
+                    width={190}
+                    options={IMAGE_HOST}
                 />
             </FilterBar>
 
@@ -204,6 +207,24 @@ const VISIBILITY = [
     { value: "all", label: "All" },
 ] as const;
 
+/**
+ * The two art filters, each a WORKING LIST rather than a narrowing.
+ *
+ * Two options apiece and no third, because the API's flag has two states: it is
+ * off, or it selects the rows that want work. There is no "only dishes that DO
+ * have art" — nobody has that question, and offering it would mean a filter the
+ * server cannot answer.
+ */
+const ILLUSTRATION = [
+    { value: "", label: "Any illustration" },
+    { value: "true", label: "No illustration" },
+] as const;
+
+const IMAGE_HOST = [
+    { value: "", label: "Any image host" },
+    { value: "true", label: "Unreachable host" },
+] as const;
+
 const LEVELS = [
     { value: "", label: "Any level" },
     { value: "easy", label: "Easy" },
@@ -218,7 +239,7 @@ function RecipeRow({ recipe }: { recipe: AdminRecipeRow }) {
     const [broken, setBroken] = useState(false);
 
     return (
-        <TableRow>
+        <LinkRow to={`/recipes/${recipe.id}`}>
             <TableCell>
                 {recipe.image && !broken ? (
                     <img
@@ -263,6 +284,6 @@ function RecipeRow({ recipe }: { recipe: AdminRecipeRow }) {
             <TableCell sx={{ color: TOKENS.inkMuted, whiteSpace: "nowrap" }}>
                 {formatDate(recipe.createdAt)}
             </TableCell>
-        </TableRow>
+        </LinkRow>
     );
 }

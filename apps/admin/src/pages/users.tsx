@@ -1,17 +1,17 @@
 import type { AdminUserRow, Page } from "@fridgeezy/admin-contract";
-import Button from "@mui/material/Button";
+import { TOKENS } from "@fridgeezy/design";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TableCell from "@mui/material/TableCell";
-import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import { Link } from "react-router-dom";
 
-import { useToast } from "../components/toast";
 import {
     DataTable,
     FilterBar,
     FilterSelect,
+    LinkRow,
+    PageHead,
     Pager,
     Pill,
     ResourceState,
@@ -22,7 +22,6 @@ import { api, queryString } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { useListParams } from "../lib/use-list-params";
 import { useDebounced, useResource } from "../lib/use-resource";
-import { TOKENS } from "../theme";
 
 const PAGE_SIZE = 50;
 
@@ -51,8 +50,6 @@ export function UsersPage() {
         sort: "createdAt",
         dir: "desc",
     });
-    const toast = useToast();
-    const [busy, setBusy] = useState<string>();
 
     const query = get("query");
     const subscription = get("subscription", "any");
@@ -74,34 +71,16 @@ export function UsersPage() {
         [debouncedQuery, subscription, sort, dir, offset]
     );
 
-    const setAdmin = async (row: AdminUserRow, isAdmin: boolean) => {
-        setBusy(row.profileId);
-
-        try {
-            await api.patch(`/users/${row.profileId}`, { isAdmin });
-            users.reload();
-            toast.show(
-                "ok",
-                `${row.email ?? row.displayName ?? "Account"} ${isAdmin ? "is now an admin" : "is no longer an admin"}.`
-            );
-        } catch (cause) {
-            toast.show("error", (cause as Error).message);
-        } finally {
-            setBusy(undefined);
-        }
-    };
 
     const totalUsage = (row: AdminUserRow) =>
         Object.values(row.usage).reduce((sum, value) => sum + value, 0);
 
     return (
         <>
-            <Typography variant="h1">Users</Typography>
-            <Typography variant="body2" className="page-lede">
-                Accounts, what the server believes about their subscription, and their AI
-                usage over the last 30 days. The admin flag is the only thing you can change
-                here.
-            </Typography>
+            <PageHead
+                title="Users"
+                lede="Accounts, what the server believes about their subscription, and their AI usage over the last 30 days. The admin flag is the only thing you can change here."
+            />
 
             <FilterBar count={users.data ? `${users.data.total} accounts` : null}>
                 <SearchField
@@ -159,11 +138,14 @@ export function UsersPage() {
                         }
                     >
                         {users.data?.rows.map((row) => (
-                            <TableRow key={row.profileId}>
+                            <LinkRow key={row.profileId} to={`/users/${row.profileId}`}>
                                 <TableCell>
-                                    <div className="cell-title">
+                                    <Link
+                                        to={`/users/${row.profileId}`}
+                                        className="cell-title"
+                                    >
                                         {row.email ?? row.displayName ?? "—"}
-                                    </div>
+                                    </Link>
                                     <Typography
                                         variant="caption"
                                         component="div"
@@ -240,18 +222,15 @@ export function UsersPage() {
                                         alignItems="center"
                                         justifyContent="flex-end"
                                     >
+                                        {/* Granting console access is not a row
+                                            action. It is full read and write over
+                                            the catalogue AND every account, and it
+                                            belongs behind the page that says so —
+                                            which the row press opens. */}
                                         {row.isAdmin ? <Pill tone="accent">Admin</Pill> : null}
-                                        <Button
-                                            size="small"
-                                            variant="outlined"
-                                            disabled={busy === row.profileId}
-                                            onClick={() => void setAdmin(row, !row.isAdmin)}
-                                        >
-                                            {row.isAdmin ? "Revoke" : "Make admin"}
-                                        </Button>
                                     </Stack>
                                 </TableCell>
-                            </TableRow>
+                            </LinkRow>
                         ))}
                     </DataTable>
                     <Pager

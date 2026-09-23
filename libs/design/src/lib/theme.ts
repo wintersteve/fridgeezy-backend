@@ -1,5 +1,7 @@
 import { createTheme } from "@mui/material/styles";
 
+import { QUIET_HEADING, TOKENS } from "./tokens";
+
 /**
  * MUI, wearing the app's clothes.
  *
@@ -8,19 +10,20 @@ import { createTheme } from "@mui/material/styles";
  * Stock MUI is Roboto on white with a blue accent, 4px corners and a heavy
  * shadow on everything — a look nobody would mistake for this product. The
  * library was brought in for the CONTROLS (a real select, a real dialog, a
- * table that sorts, a snackbar) rather than for its appearance, so every token
- * below is the console's own, copied from `styles.css`, which copied the site's
- * `chrome.ts`. **Change a colour here and change it there**; there is no build
- * step joining a CSS custom property to a TypeScript object, and inventing one
- * for two consumers would be the heavier mistake.
+ * table that sorts, a snackbar) rather than for its appearance, so every value
+ * below comes from `tokens.ts`, which is the one copy. It used to be declared
+ * in this file and hand-synchronised with two stylesheets; see that file's
+ * header for why that stopped being affordable once the site joined.
  *
- * ## The palette is DERIVED from the tokens, never re-picked
+ * ## It serves BOTH web surfaces
  *
- * `TOKENS` is the single copy and the theme reads it, so the stylesheet's
- * remaining rules and MUI's components cannot drift into two peaches. The CSS
- * custom properties are still declared in `styles.css` for what is left there
- * — the shell, the wordmark, a handful of layout classes — and they hold the
- * same values.
+ * The console and the marketing site render from this same theme, which is the
+ * point of it living in a lib. Most of what follows is console furniture — a
+ * table, a dialog, a sort label — and the site simply never mounts those
+ * components, so they cost it nothing. What the site actually reads is the
+ * palette, the type scale, the shadow ramp and the Button/Paper/Link overrides.
+ * **Neither surface may fork this theme**: a second `createTheme` is how one
+ * peach becomes two.
  *
  * ## Three things MUI does that had to be turned OFF
  *
@@ -33,55 +36,6 @@ import { createTheme } from "@mui/material/styles";
  *   app's own `tint` tier does for a row in a list; an expanding circle is a
  *   second vocabulary for the same event.
  */
-
-export const TOKENS = {
-    bg: "#FCFAF6",
-    bgVariant: "#F8F5F0",
-    surface: "#FFFFFF",
-    ink: "#5C5450",
-    inkStrong: "#3A332F",
-    inkMuted: "#9A938F",
-    inkSoft: "#8A8380",
-    inkMid: "#7A736F",
-    outline: "rgba(232, 228, 224, .6)",
-    outlineSolid: "#E8E4E0",
-    primary: "#F4A67A",
-    onPrimary: "#FFFFFF",
-    primaryContainer: "#FFF5EE",
-    primaryInk: "#A35529",
-    secondary: "#93C5A8",
-    secondaryContainer: "#F0F7F2",
-    secondaryInk: "#3F7A58",
-    roseContainer: "#FFF3F0",
-    roseInk: "#6E3733",
-    tertiaryInk: "#3C6B81",
-    tertiaryContainer: "#EEF4F8",
-    errorInk: "#A3322B",
-    errorContainer: "#FDF0EE",
-    shadowRest: "0 4px 4px rgba(6, 6, 6, .0125)",
-    shadowRaised: "0 2px 8px rgba(6, 6, 6, .06)",
-    shadowFloating: "0 6px 16px rgba(6, 6, 6, .06)",
-    sans: "'Poppins', -apple-system, system-ui, sans-serif",
-    serif: "'Lora', Georgia, 'Times New Roman', serif",
-    radius: { sm: 6, md: 8, lg: 12, xl: 16, pill: 999 },
-    sidebar: 224,
-} as const;
-
-/**
- * The quiet-heading idiom, in one place.
- *
- * Small, tracked, uppercase, muted — what every section label in the client
- * looks like, and what stops a card full of fields reading as a form. It is
- * shared by `h2`, a table header and the sidebar's group labels, so it is a
- * value rather than three near-identical rules.
- */
-export const QUIET_HEADING = {
-    fontSize: 11,
-    fontWeight: 600,
-    letterSpacing: "1px",
-    textTransform: "uppercase" as const,
-    color: TOKENS.inkMuted,
-};
 
 export const theme = createTheme({
     // Material's own is 8; this console's spacing scale is the app's 4-point

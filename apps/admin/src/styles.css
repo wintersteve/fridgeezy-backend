@@ -55,28 +55,14 @@
 @font-face { font-family: 'Lora'; font-style: normal; font-weight: 600; font-display: swap; src: url(/fonts/lora-600.woff2) format('woff2'); }
 @font-face { font-family: 'Lora'; font-style: italic; font-weight: 600; font-display: swap; src: url(/fonts/lora-600-italic.woff2) format('woff2'); }
 
-:root {
-    /* The app's page ground, not the site's. `#FCFAF6` is the 10% warm blend
-       the owner settled on after two fuller-warmth attempts were reverted —
-       don't push it warmer. */
-    --bg: #FCFAF6; --bg-variant: #F8F5F0; --surface: #FFFFFF;
-    --serif: 'Lora', Georgia, 'Times New Roman', serif;
-    --ink: #5C5450; --ink-strong: #3A332F; --ink-muted: #9A938F; --ink-soft: #8A8380; --ink-mid: #7A736F;
-    --outline: rgba(232, 228, 224, .6); --outline-solid: #E8E4E0;
-    --primary: #F4A67A; --on-primary: #FFFFFF; --primary-container: #FFF5EE; --primary-ink: #A35529;
-    --secondary: #93C5A8; --secondary-container: #F0F7F2; --secondary-ink: #3F7A58;
-    --rose-container: #FFF3F0; --rose-ink: #6E3733;
-    --tertiary-ink: #3C6B81; --tertiary-container: #EEF4F8;
-    --error-ink: #A3322B; --error-container: #FDF0EE;
-    /* The app's own three, unchanged — `rest` really is that faint. A card here
-       is separated from the page by its outline and the warm ground behind it,
-       not by a drop shadow. */
-    --shadow-rest: 0 4px 4px rgba(6, 6, 6, .0125);
-    --shadow-raised: 0 2px 8px rgba(6, 6, 6, .06);
-    --shadow-floating: 0 6px 16px rgba(6, 6, 6, .06);
-    --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px; --r-pill: 999px;
-    --sidebar: 224px;
-}
+/* The custom properties these rules read are NOT declared here any more.
+   They come from `@fridgeezy/design`'s `cssVariables()`, injected once by
+   `app.tsx`, so this stylesheet and the MUI theme cannot drift into two
+   peaches — which they did, in three places, until 2026-09-23. The sixty-odd
+   `var(--…)` uses below are unchanged; only the declaration moved.
+
+   `--sidebar` is the exception and stays a layout value on the theme
+   (`TOKENS.sidebar`), injected with the rest. */
 
 * { box-sizing: border-box; }
 
@@ -90,12 +76,13 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+/* `h2` and `h3` are still bare elements — a card's section label, the
+   Overview's block headings — so they keep their rules here. `h1` does NOT:
+   every title is `PageHead` now, so the only `<h1>` in the document carries
+   `.MuiTypography-h1`, which outranks an element selector and is set from the
+   theme. A rule here would be a second copy of one number that could never
+   win. */
 h1, h2, h3 { color: var(--ink-strong); margin: 0; font-weight: 600; }
-h1 { font-size: 26px; letter-spacing: -.5px; font-weight: 700; }
-/* A dish IS the masthead on the detail page, so that one heading takes the
-   serif. `.page-head h1.dish` rather than a blanket rule: "Recipes" and "Users"
-   are chrome and must stay in Poppins. */
-h1.dish { font-size: 30px; font-weight: 600; letter-spacing: -.4px; }
 /*
  * The app's quiet-heading idiom: small, tracked, uppercase, in the muted ink.
  * It is what every section label in the client looks like, and it is what stops
@@ -186,16 +173,16 @@ a:hover { text-decoration: underline; }
 .main { padding: 24px 28px 64px; max-width: 1400px; }
 
 /*
- * A heading with something on the far side of it. Its children are a COLUMN
- * and a trailing node, so a page that puts its heading and its lede in here as
- * two siblings gets them side by side — which is what a bare `<Typography>`
- * pair did until the lede was moved out of it.
+ * A page's title and its lede are `PageHead` now, not classes.
+ *
+ * They were `.page-head` / `.page-lede` and had to stop being: MUI's
+ * `.MuiTypography-root { margin: 0 }` has the same specificity and is injected
+ * later, so a class could not set a margin on a `<Typography>` at all — every
+ * converted page silently lost the gap. The numbers live in `sx` now, in the
+ * same layer as the defaults they have to beat. **A class must not set margin
+ * on a MUI component in this app**; that is the general rule the head learnt
+ * the hard way.
  */
-.page-head {
-    display: flex; align-items: flex-start; justify-content: space-between;
-    gap: 16px; margin-bottom: 4px;
-}
-.page-lede { color: var(--ink-soft); margin: 4px 0 20px; max-width: 70ch; }
 
 /* --- surfaces ---------------------------------------------------------- */
 

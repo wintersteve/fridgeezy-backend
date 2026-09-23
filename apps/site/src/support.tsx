@@ -1,4 +1,5 @@
-import { PROSE_CSS, renderPage, SITE_NAME, SUPPORT_EMAIL } from "./chrome";
+import { renderPage, SITE_NAME, SUPPORT_EMAIL } from "./chrome";
+import { Prose } from "./prose";
 
 /**
  * The support page — the URL App Store Connect asks for.
@@ -12,7 +13,6 @@ import { PROSE_CSS, renderPage, SITE_NAME, SUPPORT_EMAIL } from "./chrome";
  */
 
 const BODY = `
-<main class="prose">
   <h1>Support</h1>
   <p class="lede">Stuck, curious, or found something odd? We read everything.</p>
 
@@ -73,7 +73,6 @@ const BODY = `
   <h2>Privacy &amp; legal</h2>
   <p>The details live in the <a href="/privacy">Privacy Policy</a> and the
   <a href="/terms">Terms of Use</a>.</p>
-</main>
 `;
 
 export function renderSupportPage(origin?: string): string {
@@ -82,7 +81,6 @@ export function renderSupportPage(origin?: string): string {
         description: `Help with ${SITE_NAME}: subscriptions, account deletion, and getting in touch.`,
         origin,
         path: "/support",
-        styles: PROSE_CSS,
-        body: BODY,
+        children: <Prose html={BODY} />,
     });
 }

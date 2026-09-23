@@ -3,6 +3,8 @@ import Alert from "@mui/material/Alert";
 import Paper from "@mui/material/Paper";
 import { Link } from "react-router-dom";
 
+import { PageHead } from "../components/ui";
+
 
 /**
  * The opening screen: what is in the catalogue, and what is wrong with it.
@@ -26,15 +28,11 @@ export function OverviewPage({
     if (!overview) {
         return (
             <>
-                <h1>Overview</h1>
+                <PageHead title="Overview" lede={error ? undefined : "Loading…"} />
                 {/* Three states, not two. A failed read used to fall through to
                     "Loading…" and stay there, which reads as a hung console
                     rather than as an API that cannot be reached. */}
-                {error ? (
-                    <Alert severity="error">{error}</Alert>
-                ) : (
-                    <p className="page-lede">Loading…</p>
-                )}
+                {error ? <Alert severity="error">{error}</Alert> : null}
             </>
         );
     }
@@ -65,11 +63,10 @@ export function OverviewPage({
 
     return (
         <>
-            <h1>Overview</h1>
-            <p className="page-lede">
-                What is in the catalogue, and what is waiting on you. Every figure in the
-                second row is a list you can open.
-            </p>
+            <PageHead
+                title="Overview"
+                lede="What is in the catalogue, and what is waiting on you. Every figure in the second row is a list you can open."
+            />
 
             <div className="grid cols-4 section-block">
                 {fact("Dishes", overview.recipes.dishes, `${overview.recipes.total} rows including versions`)}

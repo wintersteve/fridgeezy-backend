@@ -1,7 +1,9 @@
 import type { AdminOverview } from "@fridgeezy/admin-contract";
+import { CSS_VARIABLES, theme } from "@fridgeezy/design";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CssBaseline from "@mui/material/CssBaseline";
+import GlobalStyles from "@mui/material/GlobalStyles";
 import Paper from "@mui/material/Paper";
 import { ThemeProvider } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
@@ -15,16 +17,20 @@ import { SignIn } from "./components/sign-in";
 import { ToastHost } from "./components/toast";
 import { api, ApiError } from "./lib/api";
 import { supabase } from "./lib/supabase";
+import { IngredientDetailPage } from "./pages/ingredient-detail";
 import { IngredientsPage } from "./pages/ingredients";
 import { OverviewPage } from "./pages/overview";
 import { RecipeDetailPage } from "./pages/recipe-detail";
 import { RecipesPage } from "./pages/recipes";
 import { StepArtPage } from "./pages/step-art";
+import { SuggestionDetailPage } from "./pages/suggestion-detail";
 import { SuggestionsPage } from "./pages/suggestions";
+import { TagDetailPage } from "./pages/tag-detail";
 import { TagsPage } from "./pages/tags";
 import { TechniquesPage } from "./pages/techniques";
+import { UpkeepPage } from "./pages/upkeep";
+import { UserDetailPage } from "./pages/user-detail";
 import { UsersPage } from "./pages/users";
-import { theme } from "./theme";
 
 /**
  * Three states, and the third is the one worth being careful about.
@@ -157,11 +163,16 @@ export function App() {
                         <Route path="recipes" element={<RecipesPage />} />
                         <Route path="recipes/:id" element={<RecipeDetailPage />} />
                         <Route path="suggestions" element={<SuggestionsPage />} />
+                        <Route path="suggestions/:id" element={<SuggestionDetailPage />} />
                         <Route path="ingredients" element={<IngredientsPage />} />
+                        <Route path="ingredients/:id" element={<IngredientDetailPage />} />
                         <Route path="tags" element={<TagsPage />} />
+                        <Route path="tags/:id" element={<TagDetailPage />} />
                         <Route path="users" element={<UsersPage />} />
+                        <Route path="users/:profileId" element={<UserDetailPage />} />
                         <Route path="operations/step-art" element={<StepArtPage />} />
                         <Route path="operations/techniques" element={<TechniquesPage />} />
+                        <Route path="operations/upkeep" element={<UpkeepPage />} />
                         <Route path="*" element={<Navigate to="/" replace />} />
                     </Route>
                 </Routes>
@@ -187,6 +198,11 @@ function Shells({ children }: { children: React.ReactNode }) {
     return (
         <ThemeProvider theme={theme}>
             <CssBaseline />
+            {/* The custom properties `styles.css` reads, declared from the one
+                copy in `@fridgeezy/design` rather than at the top of that file.
+                The RECORD and not the string: emotion emits nothing for a raw
+                declaration string and every var() resolves to empty. */}
+            <GlobalStyles styles={{ ":root": CSS_VARIABLES }} />
             <ToastHost>{children}</ToastHost>
         </ThemeProvider>
     );

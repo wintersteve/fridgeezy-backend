@@ -1,3 +1,4 @@
+import { TOKENS } from "@fridgeezy/design";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -8,7 +9,6 @@ import Typography from "@mui/material/Typography";
 import { useState } from "react";
 
 import { supabase } from "../lib/supabase";
-import { TOKENS } from "../theme";
 
 /**
  * Signing in to the console.

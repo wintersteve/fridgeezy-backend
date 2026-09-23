@@ -1,26 +1,20 @@
 import type {
     AdminCategory,
     AdminIngredientRow,
-    AdminIngredientUpdate,
     Page,
 } from "@fridgeezy/admin-contract";
-import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import MenuItem from "@mui/material/MenuItem";
+import { TOKENS } from "@fridgeezy/design";
 import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
 import TableCell from "@mui/material/TableCell";
-import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import { Link } from "react-router-dom";
 
-import { useToast } from "../components/toast";
 import {
-    CheckFilter,
     DataTable,
     FilterBar,
     FilterSelect,
+    LinkRow,
+    PageHead,
     Pager,
     Pill,
     ResourceState,
@@ -30,7 +24,6 @@ import {
 import { api, queryString } from "../lib/api";
 import { useListParams } from "../lib/use-list-params";
 import { useDebounced, useResource } from "../lib/use-resource";
-import { TOKENS } from "../theme";
 
 const PAGE_SIZE = 50;
 
@@ -57,8 +50,6 @@ export function IngredientsPage() {
         sort: "useCount",
         dir: "desc",
     });
-    const toast = useToast();
-    const [editing, setEditing] = useState<string>();
 
     const query = get("query");
     const componentKind = get("componentKind");
@@ -86,24 +77,13 @@ export function IngredientsPage() {
         [debouncedQuery, componentKind, categoryId, missingShelfLife, sort, dir, offset]
     );
 
-    const save = async (id: string, patch: AdminIngredientUpdate) => {
-        try {
-            await api.patch(`/ingredients/${id}`, patch);
-            setEditing(undefined);
-            ingredients.reload();
-            toast.show("ok", "Ingredient saved.");
-        } catch (cause) {
-            toast.show("error", (cause as Error).message);
-        }
-    };
 
     return (
         <>
-            <Typography variant="h1">Ingredients</Typography>
-            <Typography variant="body2" className="page-lede">
-                The catalogue recipes, pantries and shopping lists all join on. Shelf life
-                drives how quickly the pantry stops being sure you still have something.
-            </Typography>
+            <PageHead
+                title="Ingredients"
+                lede="The catalogue recipes, pantries and shopping lists all join on. Shelf life drives how quickly the pantry stops being sure you still have something."
+            />
 
             <FilterBar count={ingredients.data ? `${ingredients.data.total} matching` : null}>
                 <SearchField
@@ -131,10 +111,12 @@ export function IngredientsPage() {
                     width={200}
                     options={COMPONENT_KINDS}
                 />
-                <CheckFilter
-                    checked={missingShelfLife}
-                    onChange={(on) => setParam("missingShelfLife", on ? "true" : null)}
-                    label="No shelf life"
+                <FilterSelect
+                    value={missingShelfLife ? "true" : ""}
+                    onChange={(value) => setParam("missingShelfLife", value || null)}
+                    label="Shelf life"
+                    width={190}
+                    options={SHELF_LIFE}
                 />
             </FilterBar>
 
@@ -172,23 +154,18 @@ export function IngredientsPage() {
                                     actually asks of them. */}
                                 <TableCell align="right">Shelf life</TableCell>
                                 <TableCell>Component</TableCell>
-                                <TableCell align="right">Actions</TableCell>
                             </>
                         }
                     >
-                        {ingredients.data?.rows.map((row) =>
-                                    editing === row.id ? (
-                                        <IngredientEditor
-                                            key={row.id}
-                                            row={row}
-                                            categories={categories.data ?? []}
-                                            onCancel={() => setEditing(undefined)}
-                                            onSave={(patch) => void save(row.id, patch)}
-                                        />
-                            ) : (
-                                <TableRow key={row.id}>
+                        {ingredients.data?.rows.map((row) => (
+                                <LinkRow key={row.id} to={`/ingredients/${row.id}`}>
                                     <TableCell>
-                                        <div className="cell-title">{row.name}</div>
+                                        <Link
+                                            to={`/ingredients/${row.id}`}
+                                            className="cell-title"
+                                        >
+                                            {row.name}
+                                        </Link>
                                         {row.aliases.length ? (
                                             <Typography
                                                 variant="caption"
@@ -234,18 +211,8 @@ export function IngredientsPage() {
                                             </Typography>
                                         )}
                                     </TableCell>
-                                    <TableCell align="right">
-                                        <Button
-                                            size="small"
-                                            variant="outlined"
-                                            onClick={() => setEditing(row.id)}
-                                        >
-                                            Edit
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            )
-                        )}
+                                </LinkRow>
+                        ))}
                     </DataTable>
                     <Pager
                         total={ingredients.data?.total ?? 0}
@@ -259,6 +226,12 @@ export function IngredientsPage() {
     );
 }
 
+/** Two options, for the reason `ILLUSTRATION` records on the recipes page. */
+const SHELF_LIFE = [
+    { value: "", label: "Any shelf life" },
+    { value: "true", label: "No shelf life" },
+] as const;
+
 const COMPONENT_KINDS = [
     { value: "", label: "Any kind" },
     { value: "dish", label: "Dish (offer to make it)" },
@@ -266,113 +239,4 @@ const COMPONENT_KINDS = [
     { value: "bought", label: "Bought" },
 ] as const;
 
-const EDITOR_KINDS = [
-    { value: "", label: "Unclassified" },
-    { value: "bought", label: "Bought" },
-    { value: "prep", label: "Prep" },
-    { value: "dish", label: "Dish" },
-] as const;
 
-function IngredientEditor({
-    row,
-    categories,
-    onCancel,
-    onSave,
-}: {
-    row: AdminIngredientRow;
-    categories: AdminCategory[];
-    onCancel: () => void;
-    onSave: (patch: AdminIngredientUpdate) => void;
-}) {
-    const [name, setName] = useState(row.name);
-    const [categoryId, setCategoryId] = useState(row.categoryId ?? "");
-    const [shelfLife, setShelfLife] = useState(
-        row.defaultShelfLifeDays === null ? "" : String(row.defaultShelfLifeDays)
-    );
-    const [componentKind, setComponentKind] = useState(row.componentKind ?? "");
-    const [componentDish, setComponentDish] = useState(row.componentDish ?? "");
-
-    return (
-        <TableRow hover={false}>
-            <TableCell colSpan={6} sx={{ background: TOKENS.bgVariant }}>
-                <Stack direction="row" spacing={4} sx={{ mb: 4 }} flexWrap="wrap" useFlexGap>
-                    <TextField
-                        label="Name"
-                        value={name}
-                        onChange={(event) => setName(event.target.value)}
-                        sx={{ flex: 1, minWidth: 200 }}
-                    />
-                    <TextField
-                        select
-                        label="Category"
-                        value={categoryId}
-                        onChange={(event) => setCategoryId(event.target.value)}
-                        sx={{ minWidth: 180 }}
-                    >
-                        <MenuItem value="">—</MenuItem>
-                        {categories.map((category) => (
-                            <MenuItem key={category.id} value={category.id}>
-                                {category.name}
-                            </MenuItem>
-                        ))}
-                    </TextField>
-                    <TextField
-                        label="Shelf life (days)"
-                        type="number"
-                        value={shelfLife}
-                        onChange={(event) => setShelfLife(event.target.value)}
-                        placeholder="30 (fallback)"
-                        slotProps={{ htmlInput: { min: 0 } }}
-                        sx={{ width: 150 }}
-                    />
-                    <TextField
-                        select
-                        label="Component kind"
-                        value={componentKind}
-                        onChange={(event) => setComponentKind(event.target.value)}
-                        sx={{ minWidth: 170 }}
-                    >
-                        {EDITOR_KINDS.map((kind) => (
-                            <MenuItem key={kind.value} value={kind.value}>
-                                {kind.label}
-                            </MenuItem>
-                        ))}
-                    </TextField>
-                    <TextField
-                        label="Dish to open"
-                        value={componentDish}
-                        onChange={(event) => setComponentDish(event.target.value)}
-                        placeholder="Béchamel"
-                        disabled={componentKind !== "dish"}
-                        sx={{ minWidth: 180 }}
-                    />
-                </Stack>
-                <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
-                    <Button size="small" variant="text" onClick={onCancel}>
-                        Cancel
-                    </Button>
-                    <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() =>
-                            onSave({
-                                name,
-                                categoryId: categoryId || null,
-                                defaultShelfLifeDays: shelfLife ? Number(shelfLife) : null,
-                                componentKind:
-                                    (componentKind || null) as AdminIngredientUpdate["componentKind"],
-                                // Only meaningful for `dish`, and cleared with
-                                // the kind so a downgraded row does not keep
-                                // pointing at a dish nothing will open.
-                                componentDish:
-                                    componentKind === "dish" ? componentDish || null : null,
-                            })
-                        }
-                    >
-                        Save
-                    </Button>
-                </Box>
-            </TableCell>
-        </TableRow>
-    );
-}

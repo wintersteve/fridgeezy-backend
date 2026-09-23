@@ -14,13 +14,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { BillingBadge } from "../components/billing-badge";
 import { useToast } from "../components/toast";
-import {
-    FilterBar,
-    FilterSelect,
-    Muted,
-    Pill,
-    ResourceState,
-} from "../components/ui";
+import { FilterBar, FilterSelect, Muted, PageHead, Pill, ResourceState } from "../components/ui";
 import { api } from "../lib/api";
 import { bustCache } from "../lib/format";
 import { useResource } from "../lib/use-resource";
@@ -130,13 +124,10 @@ export function TechniquesPage() {
 
     return (
         <>
-            <Typography variant="h1">Technique illustrations</Typography>
-            <Typography variant="body2" className="page-lede">
-                One painting per cooking verb, shown when a cook taps a technique in a
-                method. Drawn on first request today — so the first person to meet a verb
-                waits at the hob for it. The vocabulary is closed, so finishing the set
-                retires that wait for good.
-            </Typography>
+            <PageHead
+                title="Technique illustrations"
+                lede="One painting per cooking verb, shown when a cook taps a technique in a method. Drawn on first request today — so the first person to meet a verb waits at the hob for it. The vocabulary is closed, so finishing the set retires that wait for good."
+            />
 
 
             <ResourceState loading={state.loading} fetching={state.fetching} error={state.error}>

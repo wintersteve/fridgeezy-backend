@@ -6,6 +6,7 @@ import {
     type DrawStepArtResponse,
     type Page,
 } from "@fridgeezy/admin-contract";
+import { TOKENS } from "@fridgeezy/design";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
@@ -17,22 +18,11 @@ import { useEffect, useRef, useState } from "react";
 
 import { BillingBadge } from "../components/billing-badge";
 import { useToast } from "../components/toast";
-import {
-    DataTable,
-    FilterBar,
-    FilterSelect,
-    Muted,
-    Pager,
-    Pill,
-    ResourceState,
-    SearchField,
-    SortTh,
-} from "../components/ui";
+import { DataTable, FilterBar, FilterSelect, Muted, PageHead, Pager, Pill, ResourceState, SearchField, SortTh } from "../components/ui";
 import { api, queryString } from "../lib/api";
 import { bustCache } from "../lib/format";
 import { useListParams } from "../lib/use-list-params";
 import { useDebounced, useResource } from "../lib/use-resource";
-import { TOKENS } from "../theme";
 
 const money = (amount: number) => `$${amount.toFixed(2)}`;
 
@@ -106,8 +96,8 @@ export function StepArtPage() {
      * Bumped by every press that should bring the method into view.
      *
      * A counter rather than a boolean, because the SAME dish being pressed
-     * twice has to scroll twice — that is the whole of what the "Open" button
-     * does once its dish is already selected.
+     * twice has to scroll twice — which is the whole of what a press on the
+     * row that is already open can mean.
      */
     const [revealNonce, setRevealNonce] = useState(0);
 
@@ -171,10 +161,10 @@ export function StepArtPage() {
      * Selecting a dish, and the reason it is one handler rather than an inline
      * `setParams`.
      *
-     * Pressing the button on the dish that is ALREADY open writes the same id,
-     * which is not a state change — so the second press did nothing whatever
-     * while the button said "Open". Scrolling on every press makes both presses
-     * mean something, and makes the label honest.
+     * Pressing the row of the dish that is ALREADY open writes the same id,
+     * which is not a state change — so without this the second press did
+     * nothing whatever, on a row that plainly invites one. Scrolling on every
+     * press makes both presses mean the same thing: show me this method.
      */
     const selectRecipe = (id: string) => {
         if (id !== recipeId) {
@@ -239,8 +229,8 @@ export function StepArtPage() {
     };
 
     useEffect(() => {
-        // A press. Includes a press on the dish already open, which changes no
-        // other state at all — that is what the "Open" button is.
+        // A press. Includes a press on the row already open, which changes no
+        // other state at all and still has to bring the method back into view.
         if (revealNonce) {
             revealMethod();
 
@@ -273,14 +263,17 @@ export function StepArtPage() {
 
     return (
         <>
-            <h1>Step illustrations</h1>
-            <p className="page-lede">
-                One picture per method step, shown in cook mode. Costs about{" "}
-                {money(STEP_ART_COST_USD)} a step — roughly{" "}
-                {money(STEP_ART_COST_USD * 8)} for a typical method — so it is drawn for
-                dishes you choose rather than for everything.
-            </p>
-
+            <PageHead
+                title="Step illustrations"
+                lede={
+                    <>
+                        One picture per method step, shown in cook mode. Costs about{" "}
+                        {money(STEP_ART_COST_USD)} a step — roughly{" "}
+                        {money(STEP_ART_COST_USD * 8)} for a typical method — so it is
+                        drawn for dishes you choose rather than for everything.
+                    </>
+                }
+            />
 
             <FilterBar count={recipes.data ? `${recipes.data.total} matching` : null}>
                 <SearchField
@@ -326,7 +319,6 @@ export function StepArtPage() {
                                 <TableCell align="right">Steps</TableCell>
                                 <TableCell>Illustrated</TableCell>
                                 <TableCell align="right">To finish</TableCell>
-                                <TableCell />
                             </>
                         }
                     >
@@ -334,9 +326,25 @@ export function StepArtPage() {
                                     const remaining = Math.max(row.stepCount - row.drawnCount, 0);
 
                                     return (
+                                        // Not a `LinkRow`: this row does not
+                                        // navigate. It opens the method BELOW
+                                        // the list, which is the whole shape of
+                                        // this screen — working through several
+                                        // dishes is scrolling rather than going
+                                        // back and forth. A dish with no method
+                                        // has nothing to open, so its row takes
+                                        // no press and says so with the cursor.
                                         <TableRow
                                             key={row.id}
+                                            hover={row.stepCount > 0}
                                             selected={row.id === recipeId}
+                                            sx={{
+                                                cursor:
+                                                    row.stepCount > 0 ? "pointer" : "default",
+                                            }}
+                                            onClick={() => {
+                                                if (row.stepCount > 0) selectRecipe(row.id);
+                                            }}
                                         >
                                             <TableCell>
                                                 {row.image ? (
@@ -381,16 +389,6 @@ export function StepArtPage() {
                                                     ? money(remaining * STEP_ART_COST_USD)
                                                     : "—"}
                                             </TableCell>
-                                            <TableCell align="right">
-                                                <Button
-                                                    size="small"
-                                                    variant="outlined"
-                                                    disabled={row.stepCount === 0}
-                                                    onClick={() => selectRecipe(row.id)}
-                                                >
-                                                    {row.id === recipeId ? "Open" : "Select"}
-                                                </Button>
-                                            </TableCell>
                                         </TableRow>
                                     );
                                 })}
@@ -418,27 +416,22 @@ export function StepArtPage() {
                 <ResourceState loading={steps.loading} fetching={steps.fetching} error={steps.error}>
                     {state ? (
                         <>
-                            <div className="page-head">
-                                <div>
-                                    <h1 className="dish">{state.dish}</h1>
-                                    <p className="page-lede tight">
-                                        {drawnCount} of {state.steps.length} steps drawn
+                            <PageHead
+                                dish
+                                title={state.dish}
+                                lede={
+                                    <>
+                                        <span>
+                                            {drawnCount} of {state.steps.length} steps drawn
+                                        </span>
                                         {state.missing > 0 ? (
-                                            <>
-                                                {" · "}
-                                                <Pill tone="accent">
-                                                    {state.missing} missing
-                                                </Pill>
-                                            </>
+                                            <Pill tone="accent">{state.missing} missing</Pill>
                                         ) : (
-                                            <>
-                                                {" · "}
-                                                <Pill tone="live">complete</Pill>
-                                            </>
+                                            <Pill tone="live">complete</Pill>
                                         )}
-                                    </p>
-                                </div>
-                            </div>
+                                    </>
+                                }
+                            />
 
                             <Stack
                                 direction="row"
